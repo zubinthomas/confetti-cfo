@@ -1,0 +1,66 @@
+{
+  "name": "Recruitment",
+  "type": "object",
+  "properties": {
+    "role_title": {
+      "type": "string",
+      "title": "Role Title"
+    },
+    "division": {
+      "type": "string",
+      "enum": [
+        "Ceramics",
+        "Textiles",
+        "Siena",
+        "Admin"
+      ],
+      "title": "Division"
+    },
+    "openings": {
+      "type": "number",
+      "title": "No. of Openings",
+      "default": 1
+    },
+    "applicant_name": {
+      "type": "string",
+      "title": "Applicant Name"
+    },
+    "applicant_email": {
+      "type": "string",
+      "title": "Applicant Email"
+    },
+    "applicant_phone": {
+      "type": "string",
+      "title": "Applicant Phone"
+    },
+    "resume_url": {
+      "type": "string",
+      "title": "Resume (file)"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "Applied",
+        "Screening",
+        "Interview",
+        "Offer",
+        "Hired",
+        "Rejected"
+      ],
+      "default": "Applied",
+      "title": "Stage"
+    },
+    "expected_salary": {
+      "type": "number",
+      "title": "Expected Salary (\u20b9/month)"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "role_title",
+    "division"
+  ]
+}

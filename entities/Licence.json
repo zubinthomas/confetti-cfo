@@ -1,0 +1,112 @@
+{
+  "name": "Licence",
+  "type": "object",
+  "properties": {
+    "licence_name": {
+      "type": "string",
+      "title": "Licence / Permit Name"
+    },
+    "licence_type": {
+      "type": "string",
+      "title": "Type",
+      "enum": [
+        "Trade Licence",
+        "GST Registration",
+        "FSSAI",
+        "Excise / Bar Licence",
+        "Fire NOC",
+        "Building Plan Approval",
+        "Factory Licence",
+        "Shops & Establishments",
+        "ESI Registration",
+        "PF Registration",
+        "Professional Tax",
+        "Pollution Control NOC",
+        "Signage Permission",
+        "Labour Licence",
+        "Import Export Code",
+        "MSME / Udyam",
+        "Pollution Control Consent",
+        "Water / Sewage Permit",
+        "KMC Permission",
+        "Panchayat / Municipality NOC",
+        "Other"
+      ]
+    },
+    "authority": {
+      "type": "string",
+      "title": "Issuing Authority"
+    },
+    "location": {
+      "type": "string",
+      "title": "Location",
+      "enum": [
+        "Kolkata (Head Office)",
+        "Kolkata (Siena)",
+        "Birbhum (Ceramics Factory)",
+        "Birbhum (Other)",
+        "All Locations"
+      ]
+    },
+    "division": {
+      "type": "string",
+      "title": "Division",
+      "enum": [
+        "Ceramics",
+        "Textiles",
+        "Siena",
+        "Admin",
+        "All"
+      ]
+    },
+    "licence_number": {
+      "type": "string",
+      "title": "Licence / Certificate Number"
+    },
+    "issue_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Issue Date"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Expiry Date"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": [
+        "Active",
+        "Expired",
+        "Renewal Pending",
+        "Applied",
+        "Not Applicable"
+      ],
+      "default": "Active"
+    },
+    "renewal_reminder_days": {
+      "type": "number",
+      "title": "Remind Before (days)",
+      "default": 30
+    },
+    "document_url": {
+      "type": "string",
+      "title": "Document (file)"
+    },
+    "annual_fee": {
+      "type": "number",
+      "title": "Annual Fee (\u20b9)"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "licence_name",
+    "licence_type",
+    "location",
+    "division"
+  ]
+}

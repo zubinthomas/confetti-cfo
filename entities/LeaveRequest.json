@@ -1,0 +1,70 @@
+{
+  "name": "LeaveRequest",
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "title": "Employee ID (ref)"
+    },
+    "employee_name": {
+      "type": "string",
+      "title": "Employee Name"
+    },
+    "division": {
+      "type": "string",
+      "enum": [
+        "Ceramics",
+        "Textiles",
+        "Siena",
+        "Admin"
+      ],
+      "title": "Division"
+    },
+    "leave_type": {
+      "type": "string",
+      "enum": [
+        "Sick",
+        "Casual",
+        "Earned",
+        "Unpaid",
+        "Maternity/Paternity"
+      ],
+      "title": "Leave Type"
+    },
+    "from_date": {
+      "type": "string",
+      "format": "date",
+      "title": "From Date"
+    },
+    "to_date": {
+      "type": "string",
+      "format": "date",
+      "title": "To Date"
+    },
+    "days": {
+      "type": "number",
+      "title": "Number of Days"
+    },
+    "reason": {
+      "type": "string",
+      "title": "Reason"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Approved",
+        "Rejected"
+      ],
+      "default": "Pending",
+      "title": "Status"
+    }
+  },
+  "required": [
+    "employee_name",
+    "division",
+    "leave_type",
+    "from_date",
+    "to_date"
+  ]
+}
