@@ -28,7 +28,7 @@ const upload = multer({
 
 /**
  * POST /api/integrations/upload
- * Returns { file_url } matching the base44 UploadFile response shape.
+ * Returns { file_url } for the uploaded file.
  */
 router.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file provided' });

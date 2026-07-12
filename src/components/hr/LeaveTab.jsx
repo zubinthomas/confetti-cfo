@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { LeaveRequest } from "@/api/entities";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
@@ -20,7 +20,7 @@ export default function LeaveTab() {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.LeaveRequest.list("-created_date");
+    const data = await LeaveRequest.list("-created_date");
     setLeaves(data);
     setLoading(false);
   };
@@ -28,8 +28,8 @@ export default function LeaveTab() {
   const save = async () => {
     setSaving(true);
     const payload = { ...form, days: Number(form.days) || 0 };
-    if (form.id) await base44.entities.LeaveRequest.update(form.id, payload);
-    else await base44.entities.LeaveRequest.create(payload);
+    if (form.id) await LeaveRequest.update(form.id, payload);
+    else await LeaveRequest.create(payload);
     setSaving(false);
     setShowForm(false);
     setForm(EMPTY);
@@ -37,12 +37,12 @@ export default function LeaveTab() {
   };
 
   const updateStatus = async (id, status) => {
-    await base44.entities.LeaveRequest.update(id, { status });
+    await LeaveRequest.update(id, { status });
     load();
   };
 
   const remove = async (id) => {
-    await base44.entities.LeaveRequest.delete(id);
+    await LeaveRequest.delete(id);
     load();
   };
 

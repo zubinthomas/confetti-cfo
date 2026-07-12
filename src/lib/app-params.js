@@ -1,5 +1,5 @@
 /**
- * Minimal app params — no longer tied to base44 infrastructure.
+ * Minimal app params.
  * The access_token is read directly from localStorage by the API client.
  */
 

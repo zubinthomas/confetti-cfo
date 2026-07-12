@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { Employee } from "@/api/entities";
+import { uploadFile } from "@/api/integrations";
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Clock, XCircle } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 
@@ -17,21 +18,21 @@ export default function DocumentsTab() {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Employee.list();
+    const data = await Employee.list();
     setEmployees(data);
     setLoading(false);
   };
 
-  const uploadFile = async (empId, field, file) => {
+  const uploadDoc = async (empId, field, file) => {
     setUploading(u => ({ ...u, [`${empId}_${field}`]: true }));
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    await base44.entities.Employee.update(empId, { [field]: file_url });
+    const { file_url } = await uploadFile(file);
+    await Employee.update(empId, { [field]: file_url });
     setUploading(u => ({ ...u, [`${empId}_${field}`]: false }));
     load();
   };
 
   const updatePVStatus = async (empId, status) => {
-    await base44.entities.Employee.update(empId, { police_verification_status: status });
+    await Employee.update(empId, { police_verification_status: status });
     load();
   };
 
@@ -50,7 +51,7 @@ export default function DocumentsTab() {
           <span className="text-xs text-muted-foreground">—</span>
         )}
         <label className="cursor-pointer">
-          <input type="file" className="hidden" onChange={e => e.target.files[0] && uploadFile(empId, field, e.target.files[0])} />
+          <input type="file" className="hidden" onChange={e => e.target.files[0] && uploadDoc(empId, field, e.target.files[0])} />
           {uploading[key] ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
           ) : (

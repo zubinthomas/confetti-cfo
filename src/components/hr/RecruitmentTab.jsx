@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { Recruitment } from "@/api/entities";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
@@ -23,7 +23,7 @@ export default function RecruitmentTab() {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Recruitment.list("-created_date");
+    const data = await Recruitment.list("-created_date");
     setItems(data);
     setLoading(false);
   };
@@ -31,15 +31,15 @@ export default function RecruitmentTab() {
   const save = async () => {
     setSaving(true);
     const payload = { ...form, openings: Number(form.openings) || 1, expected_salary: Number(form.expected_salary) || 0 };
-    if (form.id) await base44.entities.Recruitment.update(form.id, payload);
-    else await base44.entities.Recruitment.create(payload);
+    if (form.id) await Recruitment.update(form.id, payload);
+    else await Recruitment.create(payload);
     setSaving(false);
     setShowForm(false);
     setForm(EMPTY);
     load();
   };
 
-  const remove = async (id) => { await base44.entities.Recruitment.delete(id); load(); };
+  const remove = async (id) => { await Recruitment.delete(id); load(); };
 
   const Field = ({ label, name, type = "text", options = null }) => (
     <div>

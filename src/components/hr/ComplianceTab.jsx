@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { Licence } from "@/api/entities";
+import { uploadFile } from "@/api/integrations";
 import { Plus, X, Loader2, Upload, FileText, AlertTriangle, Clock, XCircle, ShieldCheck } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 
@@ -85,7 +86,7 @@ export default function ComplianceTab() {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Licence.list("-created_date");
+    const data = await Licence.list("-created_date");
     setLicences(data);
     setLoading(false);
   };
@@ -93,7 +94,7 @@ export default function ComplianceTab() {
   const seedChecklist = async () => {
     setSeeding(true);
     for (const item of CHECKLIST) {
-      await base44.entities.Licence.create({ ...item, status: "Applied", renewal_reminder_days: 30 });
+      await Licence.create({ ...item, status: "Applied", renewal_reminder_days: 30 });
     }
     setSeeding(false);
     load();
@@ -102,20 +103,20 @@ export default function ComplianceTab() {
   const save = async () => {
     setSaving(true);
     const payload = { ...form, annual_fee: Number(form.annual_fee) || 0, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
-    if (form.id) await base44.entities.Licence.update(form.id, payload);
-    else await base44.entities.Licence.create(payload);
+    if (form.id) await Licence.update(form.id, payload);
+    else await Licence.create(payload);
     setSaving(false);
     setShowForm(false);
     setForm(EMPTY);
     load();
   };
 
-  const remove = async (id) => { await base44.entities.Licence.delete(id); load(); };
+  const remove = async (id) => { await Licence.delete(id); load(); };
 
   const uploadDoc = async (id, file) => {
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    await base44.entities.Licence.update(id, { document_url: file_url });
+    const { file_url } = await uploadFile(file);
+    await Licence.update(id, { document_url: file_url });
     setUploading(false);
     load();
   };

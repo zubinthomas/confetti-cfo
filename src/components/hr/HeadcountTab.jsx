@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { Employee } from "@/api/entities";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
@@ -20,7 +20,7 @@ export default function HeadcountTab() {
 
   const load = async () => {
     setLoading(true);
-    const data = await base44.entities.Employee.list();
+    const data = await Employee.list();
     setEmployees(data);
     setLoading(false);
   };
@@ -28,8 +28,8 @@ export default function HeadcountTab() {
   const save = async () => {
     setSaving(true);
     const payload = { ...form, monthly_salary: Number(form.monthly_salary) || 0 };
-    if (form.id) await base44.entities.Employee.update(form.id, payload);
-    else await base44.entities.Employee.create(payload);
+    if (form.id) await Employee.update(form.id, payload);
+    else await Employee.create(payload);
     setSaving(false);
     setShowForm(false);
     setForm(EMPTY);
@@ -37,7 +37,7 @@ export default function HeadcountTab() {
   };
 
   const remove = async (id) => {
-    await base44.entities.Employee.delete(id);
+    await Employee.delete(id);
     load();
   };
 

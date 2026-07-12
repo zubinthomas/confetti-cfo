@@ -6,7 +6,7 @@ import {
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, LogOut,
   MenuIcon, X,
 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { auth } from "@/api/auth";
 
 const NAV_SECTIONS = [
   {
@@ -107,7 +107,7 @@ function SidebarNav({ onNavigate }) {
           <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
         </Link>
         <button
-          onClick={() => base44.auth.logout("/")}
+          onClick={() => auth.logout("/")}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <LogOut className="w-4 h-4 shrink-0" /> Sign out

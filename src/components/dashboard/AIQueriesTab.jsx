@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { invokeLLM } from "@/api/integrations";
 import { TrendingUp, Truck, BarChart3, CalendarDays, AlertTriangle, Tag, Building2, UtensilsCrossed, RefreshCw, Search, Sparkles, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -26,7 +26,7 @@ export default function AIQueriesTab() {
     setActiveQuery(query.label);
     setResponse(null);
     const contextPrompt = `You are a CFO AI assistant for Confetti Exports, a group with 3 divisions: Ceramics (manufacturing, revenue ₹18.4L MTD, 47% gross margin), Textiles (lifestyle, revenue ₹14.2L MTD, 52% gross margin, ₹2.8L dead stock), and Siena (café/restaurant/bar, revenue ₹10.0L MTD, food cost 30%, wastage 4.2%). Group total revenue is ₹42.6L MTD, EBITDA 16.7%, cash ₹11.4L, receivables ₹24.8L (38 days), payables ₹16.2L (22 days), payroll ₹8.4L (19.7% of revenue). Inventory ₹31.5L. GST liability ₹3.2L.\n\nAnswer the following question with specific numbers, actionable insights, and recommendations. Format with markdown headings and bullet points.\n\nQuestion: ${query.prompt}`;
-    const result = await base44.integrations.Core.InvokeLLM({ prompt: contextPrompt });
+    const result = await invokeLLM(contextPrompt);
     setResponse(result);
     setLoading(false);
   };

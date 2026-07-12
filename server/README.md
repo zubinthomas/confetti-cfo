@@ -1,6 +1,6 @@
 # Confetti CFO — Express Backend
 
-This is the self-hosted Express server that replaces the base44 BaaS layer.
+This is the self-hosted Express server behind the dashboard (auth, entity CRUD, file uploads and the LLM proxy).
 
 ## Quick start
 
@@ -39,7 +39,7 @@ npm run dev   # vite proxies /api → http://localhost:3001
 
 ## Data storage
 
-Entity data is persisted in `server/data.json`.
+Entity data is persisted in the `appEntities` section of `src/data/extracted_data.json` — the single data store for the whole app.
 Uploaded files are stored in `server/uploads/`.
 
 > **For production** swap `server/db.js` for a real database (PostgreSQL, MongoDB, etc.) and use proper cloud file storage (S3, R2, etc.).
