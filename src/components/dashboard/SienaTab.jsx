@@ -10,7 +10,7 @@ import {
 
 const COLORS = { product: "#3b82f6", retail: "#10b981", events: "#f59e0b", pl: "#8b5cf6" };
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Clock, XCircle } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
-import StatusBadge from "@/components/dashboard/StatusBadge";
 
 const pvStatusIcon = { Verified: CheckCircle2, Submitted: Clock, Pending: AlertCircle, Rejected: XCircle };
 const pvStatusColor = { Verified: "text-emerald-500", Submitted: "text-blue-500", Pending: "text-amber-500", Rejected: "text-red-500" };

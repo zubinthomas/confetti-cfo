@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Plus, X, Loader2, Upload, FileText, AlertTriangle, CheckCircle2, Clock, XCircle, ShieldCheck } from "lucide-react";
+import { Plus, X, Loader2, Upload, FileText, AlertTriangle, Clock, XCircle, ShieldCheck } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 
 // Days until expiry
 const daysUntil = (dateStr) => {
   if (!dateStr) return null;
-  return Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 };
 
 const statusStyle = {
@@ -120,7 +120,7 @@ export default function ComplianceTab() {
     load();
   };
 
-  const Field = ({ label, name, type = "text", options }) => (
+  const Field = ({ label, name, type = "text", options = null }) => (
     <div>
       <label className="text-xs text-muted-foreground block mb-1">{label}</label>
       {options ? (

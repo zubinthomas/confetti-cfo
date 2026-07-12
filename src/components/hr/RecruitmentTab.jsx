@@ -41,7 +41,7 @@ export default function RecruitmentTab() {
 
   const remove = async (id) => { await base44.entities.Recruitment.delete(id); load(); };
 
-  const Field = ({ label, name, type = "text", options }) => (
+  const Field = ({ label, name, type = "text", options = null }) => (
     <div>
       <label className="text-xs text-muted-foreground block mb-1">{label}</label>
       {options ? (

@@ -2,7 +2,7 @@ import React from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts";
+import { Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts";
 
 const kpis = [
   { label: "Current Cash", value: "₹11.4L", sub: "Today", status: "green" },
@@ -27,7 +27,7 @@ const forecastData = [
   { period: "Month 3", collections: 32.1, outflows: 22.8, balance: 13.7 },
 ];
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">

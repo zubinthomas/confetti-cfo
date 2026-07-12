@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Users, Plus, X, Upload, Loader2 } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 
@@ -49,7 +49,7 @@ export default function HeadcountTab() {
 
   const totalPayroll = employees.reduce((s, e) => s + (e.monthly_salary || 0), 0);
 
-  const Field = ({ label, name, type = "text", options }) => (
+  const Field = ({ label, name, type = "text", options = null }) => (
     <div>
       <label className="text-xs text-muted-foreground block mb-1">{label}</label>
       {options ? (

@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function PLRow({ label, value, isTotal, status }) {
+export default function PLRow({ label, value, isTotal = false, status = null }) {
   const valueColor = status === "green"
     ? "text-emerald-600 dark:text-emerald-400"
     : status === "red"

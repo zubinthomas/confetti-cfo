@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, CalendarOff, UserSearch, FileCheck, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Users, CalendarOff, UserSearch, FileCheck, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import HeadcountTab from "@/components/hr/HeadcountTab";
 import LeaveTab from "@/components/hr/LeaveTab";

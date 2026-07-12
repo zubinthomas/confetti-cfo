@@ -32,10 +32,10 @@ async function request(method, endpoint, body) {
 
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));
-    const err = new Error(json.message || res.statusText);
-    err.status = res.status;
-    err.data = json;
-    throw err;
+    throw Object.assign(new Error(json.message || res.statusText), {
+      status: res.status,
+      data: json,
+    });
   }
 
   return res.json();
@@ -89,16 +89,28 @@ const auth = {
 
 // ── Entities (Proxy so any entity name works) ─────────────────────────────────
 
+/**
+ * @typedef {object} EntityApi
+ * @property {(sort?: string) => Promise<any[]>} list
+ * @property {(data: object) => Promise<any>} create
+ * @property {(id: string, data: object) => Promise<any>} update
+ * @property {(id: string) => Promise<any>} delete
+ */
+
+/** @type {Record<string, EntityApi>} */
 const entities = new Proxy(
   {},
   {
-    get: (_, entityName) => ({
-      list: (sort) =>
-        get(`/entities/${entityName}${sort ? `?sort=${encodeURIComponent(sort)}` : ''}`),
-      create: (data) => post(`/entities/${entityName}`, data),
-      update: (id, data) => put(`/entities/${entityName}/${id}`, data),
-      delete: (id) => del(`/entities/${entityName}/${id}`),
-    }),
+    get: (_, prop) => {
+      const entityName = String(prop);
+      return {
+        list: (sort) =>
+          get(`/entities/${entityName}${sort ? `?sort=${encodeURIComponent(sort)}` : ''}`),
+        create: (data) => post(`/entities/${entityName}`, data),
+        update: (id, data) => put(`/entities/${entityName}/${id}`, data),
+        delete: (id) => del(`/entities/${entityName}/${id}`),
+      };
+    },
   },
 );
 

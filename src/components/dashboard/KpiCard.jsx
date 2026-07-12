@@ -6,7 +6,7 @@ const statusColors = {
   red: "text-red-600 dark:text-red-400",
 };
 
-export default function KpiCard({ label, value, sub, status }) {
+export default function KpiCard({ label, value, sub = null, status = null }) {
   return (
     <div className="bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-shadow">
       <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase mb-1.5">

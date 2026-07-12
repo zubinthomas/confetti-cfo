@@ -8,7 +8,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">

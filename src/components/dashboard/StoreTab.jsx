@@ -4,8 +4,8 @@ import DashCard from "./DashCard";
 import StatusRow from "./StatusRow";
 import { SIENNA_STORE, SIENNA_CATEGORIES, SIENNA_CATEGORIES_LABEL, STORE_HISTORY, STORE, MONTHS, L } from "@/data/financialData";
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
 const FY = SIENNA_STORE.fy2526;
@@ -19,7 +19,7 @@ const CHAN_COLORS = {
 };
 const CAT_COLORS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#06b6d4","#84cc16","#f97316","#ec4899"];
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
