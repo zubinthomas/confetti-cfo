@@ -2,3 +2,5 @@ node_modules
 dist
 .claude
 data-sources
+test-results
+playwright-report
