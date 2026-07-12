@@ -175,8 +175,7 @@ export default function StoreTab() {
       {view === "categories" && (
         <DashCard title={`Annual Sales by Product Category (${SIENNA_CATEGORIES_LABEL})`}>
           <p className="text-xs text-muted-foreground -mt-1 mb-2">
-            Most recent year with a complete 12-month category breakdown in the source data —
-            FY 2025-26 category-level detail is only available for Apr &amp; May so far.
+            Complete 12-month category breakdown for the current year.
           </p>
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={SIENNA_CATEGORIES} layout="vertical">
@@ -273,8 +272,8 @@ export default function StoreTab() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              FY 22-23 and FY 23-24 are totaled from category-level sales (no channel breakdown for those years
-              in the source data); other years use the channel-level total directly.
+              All years are totaled from the monthly channel-level &ldquo;Overall sales&rdquo; records in the
+              source workbook.
             </p>
           </DashCard>
         </>

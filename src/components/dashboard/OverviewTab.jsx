@@ -2,7 +2,7 @@ import React from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow from "./StatusRow";
-import { OVERVIEW, STORE_HISTORY, MONTHS, L } from "@/data/financialData";
+import { OVERVIEW, STORE_HISTORY, FNB_STORE_HISTORY, MONTHS, L } from "@/data/financialData";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -22,9 +22,9 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   );
 };
 
-// FY 2025-26 is the only year with full monthly F&B + Store P&L in the source
-// data, so the monthly charts below are single-year (see financialData.js
-// header comment for what historical data is/isn't available).
+// FY 2025-26 has full line-item monthly P&L; earlier years (FY21-22 … FY24-25)
+// come from the workbook's Overview sheet as monthly Sales/Expense/P&L, shown
+// in the multi-year history below.
 const CUR = OVERVIEW.fy2526;
 
 const monthlyData = MONTHS.map((m, i) => ({
@@ -35,10 +35,14 @@ const monthlyData = MONTHS.map((m, i) => ({
   "Store P&L":   CUR.store.pl[i],
 }));
 
-// Real multi-year Store revenue (F&B has no historical data in the extract)
-const storeHistoryData = STORE_HISTORY.map((y) => ({
+// Multi-year F&B + Store history (annual sales & P&L, from the workbook's
+// Overview sheet for FY21-22 … 24-25 and the department sheets for FY25-26)
+const historyData = FNB_STORE_HISTORY.map((y) => ({
   year: y.label,
-  "Store Revenue": y.total,
+  "F&B Revenue": y.fb.sales,
+  "Store Revenue": y.store.sales,
+  "F&B P&L": y.fb.pl,
+  "Store P&L": y.store.pl,
 }));
 
 const LATEST_IDX = CUR.fb.sales.length - 1; // last month with data (Mar 2026)
@@ -48,6 +52,8 @@ const fbMargin = (CUR.totals.fbPL / CUR.totals.fbSales) * 100;
 const storeMargin = (CUR.totals.storePL / CUR.totals.storeSales) * 100;
 const storeGrowthVsPrevYear =
   ((STORE_HISTORY.at(-2).total / STORE_HISTORY.at(-3).total) - 1) * 100; // FY25-26 vs FY24-25
+const fbGrowthVsPrevYear =
+  ((FNB_STORE_HISTORY.at(-1).fb.sales / FNB_STORE_HISTORY.at(-2).fb.sales) - 1) * 100;
 
 const kpis = [
   { label: "F&B Revenue (FY 25-26)", value: L(CUR.totals.fbSales), sub: `${fbMargin.toFixed(1)}% net margin`, status: "green" },
@@ -111,21 +117,37 @@ export default function OverviewTab() {
         </ResponsiveContainer>
       </DashCard>
 
-      {/* Store multi-year revenue history (real data; F&B has no historical
-          years in the current extraction, so it isn't shown here) */}
-      <DashCard title="Store Revenue — Multi-Year History">
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={storeHistoryData} layout="vertical" barGap={4}>
-            <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
-            <YAxis type="category" dataKey="year" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={110} />
+      {/* Multi-year annual history — F&B + Store revenue and P&L */}
+      <DashCard title="Annual Revenue — F&B vs Store (FY 21-22 → 25-26)">
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={historyData} barGap={2}>
+            <XAxis dataKey="year" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="Store Revenue" fill="#10b981" radius={[0,4,4,0]} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="F&B Revenue" fill="#3b82f6" radius={[4,4,0,0]} />
+            <Bar dataKey="Store Revenue" fill="#10b981" radius={[4,4,0,0]} />
           </BarChart>
         </ResponsiveContainer>
         <p className="text-xs text-muted-foreground mt-2">
-          F&B historical-year figures aren't in the current data extract, so only Store revenue is shown across years.
-          FY 22-23 and FY 23-24 are totaled from category-level sales (no channel breakdown available for those years yet).
+          F&B revenue grew {fbGrowthVsPrevYear >= 0 ? "+" : ""}{fbGrowthVsPrevYear.toFixed(0)}% in FY 25-26 —
+          its first strongly profitable year (₹{L(FNB_STORE_HISTORY.at(-1).fb.pl)} net) after
+          {" "}₹{L(Math.abs(FNB_STORE_HISTORY.at(-2).fb.pl))} of losses in FY 24-25.
         </p>
+      </DashCard>
+
+      <DashCard title="Annual Net P&L — F&B vs Store (FY 21-22 → 25-26)">
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={historyData} barGap={2}>
+            <XAxis dataKey="year" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <ReferenceLine y={0} stroke="#e2e8f0" />
+            <Bar dataKey="F&B P&L" fill="#3b82f6" radius={[4,4,0,0]} />
+            <Bar dataKey="Store P&L" fill="#10b981" radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </DashCard>
 
       {/* Status */}

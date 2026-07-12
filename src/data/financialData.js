@@ -9,22 +9,30 @@
 // businesses / businessUnits / periods / lineItems / financialRecords /
 // categories / channels / salesRecords tables in extracted_data.json.
 //
-// Known data-coverage gaps (see also raw._meta.knownSimplifications):
-//   - Full monthly P&L (financialRecords) only exists for F&B & Store for
-//     FY 2025-26 (12 months). No historical-year P&L exists in the extract,
-//     so year-over-year P&L/profit comparisons for F&B are not possible yet.
-//   - Sienna channel-level ("Overall sales") totals exist for FY 2025-26 (12mo),
-//     FY 2026-27 (Apr-May only), and FY 2024-25 (12mo). Older years only have
-//     category-level ("Category wise") detail, not a channel breakdown.
-//   - Category-level detail is only complete for FY 2022-23 and FY 2023-24
-//     (12 months each) plus partial months elsewhere — NOT for FY 2025-26.
-//     So the "category mix" chart uses the most recent complete year (FY 2023-24)
-//     rather than the current year.
+// Data coverage (after the 2026-07 extraction fix pass — see raw._meta.fixPass):
+//   - Line-item monthly P&L exists for all six CEPL departments for FY 2025-26.
+//     Historical F&B/Store annual P&L (FY 2021-22 … 2024-25) comes from the
+//     workbook's Overview sheet (lineItems 191-194, monthly Sales/Expense/P&L).
+//   - Sienna channel-level ("Overall sales") totals exist for all six fiscal
+//     years FY 2021-22 … FY 2026-27 (the last has Apr-May only so far).
+//   - Category-level detail is complete (12 months) for FY 2021-22 … 2025-26,
+//     so the category mix uses the current year FY 2025-26.
+//   - The Cafe workbook provides weekly outlet-level detail (Bosar Ghor /
+//     Dinning Room / Rannaghor) from Sept 2025, and whole-cafe weekly+monthly
+//     P&L for Apr-Aug 2025. "Durga Puja 2025" is a summary of the two calendar
+//     weeks it spans (verified: totals match exactly) and is therefore kept
+//     out of weekly aggregations.
+// Known source-workbook quirks (not extraction errors):
+//   - Store sheet June FY25-26 "Net Profit & Loss" is -242,989 but its own
+//     Sales - Expenses is -334,014 (the Overview sheet shows the latter).
+//     The Store sheet's own reported bottom line is used here.
+//   - The FY22-23 "Overall sales" grand-total cell is 2,900 above the sum of
+//     its monthly channel cells; the monthly detail is used here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import raw from "./extracted_data.json";
 
-const { periods, financialRecords, categories, channels, salesRecords } = raw;
+const { periods, financialRecords, categories, channels, salesRecords, lineItems, businessUnits, vendors, consignmentRecords } = raw;
 
 // ── Generic lookups over the normalized tables ──────────────────────────────
 const frMap = {};
@@ -163,43 +171,48 @@ export const SIENNA_STORE = {
 };
 
 // ── Sienna Store — annual category totals ──────────────────────────────────
-// FY 2025-26 only has category-level detail for Apr & May in the source
-// workbook, so an "annual" FY25-26 category split isn't derivable yet.
-// FY 2023-24 is the most recent year with a complete 12-month category
-// breakdown, so that's what's shown; see SIENNA_CATEGORIES_LABEL.
+// Category detail is complete for FY 2021-22 … FY 2025-26 (12 months each),
+// so the headline mix uses the current year and a per-year breakdown is
+// exported for comparisons.
 const CATEGORY_NAME_MAP = { "Leather & jute": "Leather & Jute" };
-export const SIENNA_CATEGORIES_LABEL = "FY 2023-24";
-const FY2324_PIDS = monthPeriodIds("2023-2024");
 
-export const SIENNA_CATEGORIES = categories
-  .map((cat) => ({
-    name: CATEGORY_NAME_MAP[cat.name] || cat.name,
-    value: sum(
-      salesRecords
-        .filter((r) => r.categoryId === cat.id && FY2324_PIDS.includes(r.periodId))
-        .map((r) => r.amount)
-    ),
-  }))
-  .filter((c) => c.value > 0)
-  .sort((a, b) => b.value - a.value);
+function categoriesForFY(fiscalYear) {
+  const pids = monthPeriodIds(fiscalYear);
+  return categories
+    .map((cat) => ({
+      name: CATEGORY_NAME_MAP[cat.name] || cat.name,
+      value: sum(
+        salesRecords
+          .filter((r) => r.categoryId === cat.id && pids.includes(r.periodId))
+          .map((r) => r.amount)
+      ),
+    }))
+    .filter((c) => c.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
 
-// ── Store revenue — multi-year history (best available method per year) ────
-// FY22-23/23-24 only have category-level detail in the source (no channel
-// breakdown for those years yet), so their totals are summed from categories;
-// other years use the channel-level "Overall sales" total directly.
+export const SIENNA_CATEGORIES_LABEL = "FY 2025-26";
+export const SIENNA_CATEGORIES = categoriesForFY("2025-2026");
+export const SIENNA_CATEGORIES_BY_FY = Object.fromEntries(
+  ["2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"].map((fy) => [
+    fy,
+    categoriesForFY(fy),
+  ])
+);
+
+// ── Store revenue — multi-year history ─────────────────────────────────────
+// Every fiscal year now has a channel-level "Overall sales" block in the
+// source, so all totals are summed from monthly channel records.
 function fyStoreRevenue(fiscalYear) {
   const pids = monthPeriodIds(fiscalYear);
-  const chanTotal = sum(
+  const total = sum(
     salesRecords.filter((r) => pids.includes(r.periodId) && r.categoryId == null).map((r) => r.amount)
   );
-  if (chanTotal > 0) return { total: chanTotal, method: "channel" };
-  const catTotal = sum(
-    salesRecords.filter((r) => pids.includes(r.periodId) && r.categoryId != null).map((r) => r.amount)
-  );
-  return { total: catTotal, method: "category" };
+  return { total, method: "channel" };
 }
 
 export const STORE_HISTORY = [
+  { fy: "2021-2022", label: "FY 21-22", ...fyStoreRevenue("2021-2022") },
   { fy: "2022-2023", label: "FY 22-23", ...fyStoreRevenue("2022-2023") },
   { fy: "2023-2024", label: "FY 23-24", ...fyStoreRevenue("2023-2024") },
   { fy: "2024-2025", label: "FY 24-25", ...fyStoreRevenue("2024-2025") },
@@ -278,6 +291,174 @@ export const TRADING_ITEMS = deptFinancials("tradingItems", FY2526_PIDS);
 export const POTTERY = deptFinancials("pottery", FY2526_PIDS);
 export const BATIK = deptFinancials("batik", FY2526_PIDS);
 export const STITCHING = deptFinancials("stitching", FY2526_PIDS);
+
+// ── F&B / Store annual history (Overview sheet + FY25-26 dept sheets) ──────
+// The Overview sheet's historical blocks are stored as lineItems 191 (Sales),
+// 192 (Expense), 193 (Profit & Loss) per month for units F&B (1) and Store (2).
+const OV_LI = { sales: 191, expense: 192, pl: 193 };
+function overviewYear(unitId, fiscalYear) {
+  const pids = monthPeriodIds(fiscalYear);
+  return {
+    sales:   sum(series(unitId, OV_LI.sales, pids)),
+    expense: sum(series(unitId, OV_LI.expense, pids)),
+    pl:      sum(series(unitId, OV_LI.pl, pids)),
+  };
+}
+export const FNB_STORE_HISTORY = [
+  ...["2021-2022", "2022-2023", "2023-2024", "2024-2025"].map((fy) => ({
+    fy,
+    label: `FY ${fy.slice(2, 4)}-${fy.slice(7)}`,
+    fb: overviewYear(FNB_BU, fy),
+    store: overviewYear(STORE_BU, fy),
+  })),
+  {
+    fy: "2025-2026",
+    label: "FY 25-26",
+    fb:    { sales: sum(FAB.totalRevenue), expense: sum(FAB.totalExpense), pl: sum(FAB.profitLoss) },
+    store: { sales: sum(STORE.totalSales), expense: sum(STORE.totalExpense), pl: sum(STORE.profitLoss) },
+  },
+];
+
+// ── F&B outlets & revenue streams (Cafe workbook, business 2) ──────────────
+// Apr-Aug 2025: one whole-cafe weekly/monthly P&L (unit "Cafe").
+// Sept 2025 onward: weekly P&L split by outlet — Bosar Ghor (café section),
+// Dinning Room (restaurant) and Rannaghor (events kitchen) — plus a Total
+// column. Revenue is also sectioned into streams: Inhouse Product Sales,
+// Sales from Liquor (bar), Sales from Events and Sales from Outside Products.
+const li2ByName = {};
+for (const l of lineItems) {
+  if (l.businessId === 2) (li2ByName[l.name] ??= {})[l.valueType] = l.id;
+}
+const li2 = (name) => li2ByName[name]?.amount ?? null;
+
+export const OUTLET_UNITS = { bosarGhor: 8, dinningRoom: 9, rannaghor: 10, total: 11 };
+export const OUTLET_LABELS = {
+  bosarGhor: "Bosar Ghor (Cafe)",
+  dinningRoom: "Dinning Room (Restaurant)",
+  rannaghor: "Rannaghor",
+  total: "All outlets",
+};
+
+// ordered outlet weeks (Sept 2025 →), special-event summaries excluded
+export const OUTLET_WEEKS = periods
+  .filter((p) => p.periodType === "week" && p.startDate >= "2025-09-01" && !p.isSpecialEvent)
+  .sort((a, b) => (a.startDate < b.startDate ? -1 : 1))
+  .map((p) => ({
+    id: p.id,
+    label: p.label,
+    short: p.startDate.slice(8, 10) + "/" + p.startDate.slice(5, 7),
+    month: new Date(p.startDate + "T00:00:00").toLocaleString("en", { month: "short" }),
+  }));
+
+const OUTLET_STREAM_LIS = {
+  totalSales: li2("Total Cafe Sales"),
+  inhouse:    li2("Inhouse Product Sales"),
+  liquor:     li2("Sales from Liquor"),
+  events:     li2("Sales from Events"),
+  outside:    li2("Sales from Outside Products"),
+  opCost:     li2("Total Operation Cost"),
+  pl:         li2("P+L = Gross Revenue - Operating Costs"),
+};
+
+function outletSeries(unitId) {
+  const out = {};
+  for (const [key, lid] of Object.entries(OUTLET_STREAM_LIS)) {
+    out[key] = OUTLET_WEEKS.map((w) => frGet(unitId, w.id, lid));
+  }
+  return out;
+}
+export const OUTLETS = Object.fromEntries(
+  Object.entries(OUTLET_UNITS).map(([key, uid]) => [key, outletSeries(uid)])
+);
+
+// Durga Puja 2025 special-event summary (sum of the two weeks it spans; kept
+// separate so weekly series don't double count)
+const DURGA_PID = periods.find((p) => p.isSpecialEvent)?.id;
+export const DURGA_PUJA = {
+  label: "Durga Puja 2025 (22 Sep – 5 Oct)",
+  totalSales: frGet(OUTLET_UNITS.total, DURGA_PID, OUTLET_STREAM_LIS.totalSales),
+  pl:         frGet(OUTLET_UNITS.total, DURGA_PID, OUTLET_STREAM_LIS.pl),
+};
+
+// menu mix per outlet — aggregated over all outlet weeks
+const MENU_ITEMS = [
+  "Pizza", "Omlettes", "Sandwitch & Burgers", "Snacks", "Salads", "Soups",
+  "Pastas", "Desserts", "Coffee", "Tea", "Lemonade", "Café Products",
+  "Cafe Specials", "Sienna Specials", "Baro Plates", "Chotto Plates",
+  "Sharing Portions", "Specials", "Bar Bites", "Mixer", "Misti",
+];
+const MENU_LABELS = { "Sandwitch & Burgers": "Sandwiches & Burgers", "Omlettes": "Omelettes" };
+export function menuMix(outletKey) {
+  const uid = OUTLET_UNITS[outletKey];
+  return MENU_ITEMS.map((name) => ({
+    name: MENU_LABELS[name] || name,
+    value: sum(OUTLET_WEEKS.map((w) => frGet(uid, w.id, li2(name)))),
+  }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+// liquor mix (all outlets) — "Beer" and "Wine/Beer" are the same row renamed
+export const LIQUOR_MIX = [
+  { name: "Cocktails", lis: ["Cocktails"] },
+  { name: "Spirits", lis: ["Spirits"] },
+  { name: "Wine & Beer", lis: ["Beer", "Wine/Beer"] },
+].map(({ name, lis }) => ({
+  name,
+  value: sum(lis.flatMap((n) => OUTLET_WEEKS.map((w) => frGet(OUTLET_UNITS.total, w.id, li2(n))))),
+})).filter((x) => x.value > 0);
+
+// events detail — weekly totals plus named-event breakdown (all outlets)
+const EVENT_SUB_LIS = [
+  "Rannaghor", "Other Events", "Other Events (After Hours)", "Other Events (Mizu)",
+  "Other Events (Beyond Berg)", "Other Events (Dali Gala After Hours)",
+  "Other Events (Riga Foods and Key Stone)",
+];
+export const EVENTS_BREAKDOWN = EVENT_SUB_LIS.map((name) => ({
+  name: name === "Rannaghor" ? "Rannaghor (event kitchen)" : name.replace(/^Other Events \(?|\)$/g, "") || "Other Events",
+  value: sum(OUTLET_WEEKS.map((w) => frGet(OUTLET_UNITS.total, w.id, li2(name)))),
+})).filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+
+// Whole-cafe P&L, Apr-Aug 2025 (unit "Cafe": monthly Total column of the
+// weekly sheets; the outlet split doesn't exist yet for these months)
+const CAFE_BU = 7;
+export const CAFE_MONTH_LABELS = ["Apr", "May", "Jun", "Jul", "Aug"];
+const CAFE_MONTH_PIDS = FY2526_PIDS.slice(0, 5);
+export const CAFE_MONTHLY = {
+  productSales: series(CAFE_BU, li2("Café Product Sales"), CAFE_MONTH_PIDS),
+  retailSales:  series(CAFE_BU, li2("Café Retail Sales"), CAFE_MONTH_PIDS),
+  liquor:       series(CAFE_BU, li2("Liquor"), CAFE_MONTH_PIDS),
+  eventSales:   series(CAFE_BU, li2("Cafe Event Sales"), CAFE_MONTH_PIDS),
+  totalSales:   series(CAFE_BU, li2("Total Cafe Sales"), CAFE_MONTH_PIDS),
+  opCost:       series(CAFE_BU, li2("Total Operation Cost"), CAFE_MONTH_PIDS),
+  pl:           series(CAFE_BU, li2("P+L = Gross Revenue - Operating Costs"), CAFE_MONTH_PIDS),
+};
+
+// ── Consignment & partner brands (Sienna workbook) ─────────────────────────
+export const CONSIGNMENT_FYS = ["2023-2024", "2024-2025", "2025-2026", "2026-2027"];
+export const CONSIGNMENT = CONSIGNMENT_FYS.map((fy) => {
+  const pids = monthPeriodIds(fy);
+  const rows = vendors
+    .map((v) => ({
+      name: v.name,
+      group: v.group,
+      rate: v.commissionRate,
+      total: sum(
+        consignmentRecords
+          .filter((r) => r.vendorId === v.id && pids.includes(r.periodId))
+          .map((r) => r.amount)
+      ),
+    }))
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total);
+  return {
+    fy,
+    label: `FY ${fy.slice(2, 4)}-${fy.slice(7)}`,
+    vendors: rows,
+    total: sum(rows.map((r) => r.total)),
+    commission: sum(rows.map((r) => r.total * (r.rate || 0))),
+  };
+});
 
 // ── Convenience: format helpers ──────────────────────────────────────────────
 export const L = (n) => {
