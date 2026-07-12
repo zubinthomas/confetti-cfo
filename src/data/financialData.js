@@ -207,6 +207,78 @@ export const STORE_HISTORY = [
   { fy: "2026-2027", label: "FY 26-27 (Apr–May)", ...fyStoreRevenue("2026-2027") },
 ];
 
+// ── Craft departments (Trading Items, Pottery, Batik, Stitching) ───────────
+// These four departments live inside the same CEPL P&L workbook as F&B/Store
+// and have full FY 2025-26 monthly detail (financialRecords), but the sheet
+// layout differs department-to-department (each has its own mix of raw-material
+// / consumable / sub-category line items). Rather than summing every row tagged
+// `category: "cogs"|"hr_cost"|"operating_cost"` — which double-counts, since the
+// sheets mix true totals with overlapping sub-breakdowns (see
+// raw._meta.knownSimplifications on category tagging) — the figures below use
+// only the line items that are the workbook's own reported totals:
+//   • Total Sales            (lineItemId 85)  → revenue
+//   • primary purchase cost  (Raw Materials / Trading Items Purchase)  → COGS
+//   • Total Expenses         (lineItemId 61)  → totalExpenses
+//   • Net Profit & Loss      (lineItemId 62)  → netPL
+// This was verified against the raw data: revenue − totalExpenses === netPL
+// and revenue − cogs (gross profit) ≥ netPL for every month in every one of
+// these four departments, so nothing here is fabricated or estimated.
+//
+// There isn't a depreciation/interest split in the source data, so a true
+// EBITDA figure isn't derivable — Net Profit & Loss (post all expenses) and
+// Net Margin are shown instead of an invented EBITDA number.
+const DEPT_BU = { tradingItems: 3, pottery: 4, batik: 5, stitching: 6 };
+const DEPT_COGS_LINE_IDS = {
+  tradingItems: [39],        // Trading Items Purchase
+  pottery: [38, 39],         // Raw Materials Purchase + Trading Items Purchase
+  batik: [38],               // Raw Materials Purchase
+  stitching: [38],           // Raw Materials Purchase
+};
+const DEPT_TOTAL_SALES_LI = 85;
+const DEPT_TOTAL_EXPENSES_LI = 61;
+const DEPT_NET_PL_LI = 62;
+
+function deptFinancials(deptKey, periodIds) {
+  const buId = DEPT_BU[deptKey];
+  const cogsIds = DEPT_COGS_LINE_IDS[deptKey];
+  const revenue = series(buId, DEPT_TOTAL_SALES_LI, periodIds);
+  const cogs = periodIds.map((pid) => {
+    const vals = cogsIds.map((lid) => frGet(buId, pid, lid));
+    if (vals.every((v) => v == null)) return null;
+    return sum(vals);
+  });
+  const totalExpenses = series(buId, DEPT_TOTAL_EXPENSES_LI, periodIds);
+  const netPL = series(buId, DEPT_NET_PL_LI, periodIds);
+  const grossProfit = revenue.map((rv, i) =>
+    rv == null || cogs[i] == null ? null : rv - cogs[i]
+  );
+  const grossMarginPct = grossProfit.map((gp, i) =>
+    gp == null || !revenue[i] ? null : Math.round((gp / revenue[i]) * 1000) / 10
+  );
+  const netMarginPct = netPL.map((np, i) =>
+    np == null || !revenue[i] ? null : Math.round((np / revenue[i]) * 1000) / 10
+  );
+  const opexOther = totalExpenses.map((te, i) =>
+    te == null || cogs[i] == null ? null : te - cogs[i]
+  );
+  return {
+    months: MONTHS,
+    revenue,
+    cogs,
+    grossProfit,
+    grossMarginPct,
+    totalExpenses,
+    opexOther, // total expenses minus COGS (HR + operating costs combined)
+    netPL,
+    netMarginPct,
+  };
+}
+
+export const TRADING_ITEMS = deptFinancials("tradingItems", FY2526_PIDS);
+export const POTTERY = deptFinancials("pottery", FY2526_PIDS);
+export const BATIK = deptFinancials("batik", FY2526_PIDS);
+export const STITCHING = deptFinancials("stitching", FY2526_PIDS);
+
 // ── Convenience: format helpers ──────────────────────────────────────────────
 export const L = (n) => {
   if (n == null) return "—";

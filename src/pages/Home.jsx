@@ -2,26 +2,28 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Factory, Shirt, UtensilsCrossed,
-  Banknote, Sparkles, ShieldCheck, LogOut, Users, Store
+  Banknote, MenuIcon, Sparkles, ShieldCheck, LogOut, Users, Store, Package
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import OverviewTab  from "@/components/dashboard/OverviewTab";
-import CeramicsTab  from "@/components/dashboard/CeramicsTab";
-import TextilesTab  from "@/components/dashboard/TextilesTab";
-import SienaTab     from "@/components/dashboard/SienaTab";
-import StoreTab     from "@/components/dashboard/StoreTab";
-import CashFlowTab  from "@/components/dashboard/CashFlowTab";
-import AIQueriesTab from "@/components/dashboard/AIQueriesTab";
+import OverviewTab     from "@/components/dashboard/OverviewTab";
+import CeramicsTab     from "@/components/dashboard/CeramicsTab";
+import TextilesTab     from "@/components/dashboard/TextilesTab";
+import TradingItemsTab from "@/components/dashboard/TradingItemsTab";
+import SienaTab         from "@/components/dashboard/SienaTab";
+import StoreTab         from "@/components/dashboard/StoreTab";
+import CashFlowTab      from "@/components/dashboard/CashFlowTab";
+import AIQueriesTab     from "@/components/dashboard/AIQueriesTab";
 
 const tabs = [
-  { id: "overview",  label: "Overview",   icon: LayoutDashboard },
-  { id: "siena",     label: "F&B",        icon: UtensilsCrossed },
-  { id: "store",     label: "Store",      icon: Store },
-  { id: "ceramics",  label: "Ceramics",   icon: Factory },
-  { id: "textiles",  label: "Textiles",   icon: Shirt },
-  { id: "cashflow",  label: "Cash Flow",  icon: Banknote },
-  { id: "ai",        label: "AI Queries", icon: Sparkles },
+  { id: "overview",  label: "Overview",       icon: LayoutDashboard },
+  { id: "siena",     label: "F&B",            icon: UtensilsCrossed },
+  { id: "store",     label: "Store",          icon: Store },
+  { id: "ceramics",  label: "Ceramics",       icon: Factory },
+  { id: "textiles",  label: "Textiles",       icon: Shirt },
+  { id: "trading",   label: "Trading Items",  icon: Package },
+  { id: "cashflow",  label: "Cash Flow",      icon: Banknote },
+  { id: "ai",        label: "AI Queries",     icon: Sparkles },
 ];
 
 const tabContent = {
@@ -30,6 +32,7 @@ const tabContent = {
   store:     StoreTab,
   ceramics:  CeramicsTab,
   textiles:  TextilesTab,
+  trading:   TradingItemsTab,
   cashflow:  CashFlowTab,
   ai:        AIQueriesTab,
 };
@@ -41,8 +44,11 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-30 flex bg-card/80 backdrop-blur-lg border-b border-border">
+        <div className="mr-auto px-4 sm:px-6 py-4 flex items-center">
+          <MenuIcon />
+        </div>
+        <div className="max-w-7xl w-full mr-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold font-heading text-foreground tracking-tight">
               Confetti Exports
