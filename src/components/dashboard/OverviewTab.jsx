@@ -2,7 +2,9 @@ import React from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow from "./StatusRow";
-import { OVERVIEW, STORE_HISTORY, FNB_STORE_HISTORY, MONTHS, L } from "@/data/financialData";
+import { OVERVIEW, FNB_STORE_HISTORY } from "@/data/ceplData";
+import { STORE_HISTORY } from "@/data/storeData";
+import { MONTHS, L } from "@/data/core";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,

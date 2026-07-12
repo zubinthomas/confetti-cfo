@@ -2,9 +2,9 @@ import React from "react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import {
-  FAB, MONTHS, OUTLETS, OUTLET_WEEKS, EVENTS_BREAKDOWN, DURGA_PUJA, L,
-} from "@/data/financialData";
+import { FAB } from "@/data/ceplData";
+import { OUTLETS, OUTLET_WEEKS, EVENTS_BREAKDOWN, DURGA_PUJA } from "@/data/fnbOutletData";
+import { MONTHS, L } from "@/data/core";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";

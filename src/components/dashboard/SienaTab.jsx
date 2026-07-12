@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow from "./StatusRow";
-import { FAB, MONTHS, L } from "@/data/financialData";
+import { FAB } from "@/data/ceplData";
+import { MONTHS, L } from "@/data/core";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,

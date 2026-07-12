@@ -2,7 +2,8 @@ import React from "react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import { OUTLETS, OUTLET_WEEKS, L } from "@/data/financialData";
+import { OUTLETS, OUTLET_WEEKS } from "@/data/fnbOutletData";
+import { L } from "@/data/core";
 import {
   ComposedChart, AreaChart, Area, BarChart, Bar, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,

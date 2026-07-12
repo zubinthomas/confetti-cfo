@@ -1,7 +1,7 @@
 // Read the source Excel workbooks in data-sources/ and compute the same
 // aggregates the dashboard presents, WITHOUT going through
-// extracted_data.json / financialData.js — so the tests compare what the UI
-// shows against the spreadsheets themselves.
+// extracted_data.json or the src/data adapters — so the tests compare what
+// the UI shows against the spreadsheets themselves.
 import ExcelJS from "exceljs";
 import path from "node:path";
 import fs from "node:fs";

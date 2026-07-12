@@ -1,5 +1,5 @@
 import React from "react";
-import { L } from "@/data/financialData";
+import { L } from "@/data/core";
 
 export default function ChartTooltip({ active = false, payload = [], label = "" }) {
   if (!active || !payload?.length) return null;

@@ -1,6 +1,6 @@
 import React from "react";
 import OutletPage, { MenuMixCard } from "./OutletPage";
-import { menuMix } from "@/data/financialData";
+import { menuMix } from "@/data/fnbOutletData";
 
 export default function RannaghorPage() {
   return (

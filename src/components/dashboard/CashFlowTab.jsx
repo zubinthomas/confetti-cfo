@@ -2,101 +2,124 @@ import React from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
-import { Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts";
+import ChartTooltip from "./ChartTooltip";
+import { CASHFLOW, OUTFLOW_CATEGORIES, GST_MEMO, CASH_GAPS } from "@/data/cashFlowData";
+import { MONTHS, L } from "@/data/core";
+import { Database } from "lucide-react";
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
+} from "recharts";
+
+const sum = (arr) => arr.reduce((a, b) => a + (b || 0), 0);
+
+const fyIn = sum(CASHFLOW.inflows);
+const fyOut = sum(CASHFLOW.outflows);
+const fyNet = fyIn - fyOut;
+const bestIdx = CASHFLOW.net.indexOf(Math.max(...CASHFLOW.net));
+const worstIdx = CASHFLOW.net.indexOf(Math.min(...CASHFLOW.net));
+const negativeMonths = CASHFLOW.net.filter((v) => v < 0).length;
 
 const kpis = [
-  { label: "Current Cash", value: "₹11.4L", sub: "Today", status: "green" },
-  { label: "30-Day Projection", value: "₹8.2L", sub: "Tightens — watch", status: "amber" },
-  { label: "90-Day Projection", value: "₹13.7L", sub: "Recovers", status: "green" },
-  { label: "WC Requirement", value: "₹6.5L", sub: "Next 30 days", status: "amber" },
+  { label: "Money In (FY 25-26)", value: `₹${L(fyIn)}`, sub: "All six departments' sales", status: "green" },
+  { label: "Money Out (FY 25-26)", value: `₹${L(fyOut)}`, sub: "All reported expenses", status: "amber" },
+  { label: "Net (FY 25-26)", value: `₹${L(fyNet)}`, sub: `${((fyNet / fyIn) * 100).toFixed(1)}% of inflows`, status: fyNet >= 0 ? "green" : "red" },
+  { label: "Cash-negative Months", value: `${negativeMonths}/12`, sub: negativeMonths ? `Worst: ${MONTHS[worstIdx]} (₹${L(CASHFLOW.net[worstIdx])})` : "None", status: negativeMonths > 3 ? "red" : negativeMonths ? "amber" : "green" },
+  { label: "Best Month", value: MONTHS[bestIdx], sub: `₹${L(CASHFLOW.net[bestIdx])} net`, status: "green" },
 ];
 
-const outflows = [
-  { label: "Payroll", value: "₹8.4L", status: "red" },
-  { label: "GST", value: "₹3.2L", status: "amber" },
-  { label: "Vendor Payments", value: "₹9.1L", status: "red" },
-  { label: "Rent", value: "₹1.8L", status: "amber" },
-  { label: "Loan EMI", value: "₹2.4L", status: "amber" },
-  { label: "Utilities", value: "₹0.9L" },
-];
+const monthly = MONTHS.map((m, i) => ({
+  month: m,
+  "Money In": CASHFLOW.inflows[i],
+  "Money Out": CASHFLOW.outflows[i],
+  "Cumulative Net": CASHFLOW.cumulative[i],
+}));
 
-const forecastData = [
-  { period: "Now", collections: 0, outflows: 0, balance: 11.4 },
-  { period: "Month 1", collections: 22.6, outflows: 25.8, balance: 8.2 },
-  { period: "Month 2", collections: 28.4, outflows: 24.2, balance: 12.4 },
-  { period: "Month 3", collections: 32.1, outflows: 22.8, balance: 13.7 },
-];
+const outflowRows = [...OUTFLOW_CATEGORIES]
+  .sort((a, b) => b.total - a.total)
+  .map((c) => ({
+    label: c.label,
+    value: `₹${L(c.total)} (${((c.total / fyOut) * 100).toFixed(1)}%)`,
+    status: c.label === "Payroll & staff" || c.label === "Materials & purchases" ? "red" : undefined,
+  }));
 
-const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-      <p className="text-xs font-medium text-foreground mb-1">{label}</p>
-      {payload.map((p, i) => (
-        <p key={i} className="text-xs text-muted-foreground">
-          <span style={{ color: p.color || p.stroke }}>●</span> {p.name}: ₹{p.value}L
-        </p>
-      ))}
-    </div>
-  );
-};
+const outflowMonthly = MONTHS.map((m, i) => {
+  const row = { month: m };
+  for (const c of OUTFLOW_CATEGORIES) row[c.label] = c.monthly[i];
+  return row;
+});
+const CAT_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4", "#10b981", "#ec4899", "#84cc16", "#94a3b8"];
 
 export default function CashFlowTab() {
   return (
     <div className="space-y-6">
       <div>
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          Cash Flow Dashboard
+          Group Money In / Money Out · FY 2025-26 (P&L basis)
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
         </div>
       </div>
 
-      <DashCard title="Next 30 Days — Outflows">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-          {outflows.map((o) => {
-            const color = o.status === "red"
-              ? "text-red-600 dark:text-red-400"
-              : o.status === "amber"
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-foreground";
-            return (
-              <div key={o.label} className="bg-muted rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">{o.label}</p>
-                <p className={`text-lg font-semibold ${color}`}>{o.value}</p>
-              </div>
-            );
-          })}
-        </div>
-        <div className="space-y-0">
-          <PLRow label="Total outflows" value="₹25.8L" status="red" />
-          <PLRow label="Expected collections" value="₹22.6L" status="green" />
-          <PLRow label="Net 30-day position" value="−₹3.2L (from current cash)" status="amber" isTotal />
-        </div>
+      <DashCard title="Monthly Money In vs Out, with Cumulative Net">
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={monthly}>
+            <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+            <Tooltip content={<ChartTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <ReferenceLine y={0} stroke="#e2e8f0" />
+            <Bar dataKey="Money In" fill="#10b981" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Money Out" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Line type="monotone" dataKey="Cumulative Net" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
       </DashCard>
 
-      <DashCard title="90-Day Cash Forecast">
-        <div className="flex flex-wrap gap-4 mb-3">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: "#10b981" }} /> Collections
-          </span>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: "#ef4444" }} /> Outflows
-          </span>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="w-2.5 h-2.5 rounded-sm border border-blue-400" style={{ backgroundColor: "transparent" }} /> Cash Balance
-          </span>
-        </div>
-        <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={forecastData}>
-            <XAxis dataKey="period" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v}L`} />
-            <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey="collections" name="Collections" stroke="#10b981" fill="#10b98115" strokeWidth={2} />
-            <Area type="monotone" dataKey="outflows" name="Outflows" stroke="#ef4444" fill="#ef444410" strokeWidth={2} />
-            <Line type="monotone" dataKey="balance" name="Cash Balance" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 4, fill: "#3b82f6" }} />
-          </AreaChart>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DashCard title="Where the Money Goes (FY 2025-26)">
+          {outflowRows.map((r) => <PLRow key={r.label} {...r} />)}
+          <PLRow label="GST paid (memo)" value={`₹${L(GST_MEMO.total)}`} status="amber" />
+          <p className="text-xs text-muted-foreground mt-3">
+            Categories are the workbooks&rsquo; own cost lines summed across all six departments;
+            &ldquo;Other operating costs&rdquo; is the remainder of reported total expenses. GST is a
+            real cash outflow but the sheets report it outside their expense totals, so it&rsquo;s
+            shown as a memo item rather than a slice of the 100%.
+          </p>
+        </DashCard>
+
+        <DashCard title="Not Derivable From the Source Data">
+          <div className="flex items-center gap-1.5 mb-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-3 py-1.5 rounded-full w-fit">
+            <Database className="w-3.5 h-3.5" />
+            The workbooks are P&L statements — no balance-sheet data
+          </div>
+          <ul className="space-y-2">
+            {CASH_GAPS.map((g) => (
+              <li key={g} className="flex items-start gap-2 text-sm text-muted-foreground">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                {g}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground mt-3">
+            Until a bank/receivables source is connected, this page shows P&L-basis money movement
+            rather than a true cash position or forecast.
+          </p>
+        </DashCard>
+      </div>
+
+      <DashCard title="Monthly Outflows by Category">
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={outflowMonthly}>
+            <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+            <Tooltip content={<ChartTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {OUTFLOW_CATEGORIES.map((c, i) => (
+              <Bar key={c.label} dataKey={c.label} stackId="a" fill={CAT_COLORS[i % CAT_COLORS.length]}
+                   radius={i === OUTFLOW_CATEGORIES.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+            ))}
+          </ComposedChart>
         </ResponsiveContainer>
       </DashCard>
     </div>

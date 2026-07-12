@@ -4,7 +4,7 @@ import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import StatusRow from "./StatusRow";
 import ChartTooltip from "./ChartTooltip";
-import { MONTHS, L, pct } from "@/data/financialData";
+import { MONTHS, L, pct } from "@/data/core";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
@@ -12,7 +12,7 @@ import {
 const sum = (arr) => arr.reduce((a, b) => a + (b || 0), 0);
 
 // One craft department's FY view (Pottery / Batik / Stitching / Trading Items).
-// `data` is a deptFinancials() export from financialData.js.
+// `data` is a deptFinancials() export from ceplData.js.
 export default function CraftDeptPage({ data, heading }) {
   const fyRevenue = sum(data.revenue);
   const fyCogs = sum(data.cogs);

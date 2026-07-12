@@ -1,19 +1,20 @@
 import React, { useState } from "react";
 import { invokeLLM } from "@/api/integrations";
+import { buildCFOContext } from "@/data/aiContext";
 import { TrendingUp, Truck, BarChart3, CalendarDays, AlertTriangle, Tag, Building2, UtensilsCrossed, RefreshCw, Search, Sparkles, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 const queries = [
-  { icon: TrendingUp, label: "Top 10 expense increases this month", prompt: "Show me the top 10 expense increases this month across all divisions" },
-  { icon: Truck, label: "Vendors with >10% cost increase", prompt: "Which vendors have had cost increases of more than 10% in the last 3 months?" },
-  { icon: BarChart3, label: "Compare EBITDA across divisions", prompt: "Compare EBITDA by division for this month vs last month" },
-  { icon: CalendarDays, label: "Predict cash flow — next 90 days", prompt: "Predict cash flow for the next 90 days based on current receivables, payables and revenue trends" },
-  { icon: AlertTriangle, label: "Which department exceeded budget?", prompt: "Which department exceeded budget this month and by how much?" },
-  { icon: Tag, label: "Highest margin SKUs by division", prompt: "Which SKUs generated the highest margin this quarter — show by division" },
-  { icon: Building2, label: "Which unit needs working capital?", prompt: "Which business unit needs working capital injection and how much?" },
-  { icon: UtensilsCrossed, label: "Siena menu items to reprice", prompt: "Show me Siena menu items that should be repriced — which have margins below 60%?" },
-  { icon: RefreshCw, label: "Ceramics cash conversion cycle", prompt: "What is the ceramics division cash conversion cycle and how can it be improved?" },
-  { icon: Search, label: "Detect cost anomalies this month", prompt: "Identify any cost anomalies or unusual spikes across utilities, payroll, or procurement this month" },
+  { icon: TrendingUp, label: "Biggest FY 25-26 cost lines", prompt: "What are the biggest cost lines this year across the group, and where should we focus cost control?" },
+  { icon: BarChart3, label: "Compare net margin by division", prompt: "Compare net margin across F&B, Store, Pottery, Batik, Stitching and Trading Items — which divisions drag the group down?" },
+  { icon: CalendarDays, label: "Seasonality & weak months", prompt: "Which months were loss-making or weak this year, and what does the seasonality pattern suggest for planning next year?" },
+  { icon: AlertTriangle, label: "Loss-making divisions", prompt: "Which divisions lost money this year, how much, and what would it take to turn them around?" },
+  { icon: UtensilsCrossed, label: "F&B outlet performance", prompt: "Compare the F&B outlets (Bosar Ghor cafe, Dinning Room restaurant, Rannaghor events kitchen) — which is strongest and where is the opportunity?" },
+  { icon: Tag, label: "Store category & channel mix", prompt: "Analyse the store's sales by category and channel — where is growth coming from and what looks over-concentrated?" },
+  { icon: Truck, label: "Consignment partner review", prompt: "Review the consignment partner sales — which partners matter, and is the commission mix healthy?" },
+  { icon: Building2, label: "F&B turnaround story", prompt: "Explain the F&B division's year-over-year turnaround — what changed vs FY 24-25 and is it sustainable?" },
+  { icon: RefreshCw, label: "Events & Durga Puja impact", prompt: "How important are events (including Durga Puja) to F&B revenue, and should we invest more in them?" },
+  { icon: Search, label: "What data are we missing?", prompt: "As CFO, what financial data are we not capturing yet, and what decisions does that limit?" },
 ];
 
 export default function AIQueriesTab() {
@@ -25,7 +26,7 @@ export default function AIQueriesTab() {
     setLoading(true);
     setActiveQuery(query.label);
     setResponse(null);
-    const contextPrompt = `You are a CFO AI assistant for Confetti Exports, a group with 3 divisions: Ceramics (manufacturing, revenue ₹18.4L MTD, 47% gross margin), Textiles (lifestyle, revenue ₹14.2L MTD, 52% gross margin, ₹2.8L dead stock), and Siena (café/restaurant/bar, revenue ₹10.0L MTD, food cost 30%, wastage 4.2%). Group total revenue is ₹42.6L MTD, EBITDA 16.7%, cash ₹11.4L, receivables ₹24.8L (38 days), payables ₹16.2L (22 days), payroll ₹8.4L (19.7% of revenue). Inventory ₹31.5L. GST liability ₹3.2L.\n\nAnswer the following question with specific numbers, actionable insights, and recommendations. Format with markdown headings and bullet points.\n\nQuestion: ${query.prompt}`;
+    const contextPrompt = `${buildCFOContext()}\n\nQuestion: ${query.prompt}`;
     const result = await invokeLLM(contextPrompt);
     setResponse(result);
     setLoading(false);

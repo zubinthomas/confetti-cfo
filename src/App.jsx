@@ -28,7 +28,7 @@ import RestaurantPage from '@/components/fnb/RestaurantPage';
 import BarPage from '@/components/fnb/BarPage';
 import EventsPage from '@/components/fnb/EventsPage';
 import RannaghorPage from '@/components/fnb/RannaghorPage';
-import { POTTERY, BATIK, STITCHING, TRADING_ITEMS } from '@/data/financialData';
+import { POTTERY, BATIK, STITCHING, TRADING_ITEMS } from '@/data/ceplData';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();

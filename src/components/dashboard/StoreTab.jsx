@@ -2,7 +2,9 @@ import React, { useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow from "./StatusRow";
-import { SIENNA_STORE, SIENNA_CATEGORIES, SIENNA_CATEGORIES_LABEL, STORE_HISTORY, STORE, MONTHS, L } from "@/data/financialData";
+import { SIENNA_STORE, SIENNA_CATEGORIES, SIENNA_CATEGORIES_LABEL, STORE_HISTORY } from "@/data/storeData";
+import { STORE } from "@/data/ceplData";
+import { MONTHS, L } from "@/data/core";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,

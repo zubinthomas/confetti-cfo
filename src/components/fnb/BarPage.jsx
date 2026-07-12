@@ -2,10 +2,9 @@ import React from "react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import {
-  FAB, MONTHS, OUTLETS, OUTLET_WEEKS, LIQUOR_MIX,
-  CAFE_MONTHLY, L,
-} from "@/data/financialData";
+import { FAB } from "@/data/ceplData";
+import { OUTLETS, OUTLET_WEEKS, LIQUOR_MIX, CAFE_MONTHLY } from "@/data/fnbOutletData";
+import { MONTHS, L } from "@/data/core";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,

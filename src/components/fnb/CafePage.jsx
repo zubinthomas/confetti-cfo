@@ -2,7 +2,8 @@ import React from "react";
 import OutletPage, { MenuMixCard } from "./OutletPage";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import { menuMix, CAFE_MONTHLY, CAFE_MONTH_LABELS, L } from "@/data/financialData";
+import { menuMix, CAFE_MONTHLY, CAFE_MONTH_LABELS } from "@/data/fnbOutletData";
+import { L } from "@/data/core";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";

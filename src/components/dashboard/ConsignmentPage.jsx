@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import ChartTooltip from "./ChartTooltip";
-import { CONSIGNMENT, L } from "@/data/financialData";
+import { CONSIGNMENT } from "@/data/storeData";
+import { L } from "@/data/core";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function ConsignmentPage() {
