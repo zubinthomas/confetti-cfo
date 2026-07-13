@@ -146188,11 +146188,5 @@
         "Second pass: all Cafe-workbook records (business units Cafe/Bosar Ghor/Dinning Room/Rannaghor/Total) were re-extracted from scratch so the duplicated 'Kombucha'/'Liquor' rows land wholly on their new '(Retail Purchases)' line items, eliminating the mixed amount/percentage residue the first collision left behind."
       ]
     }
-  },
-  "appEntities": {
-    "Employee": [],
-    "Licence": [],
-    "Recruitment": [],
-    "LeaveRequest": []
   }
 }

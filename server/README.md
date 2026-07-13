@@ -39,7 +39,7 @@ npm run dev   # vite proxies /api → http://localhost:3001
 
 ## Data storage
 
-Entity data is persisted in the `appEntities` section of `src/data/extracted_data.json` — the single data store for the whole app.
+Entity data lives in the database (PGlite in development — an embedded PostgreSQL, no server to run; swap `server/db/client.ts` to a network driver + `DATABASE_URL` for production Postgres). Seed it from the verified Excel extraction with `npm run db:seed`, and prove the data model reconstructs `src/data/extracted_data.json` exactly with `npm run db:verify`.
 Uploaded files are stored in `server/uploads/`.
 
 > **For production** swap `server/db.js` for a real database (PostgreSQL, MongoDB, etc.) and use proper cloud file storage (S3, R2, etc.).

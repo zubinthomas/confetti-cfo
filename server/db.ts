@@ -1,89 +1,97 @@
-// Entity storage. App entities (HR & compliance records) live in the
-// `appEntities` section of src/data/extracted_data.json, so that file is the
-// single data store for the whole app — the dashboards read its financial
-// tables directly (via src/data/financialData.js) and this module gives the
-// Express API read/write access to the entity tables.
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+// Entity CRUD on the database (Drizzle). The API contract is unchanged from
+// the old JSON-file store: rows go in/out with snake_case field names and a
+// string id + ISO-8601 created_date.
+import { randomUUID } from 'node:crypto';
+import { asc, desc, eq, getTableColumns } from 'drizzle-orm';
+import type { PgTableWithColumns } from 'drizzle-orm/pg-core';
+import { db, ready, schema } from './db/client.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', 'src', 'data', 'extracted_data.json');
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type AnyPgTable = PgTableWithColumns<any>;
 
-const VALID_ENTITIES = new Set(['Employee', 'Licence', 'Recruitment', 'LeaveRequest']);
+const TABLES: Record<string, AnyPgTable> = {
+  Employee: schema.employees,
+  Licence: schema.licences,
+  Recruitment: schema.recruitments,
+  LeaveRequest: schema.leaveRequests,
+};
 
-interface EntityRow {
-  id: string;
-  created_date: string;
-  [field: string]: unknown;
+function assertEntity(entity: string): AnyPgTable {
+  const table = TABLES[entity];
+  if (!table) throw new Error(`Unknown entity: ${entity}`);
+  return table;
 }
 
-interface Db {
-  appEntities?: Record<string, EntityRow[]>;
-  [table: string]: unknown;
-}
-
-function read(): Db {
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-}
-
-function write(db: Db) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-}
-
-function assertEntity(entity: string) {
-  if (!VALID_ENTITIES.has(entity)) throw new Error(`Unknown entity: ${entity}`);
-}
-
-function tables(db: Db): Record<string, EntityRow[]> {
-  if (!db.appEntities) db.appEntities = {};
-  for (const name of VALID_ENTITIES) {
-    if (!db.appEntities[name]) db.appEntities[name] = [];
+// snake_case (API) <-> schema property (camelCase) maps per table
+function fieldMaps(table: AnyPgTable) {
+  const toProp: Record<string, string> = {};
+  const toApi: Record<string, string> = {};
+  for (const [prop, col] of Object.entries(getTableColumns(table))) {
+    toProp[(col as { name: string }).name] = prop;
+    toApi[prop] = (col as { name: string }).name;
   }
-  return db.appEntities;
+  return { toProp, toApi };
 }
 
-export function listEntities(entity: string, sort?: string) {
-  assertEntity(entity);
-  const items = tables(read())[entity];
-  if (!sort) return items;
-  const desc = sort.startsWith('-');
-  const field = desc ? sort.slice(1) : sort;
-  return [...items].sort((a, b) => {
-    if (((a[field] ?? '') as string) < ((b[field] ?? '') as string)) return desc ? 1 : -1;
-    if (((a[field] ?? '') as string) > ((b[field] ?? '') as string)) return desc ? -1 : 1;
-    return 0;
-  });
+function toRow(table: AnyPgTable, data: Record<string, unknown>) {
+  const { toProp } = fieldMaps(table);
+  const row: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    const prop = toProp[k];
+    if (prop) row[prop] = v;
+  }
+  return row;
 }
 
-export function createEntity(entity: string, data: Record<string, unknown>) {
-  assertEntity(entity);
-  const db = read();
-  const item = { id: randomUUID(), created_date: new Date().toISOString(), ...data };
-  tables(db)[entity].push(item);
-  write(db);
-  return item;
+function toApiShape(table: AnyPgTable, row: Record<string, unknown>) {
+  const { toApi } = fieldMaps(table);
+  const out: Record<string, unknown> = {};
+  for (const [prop, v] of Object.entries(row)) out[toApi[prop] ?? prop] = v;
+  return out;
 }
 
-export function updateEntity(entity: string, id: string, data: Record<string, unknown>) {
-  assertEntity(entity);
-  const db = read();
-  const items = tables(db)[entity];
-  const idx = items.findIndex((i) => i.id === id);
-  if (idx === -1) return null;
-  items[idx] = { ...items[idx], ...data };
-  write(db);
-  return items[idx];
+export async function listEntities(entity: string, sort?: string) {
+  const table = assertEntity(entity);
+  await ready();
+  let query = db.select().from(table).$dynamic();
+  if (sort) {
+    const isDesc = sort.startsWith('-');
+    const apiField = isDesc ? sort.slice(1) : sort;
+    const prop = fieldMaps(table).toProp[apiField];
+    if (prop) {
+      const col = getTableColumns(table)[prop] as never;
+      query = query.orderBy(isDesc ? desc(col) : asc(col));
+    }
+  }
+  const rows = await query;
+  return rows.map((r) => toApiShape(table, r as Record<string, unknown>));
 }
 
-export function deleteEntity(entity: string, id: string) {
-  assertEntity(entity);
-  const db = read();
-  const items = tables(db)[entity];
-  const idx = items.findIndex((i) => i.id === id);
-  if (idx === -1) return false;
-  items.splice(idx, 1);
-  write(db);
-  return true;
+export async function createEntity(entity: string, data: Record<string, unknown>) {
+  const table = assertEntity(entity);
+  await ready();
+  const row = {
+    ...toRow(table, data),
+    id: randomUUID(),
+    createdDate: new Date().toISOString(),
+  };
+  const [inserted] = await db.insert(table).values(row).returning();
+  return toApiShape(table, inserted as Record<string, unknown>);
+}
+
+export async function updateEntity(entity: string, id: string, data: Record<string, unknown>) {
+  const table = assertEntity(entity);
+  await ready();
+  const row = toRow(table, data);
+  delete row.id;
+  delete row.createdDate;
+  const [updated] = await db.update(table).set(row).where(eq(table.id, id)).returning();
+  return updated ? toApiShape(table, updated as Record<string, unknown>) : null;
+}
+
+export async function deleteEntity(entity: string, id: string) {
+  const table = assertEntity(entity);
+  await ready();
+  const deleted = await db.delete(table).where(eq(table.id, id)).returning();
+  return deleted.length > 0;
 }

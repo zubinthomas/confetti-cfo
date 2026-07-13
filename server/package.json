@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "start": "node index.ts",
-    "dev": "node --watch index.ts"
+    "dev": "node --watch index.ts",
+    "db:seed": "node db/seed.ts",
+    "db:verify": "node db/verify.ts",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
