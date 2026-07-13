@@ -29,76 +29,19 @@
 //     its monthly channel cells; the monthly detail is used here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import rawJson from "./extracted_data.json";
+import { getDataset } from "./datasetStore";
 
-// ── Dataset model (field-verified against extracted_data.json) ──────────────
-export interface Business { id: number; name: string; slug: string; description: string }
-export interface BusinessUnit { id: number; businessId: number; name: string; unitType: "department" | "outlet" }
-export interface Period {
-  id: number;
-  periodType: "month" | "week" | "custom";
-  startDate: string;   // YYYY-MM-DD
-  endDate: string;     // YYYY-MM-DD
-  label: string;
-  fiscalYear: string;  // e.g. "2025-2026"
-  isSpecialEvent: boolean;
-}
-export type LineItemCategory = "revenue" | "cogs" | "hr_cost" | "operating_cost" | "subtotal" | "other";
-export interface LineItem {
-  id: number;
-  businessId: number;
-  name: string;
-  category: LineItemCategory;
-  valueType: "amount" | "percentage";
-  relatedAmountLineItemId: number | null;
-  displayOrder: number | null;
-}
-export interface FinancialRecord {
-  id: number;
-  businessUnitId: number;
-  periodId: number;
-  lineItemId: number;
-  value: number;       // percentages stored as fractions (0.296 = 29.6%)
-  notes: string | null;
-}
-export interface Category { id: number; businessId: number; name: string }
-export interface Channel { id: number; businessId: number; name: string }
-export interface SalesRecord {
-  id: number;
-  periodId: number;
-  categoryId: number | null;  // null = channel-level total row
-  channelId: number;
-  businessUnitId: number | null;
-  amount: number;
-}
-export interface Vendor {
-  id: number;
-  businessId: number;
-  name: string;
-  commissionRate: number | null;
-  group: "consignment" | "other_brands";
-}
-export interface ConsignmentRecord {
-  id: number;
-  periodId: number;
-  vendorId: number;
-  amount: number;
-  commissionRate: number | null;
-}
-export interface Dataset {
-  businesses: Business[];
-  businessUnits: BusinessUnit[];
-  periods: Period[];
-  lineItems: LineItem[];
-  financialRecords: FinancialRecord[];
-  categories: Category[];
-  channels: Channel[];
-  salesRecords: SalesRecord[];
-  vendors: Vendor[];
-  consignmentRecords: ConsignmentRecord[];
-}
+// The dataset model lives in datasetStore.ts (which also holds the data
+// fetched from /api/dataset); re-exported here so the adapters keep a single
+// import site.
+export type {
+  Business, BusinessUnit, Period, LineItemCategory, LineItem, FinancialRecord,
+  Category, Channel, SalesRecord, Vendor, ConsignmentRecord, Dataset,
+} from "./datasetStore";
 
-const raw = rawJson as unknown as Dataset;
+// Evaluated when the gated dashboard chunk loads — after DatasetGate has
+// called setDataset() (see src/App.tsx).
+const raw = getDataset();
 
 export const {
   periods, financialRecords, categories, channels, salesRecords,

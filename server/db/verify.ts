@@ -4,27 +4,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { asc } from 'drizzle-orm';
-import { db, ready, schema } from './client.ts';
+import { loadDataset, loadMeta } from './dataset.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATASET = path.join(__dirname, '..', '..', 'src', 'data', 'extracted_data.json');
 const raw = JSON.parse(fs.readFileSync(DATASET, 'utf-8'));
 
-await ready();
-
 const rebuilt: Record<string, unknown> = {
-  businesses: await db.select().from(schema.businesses).orderBy(asc(schema.businesses.id)),
-  businessUnits: await db.select().from(schema.businessUnits).orderBy(asc(schema.businessUnits.id)),
-  periods: await db.select().from(schema.periods).orderBy(asc(schema.periods.id)),
-  lineItems: await db.select().from(schema.lineItems).orderBy(asc(schema.lineItems.id)),
-  financialRecords: await db.select().from(schema.financialRecords).orderBy(asc(schema.financialRecords.id)),
-  categories: await db.select().from(schema.categories).orderBy(asc(schema.categories.id)),
-  channels: await db.select().from(schema.channels).orderBy(asc(schema.channels.id)),
-  salesRecords: await db.select().from(schema.salesRecords).orderBy(asc(schema.salesRecords.id)),
-  vendors: await db.select().from(schema.vendors).orderBy(asc(schema.vendors.id)),
-  consignmentRecords: await db.select().from(schema.consignmentRecords).orderBy(asc(schema.consignmentRecords.id)),
-  _meta: (await db.select().from(schema.datasetMeta))[0]?.meta,
+  ...(await loadDataset()),
+  _meta: await loadMeta(),
 };
 
 // source arrays, ordered by id like the reconstruction

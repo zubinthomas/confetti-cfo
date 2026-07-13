@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.ts';
 import entityRoutes from './routes/entities.ts';
 import integrationRoutes from './routes/integrations.ts';
+import datasetRoutes from './routes/dataset.ts';
 import { config } from 'dotenv';
 
 config()
@@ -24,6 +25,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/entities', entityRoutes);
 app.use('/api/integrations', integrationRoutes);
+app.use('/api/dataset', datasetRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));

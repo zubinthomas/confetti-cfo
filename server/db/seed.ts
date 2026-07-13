@@ -12,6 +12,7 @@ const DATASET = path.join(__dirname, '..', '..', 'src', 'data', 'extracted_data.
 
 const raw = JSON.parse(fs.readFileSync(DATASET, 'utf-8'));
 
+export async function seed() {
 async function insertChunked<T extends { id: unknown }>(
   table: Parameters<typeof db.insert>[0],
   rows: T[],
@@ -22,9 +23,9 @@ async function insertChunked<T extends { id: unknown }>(
   }
 }
 
-await ready();
+  await ready();
 
-await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
   // wipe in FK-safe order
   for (const t of [
     schema.consignmentRecords, schema.salesRecords, schema.financialRecords,
@@ -76,4 +77,9 @@ for (const [name, table] of Object.entries({
   counts[name] = n;
 }
 console.log('seeded:', counts);
-process.exit(0);
+}
+
+if (process.argv[1] && process.argv[1].endsWith('seed.ts')) {
+  await seed();
+  process.exit(0);
+}

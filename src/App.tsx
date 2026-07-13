@@ -1,8 +1,8 @@
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
@@ -14,32 +14,70 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import HR from '@/pages/HR';
 import Compliance from '@/pages/Compliance';
-import DashboardShell from '@/components/dashboard/DashboardShell';
-import OverviewTab from '@/components/dashboard/OverviewTab';
-import SienaTab from '@/components/dashboard/SienaTab';
-import StoreTab from '@/components/dashboard/StoreTab';
-import CashFlowTab from '@/components/dashboard/CashFlowTab';
-import AIQueriesTab from '@/components/dashboard/AIQueriesTab';
-import CraftDeptPage from '@/components/dashboard/CraftDeptPage';
-import ConsignmentPage from '@/components/dashboard/ConsignmentPage';
-import OpsPage from '@/components/dashboard/OpsPage';
-import CafePage from '@/components/fnb/CafePage';
-import RestaurantPage from '@/components/fnb/RestaurantPage';
-import BarPage from '@/components/fnb/BarPage';
-import EventsPage from '@/components/fnb/EventsPage';
-import RannaghorPage from '@/components/fnb/RannaghorPage';
-import { POTTERY, BATIK, STITCHING, TRADING_ITEMS } from '@/data/ceplData';
+import { get } from '@/api/http';
+import { setDataset, type Dataset } from '@/data/datasetStore';
+
+// The dashboard (and the data adapters it imports) loads only after the
+// dataset has been fetched — see the note in src/data/datasetStore.ts.
+const DashboardApp = lazy(() => import('./DashboardApp'));
+
+const Splash = ({ message }: { message?: string }) => (
+  <div className="fixed inset-0 flex flex-col items-center justify-center gap-3">
+    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+    {message && <p className="text-sm text-muted-foreground">{message}</p>}
+  </div>
+);
+
+/** Fetches the dataset from the API, then mounts the dashboard chunk. */
+const DatasetGate = () => {
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    setState('loading');
+    get<Dataset>('/dataset')
+      .then((d) => {
+        setDataset(d);
+        setState('ready');
+      })
+      .catch((err: Error) => {
+        setError(err.message || 'Failed to load the dataset');
+        setState('error');
+      });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (state === 'loading') return <Splash message="Loading financial data…" />;
+  if (state === 'error') {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-foreground font-medium">Couldn&rsquo;t load the financial dataset</p>
+        <p className="text-sm text-muted-foreground max-w-md">
+          {error}. Make sure the API server is running (and seeded — <code>npm run db:seed</code> in <code>server/</code>).
+        </p>
+        <button
+          onClick={load}
+          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  return (
+    <Suspense fallback={<Splash />}>
+      <DashboardApp />
+    </Suspense>
+  );
+};
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
-      </div>
-    );
+    return <Splash />;
   }
 
   // Handle authentication errors
@@ -61,28 +99,11 @@ const AuthenticatedApp = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route element={<DashboardShell />}>
-          <Route path="/" element={<OverviewTab />} />
-          <Route path="/fnb" element={<SienaTab />} />
-          <Route path="/fnb/cafe" element={<CafePage />} />
-          <Route path="/fnb/restaurant" element={<RestaurantPage />} />
-          <Route path="/fnb/bar" element={<BarPage />} />
-          <Route path="/fnb/events" element={<EventsPage />} />
-          <Route path="/fnb/rannaghor" element={<RannaghorPage />} />
-          <Route path="/store" element={<StoreTab />} />
-          <Route path="/store/consignment" element={<ConsignmentPage />} />
-          <Route path="/crafts/pottery" element={<CraftDeptPage data={POTTERY} heading="Pottery Division" />} />
-          <Route path="/crafts/batik" element={<CraftDeptPage data={BATIK} heading="Batik Division" />} />
-          <Route path="/crafts/stitching" element={<CraftDeptPage data={STITCHING} heading="Stitching Division" />} />
-          <Route path="/crafts/trading-items" element={<CraftDeptPage data={TRADING_ITEMS} heading="Trading Items" />} />
-          <Route path="/cashflow" element={<CashFlowTab />} />
-          <Route path="/ai" element={<AIQueriesTab />} />
-          <Route path="/ops/:section" element={<OpsPage />} />
-        </Route>
         <Route path="/hr" element={<HR />} />
         <Route path="/compliance" element={<Compliance />} />
+        {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
+        <Route path="/*" element={<DatasetGate />} />
       </Route>
-      <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
 };

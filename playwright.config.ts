@@ -14,10 +14,20 @@ export default defineConfig({
     baseURL: "http://localhost:5199",
     launchOptions: executablePath ? { executablePath } : {},
   },
-  webServer: {
-    command: "npx vite --port 5199 --strictPort",
-    url: "http://localhost:5199",
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      // API server (seeds the database first if it's empty)
+      command: "node db/ensure-seeded.ts && node index.ts",
+      cwd: "server",
+      url: "http://localhost:3001/api/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: "npx vite --port 5199 --strictPort",
+      url: "http://localhost:5199",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 });
