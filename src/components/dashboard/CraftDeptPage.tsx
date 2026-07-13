@@ -4,7 +4,7 @@ import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import StatusRow from "./StatusRow";
 import ChartTooltip from "./ChartTooltip";
-import { MONTHS, L, pct, sum } from "@/data/core";
+import { MONTHS, L, pct, sum, maxIdx, minIdx } from "@/data/core";
 import type { DeptFinancials } from "@/data/ceplData";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
@@ -24,10 +24,8 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
   const fyNetPL = sum(data.netPL);
   const fyNetMarginPct = fyRevenue ? (fyNetPL / fyRevenue) * 100 : 0;
 
-  const bestMonthIdx = data.netPL.reduce(
-    (best, v, i) => (v != null && (best === -1 || v > data.netPL[best]) ? i : best), -1);
-  const worstMonthIdx = data.netPL.reduce(
-    (worst, v, i) => (v != null && (worst === -1 || v < data.netPL[worst]) ? i : worst), -1);
+  const bestMonthIdx = maxIdx(data.netPL);
+  const worstMonthIdx = minIdx(data.netPL);
   const profitableMonths = data.netPL.filter((v) => v != null && v > 0).length;
 
   const kpis: KpiData[] = [

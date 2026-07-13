@@ -95,6 +95,22 @@ export const STORE_HISTORY = [
   { fy: "2026-2027", label: "FY 26-27 (Apr–May)", ...fyStoreRevenue("2026-2027") },
 ];
 
+// ── April-only channel revenue, one prior fiscal year at a time ────────────
+// Lets a page ask "is this year's April the strongest on record?" without
+// assuming which years exist — every FY with a first month is included.
+function fyFirstMonthRevenue(fiscalYear: string): number | null {
+  const pids = monthPeriodIds(fiscalYear);
+  if (!pids.length) return null;
+  return sum(
+    salesRecords.filter((r) => r.periodId === pids[0] && r.categoryId == null).map((r) => r.amount)
+  );
+}
+export const STORE_APRIL_BY_FY: Record<string, number> = Object.fromEntries(
+  ["2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"]
+    .map((fy) => [fy, fyFirstMonthRevenue(fy)])
+    .filter((entry): entry is [string, number] => entry[1] != null)
+);
+
 // ── Consignment & partner brands ────────────────────────────────────────────
 export const CONSIGNMENT_FYS = ["2023-2024", "2024-2025", "2025-2026", "2026-2027"];
 export const CONSIGNMENT = CONSIGNMENT_FYS.map((fy) => {

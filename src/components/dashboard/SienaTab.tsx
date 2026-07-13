@@ -3,7 +3,7 @@ import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import { FAB } from "@/data/ceplData";
-import { MONTHS, L } from "@/data/core";
+import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx } from "@/data/core";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -64,6 +64,28 @@ const fyDelivery = FAB.deliveryComm.reduce((a,b)=>a+b,0);
 const bestMonth  = MONTHS[FAB.plPct.indexOf(Math.max(...FAB.plPct))];
 const worstMonth = MONTHS[FAB.plPct.indexOf(Math.min(...FAB.plPct))];
 
+// COGS trend vs a fixed policy ceiling (35% is Sienna's internal COGS target,
+// not a data value — everything else here is computed from FAB).
+const COGS_TARGET_PCT = 35;
+const avgCogsPct = avg(FAB.cogsPct);
+
+// HR cost: peak month vs the most recent month with data.
+const hrPeakIdx = maxIdx(FAB.hrPct);
+const hrLatestIdx = lastValidIdx(FAB.hrPct);
+const hrPeakPct = hrPeakIdx >= 0 ? (FAB.hrPct[hrPeakIdx] as number) : null;
+const hrLatestPct = hrLatestIdx >= 0 ? (FAB.hrPct[hrLatestIdx] as number) : null;
+const hrImproving = hrPeakPct != null && hrLatestPct != null && hrLatestPct < hrPeakPct;
+
+// Seasonality: strongest/weakest revenue months (by total sales, not margin).
+const bestRevIdx = maxIdx(FAB.totalRevenue);
+const worstRevIdx = minIdx(FAB.totalRevenue);
+
+// Which quarter (of the fiscal year, Apr-start) carries the most event revenue.
+const QUARTER_LABELS = ["Q1 (Apr-Jun)", "Q2 (Jul-Sep)", "Q3 (Oct-Dec)", "Q4 (Jan-Mar)"];
+const eventQuarterTotals = QUARTER_LABELS.map((_, q) =>
+  FAB.eventCatering.slice(q * 3, q * 3 + 3).reduce((a, b) => a + (b || 0), 0));
+const bestEventQuarter = eventQuarterTotals.indexOf(Math.max(...eventQuarterTotals));
+
 const kpis: KpiData[] = [
   { label: "Annual F&B Revenue", value: L(fyTotal), sub: "FY 2025-26", status: "green" },
   { label: "Annual Net Profit", value: L(fyPL), sub: `${((fyPL/fyTotal)*100).toFixed(1)}% margin`, status: "green" },
@@ -76,10 +98,28 @@ const kpis: KpiData[] = [
 const statusItems: StatusRowData[] = [
   { label: "Best margin month", status: "green", value: `${bestMonth} — ${Math.max(...FAB.plPct)}%` },
   { label: "Weakest margin month", status: "amber", value: `${worstMonth} — ${Math.min(...FAB.plPct)}%` },
-  { label: "COGS trend", status: "green", value: "Avg 31.2% — within 35% target" },
-  { label: "HR cost (peak)", status: "red", value: "44.9% in Jun — improving to 21.5% by Jan" },
-  { label: "Events revenue", status: "green", value: `${L(FAB.eventCatering.reduce((a,b)=>a+b,0))} annual — strong Q3/Q4` },
-  { label: "Seasonality", status: "amber", value: "Dec–Jan peak (Durga Puja + year-end). Apr–Jul slow." },
+  {
+    label: "COGS trend",
+    status: avgCogsPct <= COGS_TARGET_PCT ? "green" : "red",
+    value: `Avg ${avgCogsPct.toFixed(1)}% — ${avgCogsPct <= COGS_TARGET_PCT ? "within" : "above"} ${COGS_TARGET_PCT}% target`,
+  },
+  {
+    label: "HR cost (peak)",
+    status: hrImproving ? "amber" : "red",
+    value: hrPeakPct == null || hrLatestPct == null
+      ? "—"
+      : `${hrPeakPct.toFixed(1)}% in ${MONTHS[hrPeakIdx]} — ${hrImproving
+          ? `improving to ${hrLatestPct.toFixed(1)}% by ${MONTHS[hrLatestIdx]}`
+          : `still ${hrLatestPct.toFixed(1)}% as of ${MONTHS[hrLatestIdx]}`}`,
+  },
+  { label: "Events revenue", status: "green", value: `${L(FAB.eventCatering.reduce((a,b)=>a+b,0))} annual — strongest in ${QUARTER_LABELS[bestEventQuarter]}` },
+  {
+    label: "Seasonality",
+    status: "amber",
+    value: bestRevIdx >= 0 && worstRevIdx >= 0
+      ? `${MONTHS[bestRevIdx]} peak (${L(FAB.totalRevenue[bestRevIdx])}) — ${MONTHS[worstRevIdx]} slowest (${L(FAB.totalRevenue[worstRevIdx])})`
+      : "—",
+  },
 ];
 
 export default function SienaTab() {

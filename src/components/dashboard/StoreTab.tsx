@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
-import { SIENNA_STORE, SIENNA_CATEGORIES, SIENNA_CATEGORIES_LABEL, STORE_HISTORY } from "@/data/storeData";
+import { SIENNA_STORE, SIENNA_CATEGORIES, SIENNA_CATEGORIES_LABEL, STORE_HISTORY, STORE_APRIL_BY_FY } from "@/data/storeData";
 import { STORE } from "@/data/ceplData";
-import { MONTHS, L } from "@/data/core";
+import { MONTHS, L, avg, maxIdx, minIdx } from "@/data/core";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -68,22 +68,90 @@ const hp26May = FY.channels["HP Store"][1];
 const storeFYPL = STORE.totalSales.reduce((a,b)=>a+b,0);
 const storeHR   = STORE.hrCost.reduce((a,b)=>a+b,0);
 
+// HP Store's share of total FY revenue.
+const hpSharePct = t["Total"] ? (t["HP Store"] / t["Total"]) * 100 : 0;
+
+// Online's share of total FY revenue.
+const onlineSharePct = t["Total"] ? (t["Online"] / t["Total"]) * 100 : 0;
+
+// Corporate channel concentration: peak month vs its own monthly average.
+const corpMonthly = FY.channels["Corporate"];
+const corpAvg = avg(corpMonthly);
+const corpPeakIdx = maxIdx(corpMonthly);
+const corpPeakRatio = corpPeakIdx >= 0 && corpAvg > 0 ? corpMonthly[corpPeakIdx]! / corpAvg : 0;
+
+// Seasonality: strongest/weakest revenue months, computed rather than assumed.
+const totalMonthly = FY.channels["Total"];
+const totalBestIdx = maxIdx(totalMonthly);
+const totalWorstIdx = minIdx(totalMonthly);
+
+// Is FY26-27's April the strongest April across every year with data?
+const fy2627April = FY27.channels["Total"][0];
+const priorAprils = Object.values(STORE_APRIL_BY_FY);
+const isStrongestApril = priorAprils.length > 0 && priorAprils.every((v) => fy2627April >= v);
+const bestPriorApril = priorAprils.length ? Math.max(...priorAprils) : 0;
+
+// HR cost as % of sales, per month, H1 (Apr-Sep) vs H2 (Oct-Mar) average.
+const hrPctMonthly = MONTHS.map((_, i) =>
+  STORE.totalSales[i] ? ((STORE.hrCost[i] || 0) / (STORE.totalSales[i] as number)) * 100 : null);
+const hrH1Avg = avg(hrPctMonthly.slice(0, 6));
+const hrH2Avg = avg(hrPctMonthly.slice(6, 12));
+
+// Flag the lowest HR-cost month as a likely anomaly only if it's well below
+// the average of the other months (not just "the lowest one").
+const hrCostMinIdx = minIdx(STORE.hrCost);
+const hrCostOthersAvg = hrCostMinIdx >= 0
+  ? avg(STORE.hrCost.filter((_, i) => i !== hrCostMinIdx))
+  : 0;
+const hrCostMinIsAnomaly = hrCostMinIdx >= 0 && hrCostOthersAvg > 0
+  && (STORE.hrCost[hrCostMinIdx] as number) < hrCostOthersAvg * 0.5;
+
 const kpis: KpiData[] = [
   { label: "HP Store Revenue (FY)",   value: L(t["HP Store"]),   sub: `${((t["HP Store"]/t["Total"])*100).toFixed(0)}% of total`, status: "green" },
   { label: "Corporate Sales (FY)",    value: L(t["Corporate"]),  sub: `${((t["Corporate"]/t["Total"])*100).toFixed(0)}% of total`, status: "amber" },
   { label: "Total Store Revenue (FY)",value: L(t["Total"]),      sub: "FY 2025-26", status: "green" },
   { label: "Apr–May FY26-27",         value: L(FY27.totals["Total"]), sub: `${(((hp27)/(hp26Apr+hp26May)-1)*100).toFixed(0)}% HP YoY`, status: "green" },
-  { label: "Annual HR % of Revenue",  value: `${((storeHR/storeFYPL)*100).toFixed(1)}%`, sub: "Improving H2", status: "amber" },
+  { label: "Annual HR % of Revenue",  value: `${((storeHR/storeFYPL)*100).toFixed(1)}%`, sub: hrH2Avg < hrH1Avg ? "Improving H2" : "Higher in H2", status: "amber" },
   { label: "Online Sales (FY)",       value: L(t["Online"]),     sub: `${((t["Online"]/t["Total"])*100).toFixed(1)}% share`, status: "amber" },
 ];
 
 const statusItems: StatusRowData[] = [
-  { label: "HP Store dominance", status: "green", value: `83.4% of FY revenue — reliable base` },
-  { label: "Corporate spike", status: "amber",  value: "Sep–Jan surge (₹24L+/mo) — concentration risk" },
-  { label: "Online channel", status: "red",  value: "Only 0.7% share — growth opportunity" },
-  { label: "Dec 2025 peak", status: "green",  value: `${L(FY.channels["Total"][8])} — seasonal high (Christmas/year-end)` },
-  { label: "Aug 2025 dip", status: "amber",  value: `${L(FY.channels["Total"][4])} — seasonal low` },
-  { label: "FY26-27 early trend", status: "green",  value: "Apr ₹22.7L — strongest Apr on record" },
+  {
+    label: "HP Store dominance",
+    status: hpSharePct >= 60 ? "amber" : "green",
+    value: `${hpSharePct.toFixed(1)}% of FY revenue — ${hpSharePct >= 60 ? "concentrated in one channel" : "reliable base"}`,
+  },
+  {
+    label: "Corporate concentration",
+    status: corpPeakRatio >= 2 ? "amber" : "green",
+    value: corpPeakIdx >= 0
+      ? `Peak in ${MONTHS[corpPeakIdx]} (${L(corpMonthly[corpPeakIdx])}, ${corpPeakRatio.toFixed(1)}× monthly avg)${corpPeakRatio >= 2 ? " — concentration risk" : ""}`
+      : "—",
+  },
+  {
+    label: "Online channel",
+    status: onlineSharePct < 5 ? "red" : "amber",
+    value: `${onlineSharePct.toFixed(1)}% share — ${onlineSharePct < 5 ? "growth opportunity" : "gaining traction"}`,
+  },
+  {
+    label: "Seasonal peak",
+    status: "green",
+    value: totalBestIdx >= 0 ? `${MONTHS[totalBestIdx]} — ${L(totalMonthly[totalBestIdx])}` : "—",
+  },
+  {
+    label: "Seasonal low",
+    status: "amber",
+    value: totalWorstIdx >= 0 ? `${MONTHS[totalWorstIdx]} — ${L(totalMonthly[totalWorstIdx])}` : "—",
+  },
+  {
+    label: "FY26-27 early trend",
+    status: isStrongestApril ? "green" : "amber",
+    value: priorAprils.length === 0
+      ? `Apr ${L(fy2627April)} — no prior April to compare`
+      : isStrongestApril
+        ? `Apr ${L(fy2627April)} — strongest April on record`
+        : `Apr ${L(fy2627April)} — below the best prior April (${L(bestPriorApril)})`,
+  },
 ];
 
 export default function StoreTab() {
@@ -295,9 +363,12 @@ export default function StoreTab() {
               <Bar dataKey="Site Cost"     stackId="a" fill="#8b5cf6" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
-          <p className="text-xs text-muted-foreground mt-2">
-            Note: HR cost drops sharply in Mar 2026 (₹{L(STORE.hrCost[11])}) — likely one-month anomaly.
-          </p>
+          {hrCostMinIdx >= 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Note: HR cost is lowest in {MONTHS[hrCostMinIdx]} ({L(STORE.hrCost[hrCostMinIdx])})
+              {hrCostMinIsAnomaly ? " — well below the other months' average, likely a one-month anomaly." : "."}
+            </p>
+          )}
         </DashCard>
       )}
 

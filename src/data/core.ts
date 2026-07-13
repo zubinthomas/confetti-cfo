@@ -79,6 +79,25 @@ export function pctSeries(businessUnitId: number, lineItemId: number, periodIds:
 export const sum = (arr: (number | null | undefined)[]): number =>
   arr.reduce((a: number, b) => a + (b || 0), 0);
 
+export const avg = (arr: (number | null | undefined)[]): number => {
+  const valid = arr.filter((v): v is number => v != null);
+  return valid.length ? sum(valid) / valid.length : 0;
+};
+
+/** Index of the max value in a (possibly null-containing) series, or -1 if all null. */
+export const maxIdx = (arr: (number | null | undefined)[]): number =>
+  arr.reduce((best: number, v, i) => (v != null && (best === -1 || v > (arr[best] as number)) ? i : best), -1);
+
+/** Index of the min value in a (possibly null-containing) series, or -1 if all null. */
+export const minIdx = (arr: (number | null | undefined)[]): number =>
+  arr.reduce((worst: number, v, i) => (v != null && (worst === -1 || v < (arr[worst] as number)) ? i : worst), -1);
+
+/** Index of the last non-null value in a series, or -1 if all null. */
+export const lastValidIdx = (arr: (number | null | undefined)[]): number => {
+  for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return i;
+  return -1;
+};
+
 export const MONTHS = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
 export const FY2526_PIDS = monthPeriodIds("2025-2026");
 
