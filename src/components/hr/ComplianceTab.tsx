@@ -3,6 +3,7 @@ import { Licence } from "@/api/entities";
 import { uploadFile } from "@/api/integrations";
 import { Plus, X, Loader2, Upload, FileText, AlertTriangle, Clock, XCircle, ShieldCheck } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
+import FormField from "./FormField";
 
 // Days until expiry
 const daysUntil = (dateStr: string | null | undefined) => {
@@ -121,20 +122,7 @@ export default function ComplianceTab() {
     load();
   };
 
-  const Field = ({ label, name, type = "text", options = null }: { label: string; name: string; type?: string; options?: string[] | null }) => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      {options ? (
-        <select value={form[name] ?? ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : (
-        <input type={type} value={form[name] ?? ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-      )}
-    </div>
-  );
+  const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
   const filtered = licences.filter(l => {
     if (filterLoc !== "All" && l.location !== filterLoc) return false;
@@ -318,18 +306,18 @@ export default function ComplianceTab() {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Licence Name *" name="licence_name" />
-              <Field label="Type *" name="licence_type" options={LICENCE_TYPES} />
-              <Field label="Issuing Authority" name="authority" />
-              <Field label="Licence / Certificate Number" name="licence_number" />
-              <Field label="Location *" name="location" options={LOCATIONS} />
-              <Field label="Division *" name="division" options={DIVISIONS} />
-              <Field label="Status" name="status" options={["Active", "Expired", "Renewal Pending", "Applied", "Not Applicable"]} />
-              <Field label="Issue Date" name="issue_date" type="date" />
-              <Field label="Expiry Date" name="expiry_date" type="date" />
-              <Field label="Remind Before (days)" name="renewal_reminder_days" type="number" />
-              <Field label="Annual Fee (₹)" name="annual_fee" type="number" />
-              <div className="sm:col-span-2"><Field label="Notes" name="notes" /></div>
+              <FormField label="Licence Name *" name="licence_name" value={form.licence_name ?? ""} onChange={updateField} />
+              <FormField label="Type *" name="licence_type" options={LICENCE_TYPES} value={form.licence_type ?? ""} onChange={updateField} />
+              <FormField label="Issuing Authority" name="authority" value={form.authority ?? ""} onChange={updateField} />
+              <FormField label="Licence / Certificate Number" name="licence_number" value={form.licence_number ?? ""} onChange={updateField} />
+              <FormField label="Location *" name="location" options={LOCATIONS} value={form.location ?? ""} onChange={updateField} />
+              <FormField label="Division *" name="division" options={DIVISIONS} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Status" name="status" options={["Active", "Expired", "Renewal Pending", "Applied", "Not Applicable"]} value={form.status ?? ""} onChange={updateField} />
+              <FormField label="Issue Date" name="issue_date" type="date" value={form.issue_date ?? ""} onChange={updateField} />
+              <FormField label="Expiry Date" name="expiry_date" type="date" value={form.expiry_date ?? ""} onChange={updateField} />
+              <FormField label="Remind Before (days)" name="renewal_reminder_days" type="number" value={form.renewal_reminder_days ?? ""} onChange={updateField} />
+              <FormField label="Annual Fee (₹)" name="annual_fee" type="number" value={form.annual_fee ?? ""} onChange={updateField} />
+              <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>

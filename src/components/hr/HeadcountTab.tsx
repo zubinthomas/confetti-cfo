@@ -3,6 +3,7 @@ import { Employee } from "@/api/entities";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
+import FormField from "./FormField";
 
 const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Siena: "#f59e0b", Admin: "#8b5cf6" };
 
@@ -49,20 +50,7 @@ export default function HeadcountTab() {
 
   const totalPayroll = employees.reduce((s, e) => s + (e.monthly_salary || 0), 0);
 
-  const Field = ({ label, name, type = "text", options = null }: { label: string; name: string; type?: string; options?: string[] | null }) => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      {options ? (
-        <select value={form[name] || ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : (
-        <input type={type} value={form[name] || ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-      )}
-    </div>
-  );
+  const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
   const statusColor: Record<string, string> = { Active: "text-emerald-600", "On Leave": "text-amber-600", Terminated: "text-red-600", Probation: "text-blue-600" };
 
@@ -149,23 +137,23 @@ export default function HeadcountTab() {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Full Name *" name="full_name" />
-              <Field label="Employee ID" name="employee_id" />
-              <Field label="Division *" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} />
-              <Field label="Role / Designation *" name="role" />
-              <Field label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} />
-              <Field label="Status" name="status" options={["Active", "On Leave", "Terminated", "Probation"]} />
-              <Field label="Joining Date" name="joining_date" type="date" />
-              <Field label="Monthly Salary (₹)" name="monthly_salary" type="number" />
-              <Field label="Phone" name="phone" />
-              <Field label="Email" name="email" type="email" />
-              <Field label="Aadhar Number" name="aadhar_number" />
-              <Field label="PAN Number" name="pan_number" />
-              <Field label="Blood Group" name="blood_group" />
-              <Field label="Emergency Contact Name" name="emergency_contact_name" />
-              <Field label="Emergency Contact Phone" name="emergency_contact_phone" />
-              <div className="sm:col-span-2"><Field label="Address" name="address" /></div>
-              <div className="sm:col-span-2"><Field label="Notes" name="notes" /></div>
+              <FormField label="Full Name *" name="full_name" value={form.full_name ?? ""} onChange={updateField} />
+              <FormField label="Employee ID" name="employee_id" value={form.employee_id ?? ""} onChange={updateField} />
+              <FormField label="Division *" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Role / Designation *" name="role" value={form.role ?? ""} onChange={updateField} />
+              <FormField label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} value={form.employment_type ?? ""} onChange={updateField} />
+              <FormField label="Status" name="status" options={["Active", "On Leave", "Terminated", "Probation"]} value={form.status ?? ""} onChange={updateField} />
+              <FormField label="Joining Date" name="joining_date" type="date" value={form.joining_date ?? ""} onChange={updateField} />
+              <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary ?? ""} onChange={updateField} />
+              <FormField label="Phone" name="phone" value={form.phone ?? ""} onChange={updateField} />
+              <FormField label="Email" name="email" type="email" value={form.email ?? ""} onChange={updateField} />
+              <FormField label="Aadhar Number" name="aadhar_number" value={form.aadhar_number ?? ""} onChange={updateField} />
+              <FormField label="PAN Number" name="pan_number" value={form.pan_number ?? ""} onChange={updateField} />
+              <FormField label="Blood Group" name="blood_group" value={form.blood_group ?? ""} onChange={updateField} />
+              <FormField label="Emergency Contact Name" name="emergency_contact_name" value={form.emergency_contact_name ?? ""} onChange={updateField} />
+              <FormField label="Emergency Contact Phone" name="emergency_contact_phone" value={form.emergency_contact_phone ?? ""} onChange={updateField} />
+              <div className="sm:col-span-2"><FormField label="Address" name="address" value={form.address ?? ""} onChange={updateField} /></div>
+              <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>

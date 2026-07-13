@@ -8,6 +8,34 @@ const pvStatusIcon: Record<string, React.ComponentType<{ className?: string }>> 
 const pvStatusColor: Record<string, string> = { Verified: "text-emerald-500", Submitted: "text-blue-500", Pending: "text-amber-500", Rejected: "text-red-500" };
 const pvBadge: Record<string, string> = { Verified: "green", Submitted: "green", Pending: "amber", Rejected: "red" };
 
+// Module-scope (stable identity) so re-renders during an upload don't
+// remount every file input — see FormField.tsx for why this matters.
+function DocCell({ empId, field, url, uploading, onUpload }: {
+  empId: string; field: string; url?: string; uploading: boolean;
+  onUpload: (empId: string, field: string, file: File) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-primary hover:underline">
+          <FileText className="w-3.5 h-3.5" /> View
+        </a>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      )}
+      <label className="cursor-pointer">
+        <input type="file" className="hidden" onChange={e => e.target.files[0] && onUpload(empId, field, e.target.files[0])} />
+        {uploading ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <Upload className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
+        )}
+      </label>
+    </div>
+  );
+}
+
 export default function DocumentsTab() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,30 +65,6 @@ export default function DocumentsTab() {
   };
 
   const filtered = filterDiv === "All" ? employees : employees.filter(e => e.division === filterDiv);
-
-  const DocCell = ({ empId, field, url, label }: { empId: string; field: string; url?: string; label: string }) => {
-    const key = `${empId}_${field}`;
-    return (
-      <div className="flex items-center gap-2">
-        {url ? (
-          <a href={url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-primary hover:underline">
-            <FileText className="w-3.5 h-3.5" /> View
-          </a>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-        <label className="cursor-pointer">
-          <input type="file" className="hidden" onChange={e => e.target.files[0] && uploadDoc(empId, field, e.target.files[0])} />
-          {uploading[key] ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-          ) : (
-            <Upload className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />
-          )}
-        </label>
-      </div>
-    );
-  };
 
   const idComplete = employees.filter(e => e.id_proof_url).length;
   const contractComplete = employees.filter(e => e.contract_url).length;
@@ -130,14 +134,17 @@ export default function DocumentsTab() {
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground">{emp.division}</td>
                       <td className="py-3 pr-4">
-                        <DocCell empId={emp.id} field="id_proof_url" url={emp.id_proof_url} label="ID Proof" />
+                        <DocCell empId={emp.id} field="id_proof_url" url={emp.id_proof_url}
+                          uploading={!!uploading[`${emp.id}_id_proof_url`]} onUpload={uploadDoc} />
                       </td>
                       <td className="py-3 pr-4">
-                        <DocCell empId={emp.id} field="contract_url" url={emp.contract_url} label="Contract" />
+                        <DocCell empId={emp.id} field="contract_url" url={emp.contract_url}
+                          uploading={!!uploading[`${emp.id}_contract_url`]} onUpload={uploadDoc} />
                       </td>
                       <td className="py-3 pr-4">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <DocCell empId={emp.id} field="police_verification_url" url={emp.police_verification_url} label="PV" />
+                          <DocCell empId={emp.id} field="police_verification_url" url={emp.police_verification_url}
+                            uploading={!!uploading[`${emp.id}_police_verification_url`]} onUpload={uploadDoc} />
                           <select value={emp.police_verification_status || "Pending"}
                             onChange={e => updatePVStatus(emp.id, e.target.value)}
                             className="text-xs border border-border rounded-md px-1.5 py-1 bg-background text-foreground focus:outline-none">
@@ -146,7 +153,8 @@ export default function DocumentsTab() {
                         </div>
                       </td>
                       <td className="py-3">
-                        <DocCell empId={emp.id} field="health_record_url" url={emp.health_record_url} label="Health" />
+                        <DocCell empId={emp.id} field="health_record_url" url={emp.health_record_url}
+                          uploading={!!uploading[`${emp.id}_health_record_url`]} onUpload={uploadDoc} />
                       </td>
                     </tr>
                   );

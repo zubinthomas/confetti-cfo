@@ -4,6 +4,7 @@ import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import FormField from "./FormField";
 
 const EMPTY = { role_title: "", division: "Ceramics", openings: 1, applicant_name: "", applicant_email: "", applicant_phone: "", stage: "Applied", expected_salary: "", notes: "" };
 
@@ -41,20 +42,7 @@ export default function RecruitmentTab() {
 
   const remove = async (id: string) => { await Recruitment.delete(id); load(); };
 
-  const Field = ({ label, name, type = "text", options = null }: { label: string; name: string; type?: string; options?: string[] | null }) => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      {options ? (
-        <select value={form[name] || ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : (
-        <input type={type} value={form[name] || ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-      )}
-    </div>
-  );
+  const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
   const filtered = filterStage === "All" ? items : items.filter(i => i.stage === filterStage);
 
@@ -144,15 +132,15 @@ export default function RecruitmentTab() {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Role Title *" name="role_title" />
-              <Field label="Division *" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} />
-              <Field label="No. of Openings" name="openings" type="number" />
-              <Field label="Stage" name="stage" options={STAGES} />
-              <Field label="Applicant Name" name="applicant_name" />
-              <Field label="Applicant Email" name="applicant_email" type="email" />
-              <Field label="Applicant Phone" name="applicant_phone" />
-              <Field label="Expected Salary (₹/mo)" name="expected_salary" type="number" />
-              <div className="sm:col-span-2"><Field label="Notes" name="notes" /></div>
+              <FormField label="Role Title *" name="role_title" value={form.role_title ?? ""} onChange={updateField} />
+              <FormField label="Division *" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="No. of Openings" name="openings" type="number" value={form.openings ?? ""} onChange={updateField} />
+              <FormField label="Stage" name="stage" options={STAGES} value={form.stage ?? ""} onChange={updateField} />
+              <FormField label="Applicant Name" name="applicant_name" value={form.applicant_name ?? ""} onChange={updateField} />
+              <FormField label="Applicant Email" name="applicant_email" type="email" value={form.applicant_email ?? ""} onChange={updateField} />
+              <FormField label="Applicant Phone" name="applicant_phone" value={form.applicant_phone ?? ""} onChange={updateField} />
+              <FormField label="Expected Salary (₹/mo)" name="expected_salary" type="number" value={form.expected_salary ?? ""} onChange={updateField} />
+              <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>

@@ -4,6 +4,7 @@ import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import FormField from "./FormField";
 
 const EMPTY = { employee_name: "", division: "Ceramics", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
 
@@ -46,20 +47,7 @@ export default function LeaveTab() {
     load();
   };
 
-  const Field = ({ label, name, type = "text", options = null }: { label: string; name: string; type?: string; options?: string[] | null }) => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      {options ? (
-        <select value={form[name] || ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : (
-        <input type={type} value={form[name] || ""} onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
-      )}
-    </div>
-  );
+  const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
   const pending = leaves.filter(l => l.status === "Pending").length;
   const approved = leaves.filter(l => l.status === "Approved").length;
@@ -138,14 +126,14 @@ export default function LeaveTab() {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Employee Name *" name="employee_name" />
-              <Field label="Division" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} />
-              <Field label="Leave Type" name="leave_type" options={["Sick", "Casual", "Earned", "Unpaid", "Maternity/Paternity"]} />
-              <Field label="Status" name="status" options={["Pending", "Approved", "Rejected"]} />
-              <Field label="From Date" name="from_date" type="date" />
-              <Field label="To Date" name="to_date" type="date" />
-              <Field label="Number of Days" name="days" type="number" />
-              <div className="sm:col-span-2"><Field label="Reason" name="reason" /></div>
+              <FormField label="Employee Name *" name="employee_name" value={form.employee_name ?? ""} onChange={updateField} />
+              <FormField label="Division" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Leave Type" name="leave_type" options={["Sick", "Casual", "Earned", "Unpaid", "Maternity/Paternity"]} value={form.leave_type ?? ""} onChange={updateField} />
+              <FormField label="Status" name="status" options={["Pending", "Approved", "Rejected"]} value={form.status ?? ""} onChange={updateField} />
+              <FormField label="From Date" name="from_date" type="date" value={form.from_date ?? ""} onChange={updateField} />
+              <FormField label="To Date" name="to_date" type="date" value={form.to_date ?? ""} onChange={updateField} />
+              <FormField label="Number of Days" name="days" type="number" value={form.days ?? ""} onChange={updateField} />
+              <div className="sm:col-span-2"><FormField label="Reason" name="reason" value={form.reason ?? ""} onChange={updateField} /></div>
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
