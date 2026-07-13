@@ -4,6 +4,7 @@ import { uploadFile } from "@/api/integrations";
 import { Plus, X, Loader2, Upload, FileText, AlertTriangle, Clock, XCircle, ShieldCheck } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import FormField from "./FormField";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 // Days until expiry
 const daysUntil = (dateStr: string | null | undefined) => {
@@ -83,6 +84,8 @@ export default function ComplianceTab() {
   const [filterLoc, setFilterLoc] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [seeding, setSeeding] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -113,7 +116,14 @@ export default function ComplianceTab() {
     load();
   };
 
-  const remove = async (id: string) => { await Licence.delete(id); load(); };
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    await Licence.delete(pendingDelete.id);
+    setDeleting(false);
+    setPendingDelete(null);
+    load();
+  };
 
   const uploadDoc = async (id: string, file: File) => {
     setUploading(true);
@@ -286,7 +296,7 @@ export default function ComplianceTab() {
                       <td className="py-2.5">
                         <div className="flex gap-2">
                           <button onClick={() => { setForm({ ...l }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>
-                          <button onClick={() => remove(l.id)} className="text-xs text-red-500 hover:underline">Del</button>
+                          <button onClick={() => setPendingDelete(l)} className="text-xs text-red-500 hover:underline">Del</button>
                         </div>
                       </td>
                     </tr>
@@ -329,6 +339,17 @@ export default function ComplianceTab() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete this licence?"
+        description={pendingDelete ? `"${pendingDelete.licence_name}" will be permanently removed. This cannot be undone.` : ""}
+        confirmLabel="Delete"
+        destructive
+        loading={deleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
