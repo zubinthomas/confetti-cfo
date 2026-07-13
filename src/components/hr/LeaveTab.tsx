@@ -5,6 +5,7 @@ import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "./FormField";
+import SearchableSelect from "@/components/SearchableSelect";
 
 const EMPTY = { employee_name: "", division: "", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
 
@@ -55,9 +56,10 @@ export default function LeaveTab() {
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
   // Selecting an employee auto-fills their division — no manual entry needed.
-  const employeeOptions = [...new Set(employees.map(e => e.full_name).filter(Boolean))].sort();
-  const handleEmployeeChange = (_name: string, value: string) => {
-    const emp = employees.find(e => e.full_name === value);
+  // Matched by full_name (LeaveRequest stores plain employee_name/division
+  // strings, not a foreign key) — two employees sharing an exact full name
+  // would be ambiguous here; a real id-based link would need a schema change.
+  const handleEmployeeChange = (value: string, emp: any | undefined) => {
     setForm(f => ({ ...f, employee_name: value, division: emp?.division ?? "" }));
   };
 
@@ -138,12 +140,21 @@ export default function LeaveTab() {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                label="Employee *" name="employee_name"
-                options={employeeOptions}
-                placeholder={employeeOptions.length ? "Select employee…" : "No employees yet — add one in Headcount & Payroll"}
-                value={form.employee_name ?? ""} onChange={handleEmployeeChange}
-              />
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Employee *</label>
+                <SearchableSelect
+                  records={[...employees].sort((a, b) => a.full_name.localeCompare(b.full_name))}
+                  value={form.employee_name ?? ""}
+                  onChange={handleEmployeeChange}
+                  getValue={(e) => e.full_name}
+                  getKey={(e) => e.id}
+                  getLabel={(e) => e.full_name}
+                  getDescription={(e) => e.division}
+                  placeholder={employees.length ? "Select employee…" : "No employees yet"}
+                  searchPlaceholder="Search name, division, role, phone…"
+                  emptyMessage={employees.length ? "No matching employees." : "Add one in Headcount & Payroll first."}
+                />
+              </div>
               <FormField label="Division" name="division" value={form.division ?? ""} onChange={updateField} disabled />
               <FormField label="Leave Type" name="leave_type" options={["Sick", "Casual", "Earned", "Unpaid", "Maternity/Paternity"]} value={form.leave_type ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Pending", "Approved", "Rejected"]} value={form.status ?? ""} onChange={updateField} />
