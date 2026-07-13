@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.ts';
 import entityRoutes from './routes/entities.ts';
 import integrationRoutes from './routes/integrations.ts';
 import datasetRoutes from './routes/dataset.ts';
+import importRoutes from './routes/import.ts';
 import { config } from 'dotenv';
 
 config()
@@ -26,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/entities', entityRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/dataset', datasetRoutes);
+app.use('/api/import', importRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));

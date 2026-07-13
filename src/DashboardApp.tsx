@@ -15,6 +15,7 @@ import AIQueriesTab from '@/components/dashboard/AIQueriesTab';
 import CraftDeptPage from '@/components/dashboard/CraftDeptPage';
 import ConsignmentPage from '@/components/dashboard/ConsignmentPage';
 import OpsPage from '@/components/dashboard/OpsPage';
+import ImportPage from '@/components/dashboard/ImportPage';
 import CafePage from '@/components/fnb/CafePage';
 import RestaurantPage from '@/components/fnb/RestaurantPage';
 import BarPage from '@/components/fnb/BarPage';
@@ -41,6 +42,7 @@ export default function DashboardApp() {
         <Route path="crafts/trading-items" element={<CraftDeptPage data={TRADING_ITEMS} heading="Trading Items" />} />
         <Route path="cashflow" element={<CashFlowTab />} />
         <Route path="ai" element={<AIQueriesTab />} />
+        <Route path="data/import" element={<ImportPage />} />
         <Route path="ops/:section" element={<OpsPage />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

@@ -12,7 +12,7 @@
 // are typed from the HR/compliance form fields; created_date stays an ISO-8601
 // text column to keep the existing API contract byte-identical.
 import {
-  pgTable, pgEnum, integer, text, doublePrecision, boolean, date, jsonb,
+  pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
   uniqueIndex, unique,
 } from 'drizzle-orm/pg-core';
 
@@ -116,6 +116,21 @@ export const consignmentRecords = pgTable('consignment_records', {
 export const datasetMeta = pgTable('dataset_meta', {
   id: integer('id').primaryKey(),
   meta: jsonb('meta').notNull(),
+});
+
+// ── Workbook imports (upload → preview → commit/discard) ────────────────────
+export const importStatusEnum = pgEnum('import_status', ['preview', 'committed', 'discarded']);
+
+export const importBatches = pgTable('import_batches', {
+  id: serial('id').primaryKey(),
+  filename: text('filename').notNull(),
+  kind: text('kind').notNull(), // cepl | cafe | sienna
+  status: importStatusEnum('status').notNull(),
+  uploadedAt: text('uploaded_at').notNull(),   // ISO-8601
+  committedAt: text('committed_at'),
+  issues: jsonb('issues').notNull(),           // Issue[] from the parser
+  stats: jsonb('stats').notNull(),             // per-table creates/updates/unchanged
+  payload: jsonb('payload').notNull(),         // the ParsedWorkbook, so commit needn't re-parse
 });
 
 // ── App entities (HR & compliance forms) ─────────────────────────────────────

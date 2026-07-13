@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
-  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, LogOut,
+  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, LogOut, FileSpreadsheet,
   MenuIcon, X,
 } from "lucide-react";
 import { auth } from "@/api/auth";
@@ -45,6 +45,12 @@ const NAV_SECTIONS = [
     items: [
       { to: "/cashflow", label: "Cash Flow", icon: Banknote },
       { to: "/ai", label: "AI Queries", icon: Sparkles },
+    ],
+  },
+  {
+    title: "Data",
+    items: [
+      { to: "/data/import", label: "Import Workbooks", icon: FileSpreadsheet },
     ],
   },
   {
