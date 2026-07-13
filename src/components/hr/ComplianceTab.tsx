@@ -16,6 +16,7 @@ const statusStyle: Record<string, string> = {
   Expired: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   "Renewal Pending": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   Applied: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  "Not Applied": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   "Not Applicable": "bg-muted text-muted-foreground",
 };
 
@@ -95,7 +96,7 @@ export default function ComplianceTab() {
   const seedChecklist = async () => {
     setSeeding(true);
     for (const item of CHECKLIST) {
-      await Licence.create({ ...item, status: "Applied", renewal_reminder_days: 30 });
+      await Licence.create({ ...item, status: "Not Applied", renewal_reminder_days: 30 });
     }
     setSeeding(false);
     load();
@@ -202,7 +203,7 @@ export default function ComplianceTab() {
             ))}
           </div>
           <div className="flex gap-2 flex-wrap">
-            {["All", "Active", "Renewal Pending", "Expired", "Applied"].map(s => (
+            {["All", "Not Applied", "Applied", "Active", "Renewal Pending", "Expired"].map(s => (
               <button key={s} onClick={() => setFilterStatus(s)}
                 className={`text-xs px-2.5 py-1 rounded-lg border transition ${filterStatus === s ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"}`}>
                 {s}
@@ -312,7 +313,7 @@ export default function ComplianceTab() {
               <FormField label="Licence / Certificate Number" name="licence_number" value={form.licence_number ?? ""} onChange={updateField} />
               <FormField label="Location *" name="location" options={LOCATIONS} value={form.location ?? ""} onChange={updateField} />
               <FormField label="Division *" name="division" options={DIVISIONS} value={form.division ?? ""} onChange={updateField} />
-              <FormField label="Status" name="status" options={["Active", "Expired", "Renewal Pending", "Applied", "Not Applicable"]} value={form.status ?? ""} onChange={updateField} />
+              <FormField label="Status" name="status" options={["Not Applied", "Applied", "Active", "Renewal Pending", "Expired", "Not Applicable"]} value={form.status ?? ""} onChange={updateField} />
               <FormField label="Issue Date" name="issue_date" type="date" value={form.issue_date ?? ""} onChange={updateField} />
               <FormField label="Expiry Date" name="expiry_date" type="date" value={form.expiry_date ?? ""} onChange={updateField} />
               <FormField label="Remind Before (days)" name="renewal_reminder_days" type="number" value={form.renewal_reminder_days ?? ""} onChange={updateField} />
