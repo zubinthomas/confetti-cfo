@@ -9,7 +9,7 @@ import { MONTHS, FY2526_PIDS, frGet, monthPeriodIds, series, pctSeries, sum, typ
 export const FNB_BU = 1;   // CEPL > F&B department
 export const STORE_BU = 2; // CEPL > Store department
 
-// lineItemId map (verified against extracted_data.json)
+// lineItemId map (verified against the extracted dataset)
 const LI = {
   productSales: 1, retailBarSales: 2, eventCatering: 3, totalRevenue: 4,
   rawMaterial: 5, cogsPct: 9, hrCost: 12, hrPct: 15, siteCost: 16,

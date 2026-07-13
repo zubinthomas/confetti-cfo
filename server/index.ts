@@ -32,6 +32,14 @@ app.use('/api/import', importRoutes);
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`✅ Express server running on http://localhost:${PORT}`);
+});
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use — another server instance is running. Stop it first (PGlite is single-process, so two servers must never share the database).`);
+  } else {
+    console.error('❌ Server failed to start:', err);
+  }
+  process.exit(1);
 });

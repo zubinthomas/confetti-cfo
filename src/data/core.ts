@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared foundation for the data adapters (ceplData / storeData /
 // fnbOutletData / cashFlowData / aiContext): raw table access over
-// ./extracted_data.json plus the lookup and formatting helpers they build on.
+// the dataset fetched from /api/dataset (the database-backed copy of the
+// verified Excel extraction) plus the lookup and formatting helpers.
 //
 // Nothing here is hand-entered — every number the adapters derive comes from
 // the businesses / businessUnits / periods / lineItems / financialRecords /

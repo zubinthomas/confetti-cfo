@@ -4,3 +4,4 @@ dist
 data-sources
 test-results
 playwright-report
+.vscode
