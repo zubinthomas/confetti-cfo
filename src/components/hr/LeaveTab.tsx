@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { LeaveRequest } from "@/api/entities";
+import { LeaveRequest, Employee } from "@/api/entities";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "./FormField";
 
-const EMPTY = { employee_name: "", division: "Ceramics", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
+const EMPTY = { employee_name: "", division: "", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
 
 const statusMap: Record<string, "green" | "amber" | "red"> = { Approved: "green", Pending: "amber", Rejected: "red" };
 
 export default function LeaveTab() {
   const [leaves, setLeaves] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Record<string, any>>(EMPTY);
@@ -21,8 +22,12 @@ export default function LeaveTab() {
 
   const load = async () => {
     setLoading(true);
-    const data = await LeaveRequest.list("-created_date");
-    setLeaves(data);
+    const [leaveData, employeeData] = await Promise.all([
+      LeaveRequest.list("-created_date"),
+      Employee.list(),
+    ]);
+    setLeaves(leaveData);
+    setEmployees(employeeData);
     setLoading(false);
   };
 
@@ -48,6 +53,13 @@ export default function LeaveTab() {
   };
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
+
+  // Selecting an employee auto-fills their division — no manual entry needed.
+  const employeeOptions = [...new Set(employees.map(e => e.full_name).filter(Boolean))].sort();
+  const handleEmployeeChange = (_name: string, value: string) => {
+    const emp = employees.find(e => e.full_name === value);
+    setForm(f => ({ ...f, employee_name: value, division: emp?.division ?? "" }));
+  };
 
   const pending = leaves.filter(l => l.status === "Pending").length;
   const approved = leaves.filter(l => l.status === "Approved").length;
@@ -126,8 +138,13 @@ export default function LeaveTab() {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Employee Name *" name="employee_name" value={form.employee_name ?? ""} onChange={updateField} />
-              <FormField label="Division" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} value={form.division ?? ""} onChange={updateField} />
+              <FormField
+                label="Employee *" name="employee_name"
+                options={employeeOptions}
+                placeholder={employeeOptions.length ? "Select employee…" : "No employees yet — add one in Headcount & Payroll"}
+                value={form.employee_name ?? ""} onChange={handleEmployeeChange}
+              />
+              <FormField label="Division" name="division" value={form.division ?? ""} onChange={updateField} disabled />
               <FormField label="Leave Type" name="leave_type" options={["Sick", "Casual", "Earned", "Unpaid", "Maternity/Paternity"]} value={form.leave_type ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Pending", "Approved", "Rejected"]} value={form.status ?? ""} onChange={updateField} />
               <FormField label="From Date" name="from_date" type="date" value={form.from_date ?? ""} onChange={updateField} />
