@@ -7,6 +7,8 @@ import entityRoutes from './routes/entities.ts';
 import integrationRoutes from './routes/integrations.ts';
 import datasetRoutes from './routes/dataset.ts';
 import importRoutes from './routes/import.ts';
+import sheetsRoutes from './routes/sheets.ts';
+import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { config } from 'dotenv';
 
 config()
@@ -28,12 +30,14 @@ app.use('/api/entities', entityRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/dataset', datasetRoutes);
 app.use('/api/import', importRoutes);
+app.use('/api/sheets', sheetsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 const server = app.listen(PORT, () => {
   console.log(`✅ Express server running on http://localhost:${PORT}`);
+  startSheetsScheduler();
 });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {

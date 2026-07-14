@@ -21,10 +21,12 @@ const upload = multer({
 
 const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === 'error');
 
-const summary = (b: typeof schema.importBatches.$inferSelect) => ({
+// also used by routes/sheets.ts — keeps the heavy parsed payload out of responses
+export const batchSummary = (b: typeof schema.importBatches.$inferSelect) => ({
   id: b.id, filename: b.filename, kind: b.kind, status: b.status,
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
   issues: b.issues, stats: b.stats,
+  sourceType: b.sourceType, sheetSourceId: b.sheetSourceId,
 });
 
 /** POST /api/import/upload — parse + validate a workbook, store a preview batch. */
@@ -52,7 +54,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       stats: plan.stats,
       payload: parsed,
     }).returning();
-    res.status(201).json(summary(batch));
+    res.status(201).json(batchSummary(batch));
   } catch (err) {
     console.error('import upload error:', err);
     res.status(500).json({ message: err instanceof Error ? err.message : 'Import failed' });
@@ -63,7 +65,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 router.get('/batches', async (_req, res) => {
   await ready();
   const rows = await db.select().from(schema.importBatches).orderBy(desc(schema.importBatches.id));
-  res.json(rows.map(summary));
+  res.json(rows.map(batchSummary));
 });
 
 /** POST /api/import/:id/commit */
@@ -85,7 +87,7 @@ router.post('/:id/commit', async (req, res) => {
       committedAt: new Date().toISOString(),
       stats: plan.stats,
     }).where(eq(schema.importBatches.id, id)).returning();
-    res.json(summary(updated));
+    res.json(batchSummary(updated));
   } catch (err) {
     console.error('import commit error:', err);
     res.status(500).json({ message: err instanceof Error ? err.message : 'Commit failed' });
@@ -102,7 +104,7 @@ router.post('/:id/discard', async (req, res) => {
   const [updated] = await db.update(schema.importBatches)
     .set({ status: 'discarded' })
     .where(eq(schema.importBatches.id, id)).returning();
-  res.json(summary(updated));
+  res.json(batchSummary(updated));
 });
 
 export default router;

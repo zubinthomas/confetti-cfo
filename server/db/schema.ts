@@ -121,6 +121,24 @@ export const datasetMeta = pgTable('dataset_meta', {
 // ── Workbook imports (upload → preview → commit/discard) ────────────────────
 export const importStatusEnum = pgEnum('import_status', ['preview', 'committed', 'discarded']);
 
+// Saved Google Sheets sources, re-synced on a schedule or on demand.
+export const sheetAccessMethodEnum = pgEnum('sheet_access_method', ['link', 'service_account']);
+
+export const sheetSources = pgTable('sheet_sources', {
+  id: serial('id').primaryKey(),
+  label: text('label').notNull(),
+  spreadsheetId: text('spreadsheet_id').notNull(),
+  sheetUrl: text('sheet_url').notNull(),       // as pasted, for display/linking
+  accessMethod: sheetAccessMethodEnum('access_method').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: text('created_at').notNull(),     // ISO-8601
+  lastSyncAt: text('last_sync_at'),
+  lastSyncStatus: text('last_sync_status'),    // preview_created | no_changes | error
+  lastSyncError: text('last_sync_error'),
+}, (t) => [
+  uniqueIndex('sheet_sources_spreadsheet_id').on(t.spreadsheetId),
+]);
+
 export const importBatches = pgTable('import_batches', {
   id: serial('id').primaryKey(),
   filename: text('filename').notNull(),
@@ -131,6 +149,8 @@ export const importBatches = pgTable('import_batches', {
   issues: jsonb('issues').notNull(),           // Issue[] from the parser
   stats: jsonb('stats').notNull(),             // per-table creates/updates/unchanged
   payload: jsonb('payload').notNull(),         // the ParsedWorkbook, so commit needn't re-parse
+  sourceType: text('source_type').notNull().default('upload'), // upload | sheet
+  sheetSourceId: integer('sheet_source_id').references(() => sheetSources.id, { onDelete: 'set null' }),
 });
 
 // ── App entities (HR & compliance forms) ─────────────────────────────────────
