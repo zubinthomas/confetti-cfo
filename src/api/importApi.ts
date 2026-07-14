@@ -18,6 +18,8 @@ export interface ImportBatch {
   committedAt: string | null;
   issues: ImportIssue[];
   stats: Record<string, ImportTableStats>;
+  sourceType: "upload" | "sheet";
+  sheetSourceId: number | null;
 }
 
 export async function uploadWorkbook(file: File): Promise<ImportBatch> {

@@ -53,6 +53,7 @@ export async function request<T = unknown>(
 export const get = <T = unknown>(url: string) => request<T>("GET", url);
 export const post = <T = unknown>(url: string, body?: unknown) => request<T>("POST", url, body);
 export const put = <T = unknown>(url: string, body?: unknown) => request<T>("PUT", url, body);
+export const patch = <T = unknown>(url: string, body?: unknown) => request<T>("PATCH", url, body);
 export const del = <T = unknown>(url: string) => request<T>("DELETE", url);
 
 export { API_BASE };
