@@ -1,13 +1,14 @@
-// ⚠️  AUTH DISABLED FOR PROTOTYPING — all endpoints return success
+// ⚠️  AUTH DISABLED FOR PROTOTYPING - all endpoints return success
 import { Router } from 'express';
 
 const router = Router();
 
 const DEV_USER = { id: 'dev-user', email: 'dev@local', full_name: 'Dev User' };
 
-router.post('/register',              (_req, res) => res.json({ message: 'ok' }));
-router.post('/verify-otp',            (_req, res) => res.json({ access_token: 'dev-token' }));
-router.post('/resend-otp',            (_req, res) => res.json({ message: 'ok' }));
+// Registration is disabled - users are created via the CLI (server/db/users.ts)
+router.post('/register',              (_req, res) => res.status(404).json({ message: 'Not found' }));
+router.post('/verify-otp',            (_req, res) => res.status(404).json({ message: 'Not found' }));
+router.post('/resend-otp',            (_req, res) => res.status(404).json({ message: 'Not found' }));
 router.post('/login',                 (_req, res) => res.json({ access_token: 'dev-token' }));
 router.get('/me',                     (_req, res) => res.json(DEV_USER));
 router.post('/logout',                (_req, res) => res.json({ message: 'ok' }));

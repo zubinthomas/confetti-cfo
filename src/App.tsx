@@ -9,16 +9,16 @@ import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Navigate } from 'react-router-dom';
 import Login from '@/pages/Login';
-import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import HR from '@/pages/HR';
 import Compliance from '@/pages/Compliance';
 import { get } from '@/api/http';
 import { setDataset, type Dataset } from '@/data/datasetStore';
+import PageNotFound from '@/lib/PageNotFound';
 
 // The dashboard (and the data adapters it imports) loads only after the
-// dataset has been fetched — see the note in src/data/datasetStore.ts.
+// dataset has been fetched - see the note in src/data/datasetStore.ts.
 const DashboardApp = lazy(() => import('./DashboardApp'));
 
 const Splash = ({ message }: { message?: string }) => (
@@ -54,7 +54,7 @@ const DatasetGate = () => {
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-foreground font-medium">Couldn&rsquo;t load the financial dataset</p>
         <p className="text-sm text-muted-foreground max-w-md">
-          {error}. Make sure the API server is running (and seeded — <code>npm run db:seed</code> in <code>server/</code>).
+          {error}. Make sure the API server is running (and seeded - <code>npm run db:seed</code> in <code>server/</code>).
         </p>
         <button
           onClick={load}
@@ -95,7 +95,8 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      {/* registration is disabled - users are created via the CLI (see README) */}
+      <Route path="/register" element={<PageNotFound />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
