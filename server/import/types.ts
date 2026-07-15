@@ -9,6 +9,20 @@ export interface Issue {
   message: string;
 }
 
+/** One field's value before/after a merge-plan update (or after, for a create). */
+export interface FieldChange {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+/** Row-level detail behind a merge-plan's aggregate creates/updates counts. */
+export interface RecordChange {
+  action: 'create' | 'update';
+  description: string;
+  fields?: FieldChange[];
+}
+
 export interface ParsedPeriod {
   periodType: 'month' | 'week' | 'custom';
   startDate: string; // YYYY-MM-DD
@@ -103,6 +117,15 @@ export function monthPeriod(year: number, month: number): ParsedPeriod {
 /** The workbook's percentage/amount heuristic: |v| <= 1.5 is a fraction. */
 export function valueTypeOf(v: number): 'amount' | 'percentage' {
   return Math.abs(v) <= 1.5 ? 'percentage' : 'amount';
+}
+
+/** Unlabeled-row policy: a hand-typed value in a row without a label is data
+ *  missing its label (an error the source must fix) only when it looks like a
+ *  real amount. The workbooks' unlabeled ratio scratch rows run up to ~2x
+ *  (purchase-to-sales lines), slightly past the 1.5 fraction cutoff, so this
+ *  uses its own margin - real amounts are orders of magnitude larger. */
+export function looksLikeUnlabeledData(values: number[]): boolean {
+  return values.some((v) => Math.abs(v) > 5);
 }
 
 /** Keyword classification for NEW line items (existing ones keep their category). */

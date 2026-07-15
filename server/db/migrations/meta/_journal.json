@@ -57,6 +57,13 @@
       "when": 1784137952044,
       "tag": "0007_sheet-sync-issues",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784140017803,
+      "tag": "0008_uneven_vindicator",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "import_batches" ADD COLUMN "details" jsonb;

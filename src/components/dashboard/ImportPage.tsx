@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import DashCard from "./DashCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ImportDetailsModal from "./ImportDetailsModal";
 import {
-  uploadWorkbook, listBatches, commitBatch, discardBatch,
-  type ImportBatch, type ImportIssue,
+  uploadWorkbook, listBatches, commitBatch, discardBatch, getBatchDetails,
+  type ImportBatch, type ImportIssue, type ImportBatchDetails, type RejectedUpload,
 } from "@/api/importApi";
 import {
   getSheetsConfig, listSources, addSource, updateSource, deleteSource, syncSheetSource,
@@ -12,7 +13,7 @@ import {
 import {
   Upload, Loader2, AlertTriangle, AlertCircle, Info, CheckCircle2,
   RefreshCw, Trash2, ExternalLink, FileSpreadsheet, Link2, Filter,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Eye,
 } from "lucide-react";
 
 const KIND_LABELS: Record<ImportBatch["kind"], string> = {
@@ -282,7 +283,8 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
       {sources.length > 0 && (
         <div className="mt-4 divide-y divide-border border-t border-border">
           {sources.map((s) => (
-            <div key={s.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
+            <div key={s.id} className="py-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <a
@@ -341,6 +343,15 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
+              </div>
+              {s.lastSyncStatus === "error" && (s.lastSyncIssues?.length ?? 0) > 0 && (
+                <div className="mt-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    The sheet was not imported. Fix the issues below in the spreadsheet, then sync again.
+                  </p>
+                  <IssueList issues={s.lastSyncIssues ?? []} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -368,6 +379,7 @@ const localDay = (iso: string) => {
 
 export default function ImportPage() {
   const [batches, setBatches] = useState<ImportBatch[]>([]);
+  const [rejected, setRejected] = useState<RejectedUpload | null>(null);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -379,6 +391,9 @@ export default function ImportPage() {
   const [hideDiscarded, setHideDiscarded] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const [detailsCache, setDetailsCache] = useState<Record<number, ImportBatchDetails>>({});
+  const [detailsOpenFor, setDetailsOpenFor] = useState<number | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => { listBatches().then(setBatches).catch(() => {}); }, []);
@@ -390,9 +405,11 @@ export default function ImportPage() {
   const onFile = async (file: File) => {
     setUploading(true);
     setError("");
+    setRejected(null);
     try {
-      await uploadWorkbook(file);
-      refresh();
+      const result = await uploadWorkbook(file);
+      if (result.rejected) setRejected(result.rejected);
+      else refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -418,6 +435,18 @@ export default function ImportPage() {
   const onDiscard = async (id: number) => {
     setBusyId(id);
     try { await discardBatch(id); refresh(); } finally { setBusyId(null); }
+  };
+
+  const openDetails = async (id: number) => {
+    if (detailsCache[id] !== undefined) { setDetailsOpenFor(id); return; }
+    setDetailsLoading(true);
+    setDetailsOpenFor(id);
+    try {
+      const { details } = await getBatchDetails(id);
+      setDetailsCache((prev) => ({ ...prev, [id]: details }));
+    } finally {
+      setDetailsLoading(false);
+    }
   };
 
   // hideDiscarded counts as "active" only when switched off its default
@@ -464,6 +493,32 @@ export default function ImportPage() {
           </p>
         )}
       </DashCard>
+
+      {rejected && (
+        <DashCard
+          title={
+            <span className="inline-flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              Validation failed · {rejected.filename}
+            </span>
+          }
+          action={
+            <button
+              onClick={() => setRejected(null)}
+              className="text-xs text-muted-foreground underline hover:text-foreground"
+            >
+              Dismiss
+            </button>
+          }
+        >
+          <p className="text-xs text-muted-foreground mb-3">
+            Recognised as a {KIND_LABELS[rejected.kind]} workbook, but it has validation errors, so
+            nothing was imported and no batch was created. Fix the issues below in the source file
+            and upload it again.
+          </p>
+          <IssueList issues={rejected.issues} />
+        </DashCard>
+      )}
 
       <SheetsCard onBatchesChanged={refresh} />
 
@@ -536,9 +591,17 @@ export default function ImportPage() {
           key={b.id}
           title={`#${b.id} · ${b.filename}`}
           action={
-            <span className={`text-[11px] px-2 py-0.5 rounded-full ${STATUS_STYLE[b.status]}`}>
-              {b.status}
-            </span>
+            <>
+              <button
+                onClick={() => openDetails(b.id)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <Eye className="w-3 h-3" /> View full details
+              </button>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full ${STATUS_STYLE[b.status]}`}>
+                {b.status}
+              </span>
+            </>
           }
         >
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
@@ -585,6 +648,21 @@ export default function ImportPage() {
           )}
         </DashCard>
       ))}
+
+      <ImportDetailsModal
+        open={detailsOpenFor !== null}
+        onOpenChange={(open) => { if (!open) setDetailsOpenFor(null); }}
+        batchLabel={
+          detailsOpenFor !== null
+            ? (() => {
+              const b = batches.find((x) => x.id === detailsOpenFor);
+              return b ? `#${b.id} · ${b.filename}` : `#${detailsOpenFor}`;
+            })()
+            : ""
+        }
+        details={detailsOpenFor !== null ? detailsCache[detailsOpenFor] : undefined}
+        loading={detailsLoading}
+      />
 
       {visibleBatches.length > pageSize && (
         <div className="flex flex-wrap items-center justify-center gap-2">

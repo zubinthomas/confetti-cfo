@@ -42,6 +42,16 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       });
     }
     const parsed = PARSERS[kind](wb);
+    // validation errors reject the upload outright: no batch is stored, the
+    // client shows the issues as an informational card instead of a preview
+    if (hasErrors(parsed.issues)) {
+      return res.status(422).json({
+        message: 'Validation failed - nothing was imported',
+        filename: req.file.originalname,
+        kind,
+        issues: parsed.issues,
+      });
+    }
     // preview merge plan against the current database (not committed)
     const plan = await buildMergePlan(parsed);
     const [batch] = await db.insert(schema.importBatches).values({
@@ -52,6 +62,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       committedAt: null,
       issues: parsed.issues,
       stats: plan.stats,
+      details: plan.details,
       payload: parsed,
     }).returning();
     res.status(201).json(batchSummary(batch));
@@ -86,12 +97,23 @@ router.post('/:id/commit', async (req, res) => {
       status: 'committed',
       committedAt: new Date().toISOString(),
       stats: plan.stats,
+      details: plan.details,
     }).where(eq(schema.importBatches.id, id)).returning();
     res.json(batchSummary(updated));
   } catch (err) {
     console.error('import commit error:', err);
     res.status(500).json({ message: err instanceof Error ? err.message : 'Commit failed' });
   }
+});
+
+/** GET /api/import/:id/details - full row-level change details for one batch. */
+router.get('/:id/details', async (req, res) => {
+  await ready();
+  const id = Number(req.params.id);
+  const [batch] = await db.select({ details: schema.importBatches.details })
+    .from(schema.importBatches).where(eq(schema.importBatches.id, id));
+  if (!batch) return res.status(404).json({ message: 'Not found' });
+  res.json({ details: batch.details ?? null });
 });
 
 /** POST /api/import/:id/discard */

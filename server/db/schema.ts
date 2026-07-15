@@ -15,6 +15,7 @@ import {
   pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
   uniqueIndex, unique,
 } from 'drizzle-orm/pg-core';
+import type { RecordChange } from '../import/types.ts';
 
 // ── Closed value sets (verified distinct values) ─────────────────────────────
 export const unitTypeEnum = pgEnum('unit_type', ['department', 'outlet']);
@@ -167,7 +168,8 @@ export const sheetSources = pgTable('sheet_sources', {
   createdAt: text('created_at').notNull(),     // ISO-8601
   lastSyncAt: text('last_sync_at'),
   lastSyncStatus: text('last_sync_status'),    // preview_created | auto_committed | no_changes | error
-  lastSyncError: text('last_sync_error'),
+  lastSyncError: text('last_sync_error'),      // short summary line
+  lastSyncIssues: jsonb('last_sync_issues'),   // Issue[] when the sync failed validation, else null
 }, (t) => [
   uniqueIndex('sheet_sources_spreadsheet_id').on(t.spreadsheetId),
 ]);
@@ -181,6 +183,7 @@ export const importBatches = pgTable('import_batches', {
   committedAt: text('committed_at'),
   issues: jsonb('issues').notNull(),           // Issue[] from the parser
   stats: jsonb('stats').notNull(),             // per-table creates/updates/unchanged
+  details: jsonb('details').$type<Record<string, RecordChange[]> | null>(), // row-level detail behind stats; null for pre-feature batches
   payload: jsonb('payload').notNull(),         // the ParsedWorkbook, so commit needn't re-parse
   sourceType: text('source_type').notNull().default('upload'), // upload | sheet
   sheetSourceId: integer('sheet_source_id').references(() => sheetSources.id, { onDelete: 'set null' }),
