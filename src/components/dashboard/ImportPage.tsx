@@ -11,7 +11,8 @@ import {
 } from "@/api/sheetsApi";
 import {
   Upload, Loader2, AlertTriangle, AlertCircle, Info, CheckCircle2,
-  RefreshCw, Pause, Play, Trash2, ExternalLink, FileSpreadsheet, Link2,
+  RefreshCw, Trash2, ExternalLink, FileSpreadsheet, Link2, Filter,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 const KIND_LABELS: Record<ImportBatch["kind"], string> = {
@@ -88,8 +89,15 @@ function StatsTable({ stats }: { stats: ImportBatch["stats"] }) {
 
 const SYNC_STATUS_CHIP: Record<NonNullable<SheetSource["lastSyncStatus"]>, { label: string; cls: string }> = {
   preview_created: { label: "preview ready", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  auto_committed: { label: "auto-committed", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
   no_changes: { label: "no changes", cls: "bg-muted text-muted-foreground" },
   error: { label: "error", cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+};
+
+const SYNC_MODE_LABELS: Record<SheetSource["syncMode"], string> = {
+  auto: "Auto",
+  manual: "Manual review",
+  paused: "Paused",
 };
 
 function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
@@ -156,17 +164,21 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
     setBusyId(id);
     setError("");
     try {
-      await syncSheetSource(id);
+      const result = await syncSheetSource(id);
       refresh();
       onBatchesChanged();
+      if (result.source.lastSyncStatus === "auto_committed") {
+        // data landed in the dataset — reload so the dashboards pick it up
+        window.location.reload();
+      }
     } finally {
       setBusyId(null);
     }
   };
 
-  const onToggle = async (s: SheetSource) => {
+  const onModeChange = async (s: SheetSource, syncMode: SheetSource["syncMode"]) => {
     setBusyId(s.id);
-    try { await updateSource(s.id, { enabled: !s.enabled }); refresh(); } finally { setBusyId(null); }
+    try { await updateSource(s.id, { syncMode }); refresh(); } finally { setBusyId(null); }
   };
 
   const onRemove = async () => {
@@ -282,9 +294,14 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                     {s.accessMethod === "link" ? "link-shared" : "service account"}
                   </span>
-                  {!s.enabled && (
+                  {s.syncMode === "paused" && (
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                       paused
+                    </span>
+                  )}
+                  {s.syncMode === "auto" && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      auto
                     </span>
                   )}
                   {s.lastSyncStatus && (
@@ -307,13 +324,16 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${busyId === s.id ? "animate-spin" : ""}`} /> Sync now
                 </button>
-                <button
-                  onClick={() => onToggle(s)} disabled={busyId === s.id}
-                  title={s.enabled ? "Pause auto-sync" : "Resume auto-sync"}
-                  className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
+                <select
+                  value={s.syncMode} disabled={busyId === s.id}
+                  onChange={(e) => onModeChange(s, e.target.value as SheetSource["syncMode"])}
+                  title="Auto: commit syncs with no warnings or errors. Manual review: you commit previews. Paused: no scheduled syncing."
+                  className="px-2 py-1.5 rounded-lg border border-border bg-background text-xs disabled:opacity-50"
                 >
-                  {s.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                </button>
+                  {Object.entries(SYNC_MODE_LABELS).map(([mode, label]) => (
+                    <option key={mode} value={mode}>{label}</option>
+                  ))}
+                </select>
                 <button
                   onClick={() => setRemoveTarget(s)} disabled={busyId === s.id} title="Remove"
                   className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-red-500 disabled:opacity-50"
@@ -340,16 +360,32 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
   );
 }
 
+/** Local calendar day (yyyy-mm-dd) of an ISO timestamp, comparable to <input type="date"> values. */
+const localDay = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 export default function ImportPage() {
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [committed, setCommitted] = useState(false);
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [filterKind, setFilterKind] = useState<"all" | ImportBatch["kind"]>("all");
+  const [filterSource, setFilterSource] = useState<"all" | ImportBatch["sourceType"]>("all");
+  const [hideDiscarded, setHideDiscarded] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => { listBatches().then(setBatches).catch(() => {}); }, []);
   useEffect(() => { refresh(); }, [refresh]);
+
+  // back to the first page whenever the visible set changes shape
+  useEffect(() => { setPage(1); }, [filterFrom, filterTo, filterKind, filterSource, hideDiscarded, pageSize]);
 
   const onFile = async (file: File) => {
     setUploading(true);
@@ -384,6 +420,21 @@ export default function ImportPage() {
     try { await discardBatch(id); refresh(); } finally { setBusyId(null); }
   };
 
+  // hideDiscarded counts as "active" only when switched off its default
+  const hasFilters = !!filterFrom || !!filterTo || filterKind !== "all" || filterSource !== "all" || !hideDiscarded;
+  const visibleBatches = batches.filter((b) => {
+    const day = localDay(b.uploadedAt);
+    return (!filterFrom || day >= filterFrom)
+      && (!filterTo || day <= filterTo)
+      && (filterKind === "all" || b.kind === filterKind)
+      && (filterSource === "all" || b.sourceType === filterSource)
+      && (!hideDiscarded || b.status !== "discarded");
+  });
+
+  const totalPages = Math.max(1, Math.ceil(visibleBatches.length / pageSize));
+  const currentPage = Math.min(page, totalPages); // stays valid if the list shrinks
+  const pagedBatches = visibleBatches.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <div className="space-y-6">
       <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
@@ -416,7 +467,71 @@ export default function ImportPage() {
 
       <SheetsCard onBatchesChanged={refresh} />
 
-      {batches.map((b) => (
+      {batches.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-full md:w-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Filter className="w-3.5 h-3.5" /> Filter batches
+          </span>
+          <input
+            type="date" value={filterFrom} max={filterTo || undefined}
+            onChange={(e) => setFilterFrom(e.target.value)} title="From date"
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <input
+            type="date" value={filterTo} min={filterFrom || undefined}
+            onChange={(e) => setFilterTo(e.target.value)} title="To date"
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs"
+          />
+          <select
+            value={filterKind} onChange={(e) => setFilterKind(e.target.value as typeof filterKind)}
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs"
+          >
+            <option value="all">All workbook types</option>
+            {Object.entries(KIND_LABELS).map(([kind, label]) => (
+              <option key={kind} value={kind}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={filterSource} onChange={(e) => setFilterSource(e.target.value as typeof filterSource)}
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs"
+          >
+            <option value="all">All sources</option>
+            <option value="upload">Uploaded file</option>
+            <option value="sheet">Google Sheet</option>
+          </select>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox" checked={hideDiscarded}
+              onChange={(e) => setHideDiscarded(e.target.checked)}
+              className="accent-primary"
+            />
+            Hide discarded
+          </label>
+          {hasFilters && (
+            <>
+              <button
+                onClick={() => {
+                  setFilterFrom(""); setFilterTo(""); setFilterKind("all"); setFilterSource("all");
+                  setHideDiscarded(true);
+                }}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                Clear
+              </button>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {visibleBatches.length} of {batches.length} batch{batches.length === 1 ? "" : "es"}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      {batches.length > 0 && visibleBatches.length === 0 && (
+        <p className="text-sm text-muted-foreground">No import batches match the current filters.</p>
+      )}
+
+      {pagedBatches.map((b) => (
         <DashCard
           key={b.id}
           title={`#${b.id} · ${b.filename}`}
@@ -470,6 +585,33 @@ export default function ImportPage() {
           )}
         </DashCard>
       ))}
+
+      {visibleBatches.length > pageSize && (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Previous
+          </button>
+          <span className="text-xs text-muted-foreground px-1">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(currentPage + 1)} disabled={currentPage === totalPages}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          >
+            Next <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <select
+            value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs"
+            title="Batches per page"
+          >
+            {[15, 30, 50].map((n) => <option key={n} value={n}>{n} per page</option>)}
+          </select>
+        </div>
+      )}
 
       <p className="text-xs text-muted-foreground">
         Imports upsert by natural key (department + period + line item, and so on): re-importing the
