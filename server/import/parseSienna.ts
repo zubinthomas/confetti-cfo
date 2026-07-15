@@ -12,11 +12,15 @@
 //     Brands" blocks; vendor names are canonicalised across blocks.
 //   - "Category Comparision" is a derivative re-slice of "Category wise" with
 //     inconsistent column blocks; it is deliberately not imported.
+//   - Rows with hand-typed numbers but no label (e.g. the Feb-2022 category
+//     row whose label cell AO141 is blank in the source) raise an error-level
+//     issue so the source gets fixed; unlabeled formula rows are derivable
+//     and skipped silently.
 import type ExcelJS from 'exceljs';
-import { num, str, dateVal } from './xlsx.ts';
+import { literalNum, num, str, dateVal } from './xlsx.ts';
 import {
   type Issue, type ParsedPeriod, type ParsedSalesRecord, type ParsedConsignmentRecord,
-  type ParsedWorkbook, MONTH_NAMES, monthPeriod,
+  type ParsedWorkbook, MONTH_NAMES, looksLikeUnlabeledData, monthPeriod,
 } from './types.ts';
 
 const BUSINESS = 'Sienna';
@@ -64,7 +68,19 @@ export function parseSienna(wb: ExcelJS.Workbook): ParsedWorkbook {
       }
       if (!block) return;
       const a = str(row.getCell(1).value);
-      if (!a || a === 'Cost Centres') return;
+      if (!a) {
+        const typed = block.months
+          .map((_, i) => literalNum(row.getCell(2 + i).value))
+          .filter((v): v is number => v != null);
+        if (looksLikeUnlabeledData(typed)) {
+          issues.push({
+            level: 'error', sheet: 'Overall sales',
+            message: `row ${row.number} holds ${typed.length} typed value(s) but its channel label cell (column A) is blank - add the missing label in the source sheet (or clear the cells), then re-import`,
+          });
+        }
+        return;
+      }
+      if (a === 'Cost Centres') return;
       if (a === 'TOTAL') {
         for (let i = 0; i < 12; i++) {
           const total = num(row.getCell(2 + i).value);
@@ -99,6 +115,9 @@ export function parseSienna(wb: ExcelJS.Workbook): ParsedWorkbook {
       const s = str(cell.value);
       const m = s?.match(/^(\d{4})-(\d{4})$/);
       if (!m) return;
+      // the fiscal-year label is merged across the whole block, so every
+      // column reports it - only the first column of a run starts a block
+      if (col > 1 && str(rows[0].getCell(col - 1).value) === s) return;
       const y1 = Number(m[1]);
       if (Number(m[2]) !== y1 + 1) {
         issues.push({ level: 'warning', sheet: 'Category wise', message: `block label "${s}" is not a single fiscal year - treated as ${y1}-${y1 + 1}` });
@@ -128,9 +147,25 @@ export function parseSienna(wb: ExcelJS.Workbook): ParsedWorkbook {
         }
         for (let r = hdrIdx + 1; r < end; r++) {
           const row = rows[r];
-          const label = str(row.getCell(b.offset).value);
-          if (!label || label === 'TOTAL' || label === 'Growth %') continue;
-          if (looksLikeMonthLabel(label) || dateVal(row.getCell(b.offset).value)) continue;
+          const labelCell = row.getCell(b.offset);
+          const label = str(labelCell.value);
+          if (!label) {
+            // a NUMBER in the label cell is one of the corrupted date-serial
+            // header rows (44672 …), not a category row missing its label
+            if (num(labelCell.value) != null) continue;
+            const skipped = chans
+              .map((ch) => ({ name: ch.name, v: literalNum(row.getCell(ch.col).value) }))
+              .filter((x): x is { name: string; v: number } => x.v != null);
+            if (looksLikeUnlabeledData(skipped.map((x) => x.v))) {
+              issues.push({
+                level: 'error', sheet: 'Category wise',
+                message: `${period.label}: row ${row.number} holds typed values (${skipped.map((x) => `${x.name} ${x.v}`).join(', ')}) but its category label cell ${labelCell.address} is blank - add the missing category in the source sheet (or clear the cells), then re-import`,
+              });
+            }
+            continue;
+          }
+          if (label === 'TOTAL' || label === 'Growth %') continue;
+          if (looksLikeMonthLabel(label) || dateVal(labelCell.value)) continue;
           for (const ch of chans) {
             const v = num(row.getCell(ch.col).value);
             if (v == null) continue;
@@ -159,7 +194,20 @@ export function parseSienna(wb: ExcelJS.Workbook): ParsedWorkbook {
         group = /Other Brands/i.test(a) ? 'other_brands' : 'consignment';
         return;
       }
-      if (!months || !a || a === 'TOTAL' || a === 'Consignment' || /Other Brands/i.test(a)) return;
+      if (!months) return;
+      if (!a) {
+        const typed = months
+          .map((_, i) => literalNum(row.getCell(3 + i).value))
+          .filter((v): v is number => v != null);
+        if (looksLikeUnlabeledData(typed)) {
+          issues.push({
+            level: 'error', sheet: 'Consigment',
+            message: `row ${row.number} holds ${typed.length} typed value(s) but its vendor label cell (column A) is blank - add the missing label in the source sheet (or clear the cells), then re-import`,
+          });
+        }
+        return;
+      }
+      if (a === 'TOTAL' || a === 'Consignment' || /Other Brands/i.test(a)) return;
       const vendorName = canonVendor(a);
       const rate = num(row.getCell(2).value);
       for (let i = 0; i < 12; i++) {

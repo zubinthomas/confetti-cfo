@@ -50,6 +50,13 @@
       "when": 1784124783083,
       "tag": "0006_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784137952044,
+      "tag": "0007_sheet-sync-issues",
+      "breakpoints": true
     }
   ]
 }

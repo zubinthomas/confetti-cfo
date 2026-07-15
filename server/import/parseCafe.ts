@@ -12,11 +12,15 @@
 //     "<label> (Retail Purchases)" line item (all cells as amounts, matching
 //     the verified extraction); unknown duplicate labels get "<label> (2)"
 //     plus a warning.
+//   - Rows with hand-typed amounts but no label in column A raise an
+//     error-level issue so the source gets fixed; unlabeled formula rows and
+//     typed ratio rows (the percent-of-sales scratch lines under each
+//     section) are skipped silently.
 import type ExcelJS from 'exceljs';
-import { num, str } from './xlsx.ts';
+import { literalNum, num, str } from './xlsx.ts';
 import {
   type Issue, type ParsedFinancialRecord, type ParsedPeriod, type ParsedWorkbook,
-  MONTH_NAMES, fiscalYearOf, monthPeriod, pad2, valueTypeOf,
+  MONTH_NAMES, fiscalYearOf, looksLikeUnlabeledData, monthPeriod, pad2, valueTypeOf,
 } from './types.ts';
 
 const BUSINESS = 'Cafe';
@@ -62,7 +66,18 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     ws.eachRow((row) => {
       if (row.number <= 2) return; // title + header
       const rawLabel = str(row.getCell(1).value);
-      if (!rawLabel) return;
+      if (!rawLabel) {
+        const typed = targets
+          .map((t) => literalNum(row.getCell(t.col).value))
+          .filter((v): v is number => v != null);
+        if (looksLikeUnlabeledData(typed)) {
+          issues.push({
+            level: 'error', sheet: ws.name,
+            message: `row ${row.number} holds ${typed.length} typed value(s) but its label cell (column A) is blank - add the missing label in the source sheet (or clear the cells), then re-import`,
+          });
+        }
+        return;
+      }
       const n = (dupCount.get(rawLabel) ?? 0) + 1;
       dupCount.set(rawLabel, n);
       let label = rawLabel;

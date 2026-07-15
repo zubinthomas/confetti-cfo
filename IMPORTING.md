@@ -15,7 +15,11 @@ are appended. Every batch is kept as provenance.
 ## Excel upload
 
 Upload one of the three known workbooks from the Import page. Unrecognised
-workbook shapes are rejected; validation errors block commit.
+workbook shapes are rejected. Validation errors (e.g. a row that holds values
+but has no label) reject the upload outright: no batch is created - an
+informational card lists exactly what to fix in the source file before
+uploading again. The same applies to sheet syncs, where the errors appear on
+the sheet's row instead.
 
 ## Google Sheets sync
 

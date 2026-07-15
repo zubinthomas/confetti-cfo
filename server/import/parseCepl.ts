@@ -2,7 +2,9 @@
 // Ports the verified extraction rules:
 //   - month columns come from the header row's date cells (the Store sheet's
 //     "2025-04-04" quirk normalises to the month);
-//   - rows with a blank label in column A are skipped (counted per sheet);
+//   - rows with a blank label in column A are skipped; when such a row holds
+//     hand-typed numbers (not formulas - those are derivable scratch rows) it
+//     raises an error-level issue so the source gets fixed;
 //   - a whole row is classified amount/percentage by the |v| <= 1.5 fraction
 //     heuristic (percentage only when every numeric cell is a fraction);
 //     first row wins on a (unit, period, line-item) clash;
@@ -13,10 +15,10 @@
 //     P&L row (warning when off - the source is known to disagree with
 //     itself for Store June FY25-26).
 import type ExcelJS from 'exceljs';
-import { num, str, dateVal } from './xlsx.ts';
+import { literalNum, num, str, dateVal } from './xlsx.ts';
 import {
   type Issue, type ParsedFinancialRecord, type ParsedPeriod, type ParsedWorkbook,
-  monthPeriod,
+  looksLikeUnlabeledData, monthPeriod,
 } from './types.ts';
 
 const BUSINESS = 'CEPL';
@@ -78,7 +80,7 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
     }
 
     const seen = new Set<string>();
-    let blankLabelCells = 0;
+    const unlabeledRows = new Map<number, number[]>(); // row number -> typed values skipped
     // per-month reconciliation inputs
     const recon: Record<string, Record<string, number>> = {};
 
@@ -93,7 +95,13 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
       for (const m of months) {
         const v = num(row.getCell(m.col).value);
         if (v == null) continue;
-        if (!label) { blankLabelCells++; continue; }
+        if (!label) {
+          const lit = literalNum(row.getCell(m.col).value);
+          if (lit != null) {
+            unlabeledRows.set(row.number, [...(unlabeledRows.get(row.number) ?? []), lit]);
+          }
+          continue;
+        }
         const valueType = rowType;
         const key = `${m.period.startDate}|${label}|${valueType}`;
         if (seen.has(key)) continue; // first row wins
@@ -112,10 +120,11 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
       }
     });
 
-    if (blankLabelCells) {
+    for (const [rowNumber, values] of unlabeledRows) {
+      if (!looksLikeUnlabeledData(values)) continue; // typed ratio/zero scratch rows
       issues.push({
-        level: 'info', sheet: sheetName,
-        message: `${blankLabelCells} numeric cell(s) in rows without a label were skipped (derivable ratio rows / orphaned cells)`,
+        level: 'error', sheet: sheetName,
+        message: `row ${rowNumber} holds ${values.length} typed value(s) but its label cell (column A) is blank - add the missing label in the source sheet (or clear the cells), then re-import`,
       });
     }
     for (const [start, r] of Object.entries(recon)) {

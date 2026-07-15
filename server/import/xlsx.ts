@@ -21,6 +21,13 @@ export function num(v: ExcelJS.CellValue): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/** A hand-typed finite number (formula cells excluded), else null. Unlabeled
+ *  rows holding literals are someone's data missing its label and must be
+ *  flagged; unlabeled formula rows are derivable scratch and can be skipped. */
+export function literalNum(v: ExcelJS.CellValue): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
 /** Unwrap a cell value to a trimmed non-empty string, else null. */
 export function str(v: ExcelJS.CellValue): string | null {
   if (v && typeof v === 'object' && 'result' in v) v = (v as { result: ExcelJS.CellValue }).result;

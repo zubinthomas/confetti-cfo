@@ -1,6 +1,6 @@
 // Google Sheets source calls against the Express server (server/routes/sheets.ts).
 import { get, post, patch, del } from "./http";
-import type { ImportBatch } from "./importApi";
+import type { ImportBatch, ImportIssue } from "./importApi";
 
 export type SheetSyncMode = "auto" | "manual" | "paused";
 
@@ -15,6 +15,7 @@ export interface SheetSource {
   lastSyncAt: string | null;
   lastSyncStatus: "preview_created" | "auto_committed" | "no_changes" | "error" | null;
   lastSyncError: string | null;
+  lastSyncIssues: ImportIssue[] | null;
 }
 
 export interface SheetsConfig { serviceAccountEmail: string | null }
