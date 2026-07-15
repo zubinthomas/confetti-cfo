@@ -118,6 +118,17 @@ export const datasetMeta = pgTable('dataset_meta', {
   meta: jsonb('meta').notNull(),
 });
 
+// ── Users (managed via the db/users.ts CLI; dormant until auth is enabled) ──
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  fullName: text('full_name'),
+  createdAt: text('created_at').notNull(),  // ISO-8601
+}, (t) => [
+  uniqueIndex('users_email').on(t.email),
+]);
+
 // ── Workbook imports (upload → preview → commit/discard) ────────────────────
 export const importStatusEnum = pgEnum('import_status', ['preview', 'committed', 'discarded']);
 

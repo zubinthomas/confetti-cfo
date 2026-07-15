@@ -9,7 +9,11 @@
     "db:verify": "node db/verify.ts",
     "db:generate": "drizzle-kit generate",
     "import:verify": "node import/verify-parsers.ts && node import/verify-import.ts",
-    "sheets:verify": "node sheets/verify-sheets.ts"
+    "sheets:verify": "node sheets/verify-sheets.ts",
+    "user:create": "node db/users.ts create",
+    "user:list": "node db/users.ts list",
+    "user:delete": "node db/users.ts delete",
+    "user:password": "node db/users.ts password"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
@@ -24,6 +28,7 @@
     "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
     "@types/jsonwebtoken": "^9.0.10",
