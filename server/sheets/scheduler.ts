@@ -1,7 +1,7 @@
-// In-process periodic sync of enabled sheet sources. In-process is the right
+// In-process periodic sync of non-paused sheet sources. In-process is the right
 // shape here: PGlite is single-process, so an external cron/worker could
 // never share the database with the server anyway.
-import { eq } from 'drizzle-orm';
+import { ne } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { syncSource } from './sync.ts';
 
@@ -15,7 +15,7 @@ async function tick(): Promise<void> {
   try {
     await ready();
     const sources = await db.select().from(schema.sheetSources)
-      .where(eq(schema.sheetSources.enabled, true));
+      .where(ne(schema.sheetSources.syncMode, 'paused'));
     // serial on purpose: PGlite handles one transaction at a time
     for (const source of sources) {
       const result = await syncSource(source);

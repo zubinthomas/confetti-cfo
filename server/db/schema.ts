@@ -123,6 +123,8 @@ export const importStatusEnum = pgEnum('import_status', ['preview', 'committed',
 
 // Saved Google Sheets sources, re-synced on a schedule or on demand.
 export const sheetAccessMethodEnum = pgEnum('sheet_access_method', ['link', 'service_account']);
+// auto = commit syncs with no warning/error issues; manual = human commits; paused = skip auto-sync
+export const sheetSyncModeEnum = pgEnum('sheet_sync_mode', ['auto', 'manual', 'paused']);
 
 export const sheetSources = pgTable('sheet_sources', {
   id: serial('id').primaryKey(),
@@ -130,10 +132,10 @@ export const sheetSources = pgTable('sheet_sources', {
   spreadsheetId: text('spreadsheet_id').notNull(),
   sheetUrl: text('sheet_url').notNull(),       // as pasted, for display/linking
   accessMethod: sheetAccessMethodEnum('access_method').notNull(),
-  enabled: boolean('enabled').notNull().default(true),
+  syncMode: sheetSyncModeEnum('sync_mode').notNull().default('manual'),
   createdAt: text('created_at').notNull(),     // ISO-8601
   lastSyncAt: text('last_sync_at'),
-  lastSyncStatus: text('last_sync_status'),    // preview_created | no_changes | error
+  lastSyncStatus: text('last_sync_status'),    // preview_created | auto_committed | no_changes | error
   lastSyncError: text('last_sync_error'),
 }, (t) => [
   uniqueIndex('sheet_sources_spreadsheet_id').on(t.spreadsheetId),

@@ -49,11 +49,14 @@ for (const [input, expected] of [
 
 // ── 2. fixture server standing in for the export endpoints ──────────────────
 const SOURCE_XLSX = path.join(ROOT, 'data-sources', 'Store sales', 'Sienna Store Sales Analysis FINAL.xlsx');
-if (!fs.existsSync(SOURCE_XLSX)) {
-  console.log(`SKIPPED — ${SOURCE_XLSX} not present`);
+// the cafe workbook parses with zero warnings — used to test auto-commit
+const CLEAN_XLSX = path.join(ROOT, 'data-sources', 'P&L', 'Cafe Weekly P&L - 2025 -2026.xlsx');
+if (!fs.existsSync(SOURCE_XLSX) || !fs.existsSync(CLEAN_XLSX)) {
+  console.log(`SKIPPED — source workbooks not present in data-sources/`);
   process.exit(bad ? 1 : 0);
 }
 const workbookXlsx = fs.readFileSync(SOURCE_XLSX);
+const cleanXlsx = fs.readFileSync(CLEAN_XLSX);
 
 const junkWb = new ExcelJS.Workbook();
 junkWb.addWorksheet('Nothing Recognisable').getCell('A1').value = 'hello';
@@ -64,6 +67,9 @@ const fixtures = http.createServer((req, res) => {
   if (url.includes('/d/goodsheet') || url.includes('/files/goodsheet')) {
     res.writeHead(200, { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     res.end(workbookXlsx);
+  } else if (url.includes('/d/cleansheet')) {
+    res.writeHead(200, { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    res.end(cleanXlsx);
   } else if (url.includes('/d/junksheet')) {
     res.writeHead(200, { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     res.end(junkXlsx);
@@ -79,10 +85,10 @@ process.env.SHEETS_EXPORT_BASE_URL = `http://127.0.0.1:${port}`;
 
 await ready();
 
-const mkSource = async (spreadsheetId: string, label: string) => {
+const mkSource = async (spreadsheetId: string, label: string, syncMode: 'auto' | 'manual' | 'paused' = 'manual') => {
   const [s] = await db.insert(schema.sheetSources).values({
     label, spreadsheetId, sheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
-    accessMethod: 'link', enabled: true, createdAt: new Date().toISOString(),
+    accessMethod: 'link', syncMode, createdAt: new Date().toISOString(),
   }).returning();
   return s;
 };
@@ -102,11 +108,28 @@ const firstAgain = first.batch
 check(second.status === 'preview_created' && second.batch?.id !== first.batch?.id, 're-sync creates a fresh preview');
 check(firstAgain?.status === 'discarded', 're-sync discards the superseded preview');
 
+// auto mode must NOT commit while the parse has warnings (sienna has 7):
+// run before the sienna data is committed below, so real changes are pending
+const autoWarn = await mkSource('goodsheetB', 'Sienna (auto, warns)', 'auto');
+const autoWarnResult = await syncSource(autoWarn);
+check(autoWarnResult.status === 'preview_created' && autoWarnResult.batch?.status === 'preview',
+  'auto mode with warnings stays a preview');
+
 // commit, then a third sync must be a clean no-op with no new batch
 await commitMergePlan(await buildMergePlan(second.batch!.payload as never));
 await db.update(schema.importBatches).set({ status: 'committed' }).where(eq(schema.importBatches.id, second.batch!.id));
 const third = await syncSource(second.source);
 check(third.status === 'no_changes' && third.batch == null, 'post-commit sync records no_changes, no batch');
+
+// ── auto mode ────────────────────────────────────────────────────────────────
+// clean parse (no warnings/errors) → committed without human intervention
+const auto = await mkSource('cleansheet', 'Cafe (auto)', 'auto');
+const autoResult = await syncSource(auto);
+check(autoResult.status === 'auto_committed' && autoResult.batch?.status === 'committed',
+  'auto mode commits a clean sync');
+check(autoResult.source.lastSyncStatus === 'auto_committed', 'source records auto_committed');
+const afterAuto = await syncSource(autoResult.source);
+check(afterAuto.status === 'no_changes', 'auto-committed data re-syncs as no_changes');
 
 // unrecognised workbook shape → error on the source, no batch
 const junk = await mkSource('junksheet', 'Junk (fixture)');

@@ -22,6 +22,20 @@
       "when": 1784053451093,
       "tag": "0002_sheet-sources",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784064744348,
+      "tag": "0003_sheet-sync-mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784064777636,
+      "tag": "0004_drop-sheet-enabled",
+      "breakpoints": true
     }
   ]
 }

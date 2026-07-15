@@ -71,7 +71,7 @@ router.post('/sources', async (req, res) => {
       spreadsheetId,
       sheetUrl: url.trim(),
       accessMethod: method,
-      enabled: true,
+      syncMode: 'manual',
       createdAt: new Date().toISOString(),
     }).returning();
     const result = await syncSource(source, buffer);
@@ -85,14 +85,21 @@ router.post('/sources', async (req, res) => {
   }
 });
 
-/** PATCH /api/sheets/sources/:id { label?, enabled? } */
+const SYNC_MODES = ['auto', 'manual', 'paused'] as const;
+
+/** PATCH /api/sheets/sources/:id { label?, syncMode? } */
 router.patch('/sources/:id', async (req, res) => {
   await ready();
   const id = Number(req.params.id);
-  const { label, enabled } = req.body as { label?: string; enabled?: boolean };
+  const { label, syncMode } = req.body as { label?: string; syncMode?: string };
   const patch: Partial<typeof schema.sheetSources.$inferInsert> = {};
   if (typeof label === 'string' && label.trim()) patch.label = label.trim();
-  if (typeof enabled === 'boolean') patch.enabled = enabled;
+  if (syncMode !== undefined) {
+    if (!SYNC_MODES.includes(syncMode as typeof SYNC_MODES[number])) {
+      return res.status(400).json({ message: `syncMode must be one of: ${SYNC_MODES.join(', ')}` });
+    }
+    patch.syncMode = syncMode as typeof SYNC_MODES[number];
+  }
   if (Object.keys(patch).length === 0) return res.status(400).json({ message: 'Nothing to update' });
   const [updated] = await db.update(schema.sheetSources).set(patch)
     .where(eq(schema.sheetSources.id, id)).returning();

@@ -1,0 +1,1 @@
+ALTER TABLE "sheet_sources" DROP COLUMN "enabled";

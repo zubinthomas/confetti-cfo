@@ -2,19 +2,22 @@
 // normal import pipeline, and leave at most ONE pending preview batch per
 // source (a fresh sync supersedes the previous preview). Zero-diff syncs
 // record "no_changes" on the source instead of creating an empty batch.
-// Commit stays manual, in the same UI as uploaded workbooks.
+// The source's syncMode decides what happens to the preview: 'manual' leaves
+// it for a human to commit; 'auto' commits it immediately — but only when the
+// parse produced no warning- or error-level issues ('paused' sources are
+// skipped by the scheduler; Sync now still works on them).
 import { and, eq } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { loadWorkbook } from '../import/xlsx.ts';
 import { detectKind, PARSERS } from '../import/detect.ts';
-import { buildMergePlan } from '../import/merge.ts';
+import { buildMergePlan, commitMergePlan } from '../import/merge.ts';
 import type { Issue } from '../import/types.ts';
 import { fetchSheetXlsx } from './fetch.ts';
 
 export type SheetSource = typeof schema.sheetSources.$inferSelect;
 type ImportBatch = typeof schema.importBatches.$inferSelect;
 
-export type SyncStatus = 'preview_created' | 'no_changes' | 'error';
+export type SyncStatus = 'preview_created' | 'auto_committed' | 'no_changes' | 'error';
 
 export interface SyncResult {
   status: SyncStatus;
@@ -24,6 +27,8 @@ export interface SyncResult {
 }
 
 const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === 'error');
+/** Auto-commit is stricter than manual commit: warnings also need a human eye. */
+export const canAutoCommit = (issues: Issue[]) => issues.every((i) => i.level === 'info');
 
 async function recordOutcome(
   sourceId: number, status: SyncStatus, error: string | null,
@@ -79,6 +84,15 @@ export async function syncSource(source: SheetSource, prefetchedBuffer?: Buffer)
       sourceType: 'sheet',
       sheetSourceId: source.id,
     }).returning();
+
+    if (source.syncMode === 'auto' && canAutoCommit(parsed.issues)) {
+      await commitMergePlan(plan);
+      const [committed] = await db.update(schema.importBatches).set({
+        status: 'committed',
+        committedAt: new Date().toISOString(),
+      }).where(eq(schema.importBatches.id, batch.id)).returning();
+      return { status: 'auto_committed', batch: committed, source: await recordOutcome(source.id, 'auto_committed', null) };
+    }
 
     return { status: 'preview_created', batch, source: await recordOutcome(source.id, 'preview_created', null) };
   } catch (err) {
