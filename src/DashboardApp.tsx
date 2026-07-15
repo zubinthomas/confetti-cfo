@@ -1,6 +1,6 @@
 // The data-driven dashboard route tree. This module (and everything it
 // imports, including the src/data adapters) lives in a lazy chunk that
-// DatasetGate only imports after /api/dataset has been fetched — the adapters
+// DatasetGate only imports after /api/dataset has been fetched - the adapters
 // compute their aggregates at module-evaluation time and need the dataset
 // present. Keep any import of "@/data/*" inside this chunk.
 import React from 'react';
@@ -16,6 +16,7 @@ import CraftDeptPage from '@/components/dashboard/CraftDeptPage';
 import ConsignmentPage from '@/components/dashboard/ConsignmentPage';
 import OpsPage from '@/components/dashboard/OpsPage';
 import ImportPage from '@/components/dashboard/ImportPage';
+import SettingsPage from '@/components/dashboard/SettingsPage';
 import CafePage from '@/components/fnb/CafePage';
 import RestaurantPage from '@/components/fnb/RestaurantPage';
 import BarPage from '@/components/fnb/BarPage';
@@ -43,6 +44,7 @@ export default function DashboardApp() {
         <Route path="cashflow" element={<CashFlowTab />} />
         <Route path="ai" element={<AIQueriesTab />} />
         <Route path="data/import" element={<ImportPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="ops/:section" element={<OpsPage />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

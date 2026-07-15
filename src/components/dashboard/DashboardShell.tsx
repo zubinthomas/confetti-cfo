@@ -4,7 +4,7 @@ import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, LogOut, FileSpreadsheet,
-  MenuIcon, X,
+  MenuIcon, X, Settings,
 } from "lucide-react";
 import { auth } from "@/api/auth";
 
@@ -51,6 +51,7 @@ const NAV_SECTIONS = [
     title: "Data",
     items: [
       { to: "/data/import", label: "Import Workbooks", icon: FileSpreadsheet },
+      { to: "/settings", label: "Settings", icon: Settings },
     ],
   },
   {

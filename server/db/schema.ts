@@ -1,5 +1,5 @@
 // Drizzle schema (PostgreSQL dialect). The dataset tables mirror
-// src/data/extracted_data.json exactly — every field, nullability and closed
+// src/data/extracted_data.json exactly - every field, nullability and closed
 // value set below was verified programmatically against that file:
 //   - relatedAmountLineItemId / displayOrder / notes / salesRecords.businessUnitId
 //     are always null in the current data but exist in the source shape,
@@ -127,6 +127,26 @@ export const users = pgTable('users', {
   createdAt: text('created_at').notNull(),  // ISO-8601
 }, (t) => [
   uniqueIndex('users_email').on(t.email),
+]);
+
+// ── Settings (mirrors server/.env; read-only via the API for now - see
+// server/routes/settings.ts. Doesn't drive runtime config yet, process.env
+// still does; this is a display/audit copy populated by db/seed-settings.ts) ─
+export const settingCategoryEnum = pgEnum('setting_category', [
+  'server', 'security', 'llm', 'google_oauth', 'google_sheets', 'email',
+]);
+
+export const settings = pgTable('settings', {
+  id: serial('id').primaryKey(),
+  key: text('key').notNull(),
+  value: text('value'),
+  category: settingCategoryEnum('category').notNull(),
+  label: text('label').notNull(),
+  description: text('description'),
+  isSecret: boolean('is_secret').notNull().default(false),
+  updatedAt: text('updated_at').notNull(), // ISO-8601
+}, (t) => [
+  uniqueIndex('settings_key').on(t.key),
 ]);
 
 // ── Workbook imports (upload → preview → commit/discard) ────────────────────

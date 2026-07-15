@@ -8,6 +8,7 @@ import integrationRoutes from './routes/integrations.ts';
 import datasetRoutes from './routes/dataset.ts';
 import importRoutes from './routes/import.ts';
 import sheetsRoutes from './routes/sheets.ts';
+import settingsRoutes from './routes/settings.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { config } from 'dotenv';
 
@@ -31,6 +32,7 @@ app.use('/api/integrations', integrationRoutes);
 app.use('/api/dataset', datasetRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/sheets', sheetsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
@@ -41,7 +43,7 @@ const server = app.listen(PORT, () => {
 });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use — another server instance is running. Stop it first (PGlite is single-process, so two servers must never share the database).`);
+    console.error(`❌ Port ${PORT} is already in use - another server instance is running. Stop it first (PGlite is single-process, so two servers must never share the database).`);
   } else {
     console.error('❌ Server failed to start:', err);
   }
