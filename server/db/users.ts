@@ -1,5 +1,5 @@
 // User management CLI (the users table is dormant until auth is enabled).
-// Stop the dev server first — PGlite is single-process, and the lockfile in
+// Stop the dev server first - PGlite is single-process, and the lockfile in
 // client.ts will refuse to run otherwise.
 //   node db/users.ts create <email> [full name] [--password <pw>]
 //   node db/users.ts list
@@ -18,7 +18,7 @@ const USAGE = `usage: node db/users.ts <command>   (stop the dev server first)
   delete <email>                                 remove a user
 
 Without --password you are prompted interactively (input hidden).
-Note: --password ends up in your shell history — prefer the prompt.`;
+Note: --password ends up in your shell history - prefer the prompt.`;
 
 // pull `--password <pw>` out of argv, leaving positional args
 const argv = process.argv.slice(2);
@@ -72,7 +72,7 @@ function promptHidden(question: string): Promise<string> {
 async function getPassword(): Promise<string> {
   const pw = passwordArg ?? await promptHidden('Password: ');
   if (pw.length < 8) fail('password must be at least 8 characters');
-  // confirmation only makes sense interactively — piped stdin has one shot
+  // confirmation only makes sense interactively - piped stdin has one shot
   if (passwordArg === undefined && process.stdin.isTTY) {
     const again = await promptHidden('Repeat password: ');
     if (again !== pw) fail('passwords do not match');

@@ -1,4 +1,4 @@
-// Offline proof of the Google Sheets sync path — no Google account needed.
+// Offline proof of the Google Sheets sync path - no Google account needed.
 // A local HTTP fixture server stands in for the export endpoints (via
 // SHEETS_EXPORT_BASE_URL), serving a real source workbook, an HTML "sign-in"
 // page and a junk workbook. Verifies:
@@ -49,10 +49,10 @@ for (const [input, expected] of [
 
 // ── 2. fixture server standing in for the export endpoints ──────────────────
 const SOURCE_XLSX = path.join(ROOT, 'data-sources', 'Store sales', 'Sienna Store Sales Analysis FINAL.xlsx');
-// the cafe workbook parses with zero warnings — used to test auto-commit
+// the cafe workbook parses with zero warnings - used to test auto-commit
 const CLEAN_XLSX = path.join(ROOT, 'data-sources', 'P&L', 'Cafe Weekly P&L - 2025 -2026.xlsx');
 if (!fs.existsSync(SOURCE_XLSX) || !fs.existsSync(CLEAN_XLSX)) {
-  console.log(`SKIPPED — source workbooks not present in data-sources/`);
+  console.log(`SKIPPED - source workbooks not present in data-sources/`);
   process.exit(bad ? 1 : 0);
 }
 const workbookXlsx = fs.readFileSync(SOURCE_XLSX);
@@ -153,6 +153,6 @@ check(resolved.method === 'link' && resolved.buffer.length > 0, 'resolveAccessMe
 // ── done ─────────────────────────────────────────────────────────────────────
 fixtures.close();
 fs.rmSync(process.env.PGLITE_DATA_DIR!, { recursive: true, force: true });
-if (bad) { console.error(`SHEETS SYNC VERIFY FAILED — ${bad} problem(s)`); process.exit(1); }
-console.log('SHEETS SYNC OK — id extraction, preview/supersede/no-change lifecycle and error paths all behave');
+if (bad) { console.error(`SHEETS SYNC VERIFY FAILED - ${bad} problem(s)`); process.exit(1); }
+console.log('SHEETS SYNC OK - id extraction, preview/supersede/no-change lifecycle and error paths all behave');
 process.exit(0);

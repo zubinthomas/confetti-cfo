@@ -7,7 +7,7 @@ export function signToken(payload: object) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
-// ⚠️  AUTH DISABLED FOR PROTOTYPING — re-enable before going to production
+// ⚠️  AUTH DISABLED FOR PROTOTYPING - re-enable before going to production
 export interface AuthedRequest extends Request {
   user?: { id: string; email: string };
 }

@@ -74,7 +74,7 @@ export default function EventsPage() {
       <p className="text-xs text-muted-foreground">
         The monthly series is the F&B department&rsquo;s &ldquo;Event &amp; Catering Receipt&rdquo; P&L line.
         The weekly view and the by-source breakdown come from the cafe workbook&rsquo;s &ldquo;Sales from
-        Events&rdquo; section (September 2025 onwards) — most event revenue flows through the Rannaghor
+        Events&rdquo; section (September 2025 onwards) - most event revenue flows through the Rannaghor
         events kitchen and named one-off events.
       </p>
     </div>

@@ -119,38 +119,38 @@ const statusItems: StatusRowData[] = [
   {
     label: "HP Store dominance",
     status: hpSharePct >= 60 ? "amber" : "green",
-    value: `${hpSharePct.toFixed(1)}% of FY revenue — ${hpSharePct >= 60 ? "concentrated in one channel" : "reliable base"}`,
+    value: `${hpSharePct.toFixed(1)}% of FY revenue - ${hpSharePct >= 60 ? "concentrated in one channel" : "reliable base"}`,
   },
   {
     label: "Corporate concentration",
     status: corpPeakRatio >= 2 ? "amber" : "green",
     value: corpPeakIdx >= 0
-      ? `Peak in ${MONTHS[corpPeakIdx]} (${L(corpMonthly[corpPeakIdx])}, ${corpPeakRatio.toFixed(1)}× monthly avg)${corpPeakRatio >= 2 ? " — concentration risk" : ""}`
-      : "—",
+      ? `Peak in ${MONTHS[corpPeakIdx]} (${L(corpMonthly[corpPeakIdx])}, ${corpPeakRatio.toFixed(1)}× monthly avg)${corpPeakRatio >= 2 ? " - concentration risk" : ""}`
+      : "-",
   },
   {
     label: "Online channel",
     status: onlineSharePct < 5 ? "red" : "amber",
-    value: `${onlineSharePct.toFixed(1)}% share — ${onlineSharePct < 5 ? "growth opportunity" : "gaining traction"}`,
+    value: `${onlineSharePct.toFixed(1)}% share - ${onlineSharePct < 5 ? "growth opportunity" : "gaining traction"}`,
   },
   {
     label: "Seasonal peak",
     status: "green",
-    value: totalBestIdx >= 0 ? `${MONTHS[totalBestIdx]} — ${L(totalMonthly[totalBestIdx])}` : "—",
+    value: totalBestIdx >= 0 ? `${MONTHS[totalBestIdx]} - ${L(totalMonthly[totalBestIdx])}` : "-",
   },
   {
     label: "Seasonal low",
     status: "amber",
-    value: totalWorstIdx >= 0 ? `${MONTHS[totalWorstIdx]} — ${L(totalMonthly[totalWorstIdx])}` : "—",
+    value: totalWorstIdx >= 0 ? `${MONTHS[totalWorstIdx]} - ${L(totalMonthly[totalWorstIdx])}` : "-",
   },
   {
     label: "FY26-27 early trend",
     status: isStrongestApril ? "green" : "amber",
     value: priorAprils.length === 0
-      ? `Apr ${L(fy2627April)} — no prior April to compare`
+      ? `Apr ${L(fy2627April)} - no prior April to compare`
       : isStrongestApril
-        ? `Apr ${L(fy2627April)} — strongest April on record`
-        : `Apr ${L(fy2627April)} — below the best prior April (${L(bestPriorApril)})`,
+        ? `Apr ${L(fy2627April)} - strongest April on record`
+        : `Apr ${L(fy2627April)} - below the best prior April (${L(bestPriorApril)})`,
   },
 ];
 
@@ -165,7 +165,7 @@ export default function StoreTab() {
     <div className="space-y-6">
       <div>
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          Sienna Store — Sales Analysis · FY 2025-26
+          Sienna Store - Sales Analysis · FY 2025-26
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
@@ -272,7 +272,7 @@ export default function StoreTab() {
 
       {view === "yoy" && (
         <>
-          <DashCard title="Apr & May — FY 25-26 vs FY 26-27">
+          <DashCard title="Apr & May - FY 25-26 vs FY 26-27">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={yoyMonthly} barGap={8}>
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -326,7 +326,7 @@ export default function StoreTab() {
             </div>
           </DashCard>
 
-          <DashCard title="Store Revenue — Full Multi-Year History">
+          <DashCard title="Store Revenue - Full Multi-Year History">
             <div className="space-y-2">
               {[...STORE_HISTORY].reverse().map(({ label, total, method }) => (
                 <div key={label} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
@@ -366,7 +366,7 @@ export default function StoreTab() {
           {hrCostMinIdx >= 0 && (
             <p className="text-xs text-muted-foreground mt-2">
               Note: HR cost is lowest in {MONTHS[hrCostMinIdx]} ({L(STORE.hrCost[hrCostMinIdx])})
-              {hrCostMinIsAnomaly ? " — well below the other months' average, likely a one-month anomaly." : "."}
+              {hrCostMinIsAnomaly ? " - well below the other months' average, likely a one-month anomaly." : "."}
             </p>
           )}
         </DashCard>

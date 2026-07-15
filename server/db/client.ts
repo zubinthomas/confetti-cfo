@@ -5,7 +5,7 @@
 //
 // PGlite is strictly SINGLE-PROCESS: two processes opening the same data
 // directory each get an independent in-memory view and silently diverge
-// (writes from one are invisible to — and can clobber — the other). The
+// (writes from one are invisible to - and can clobber - the other). The
 // lockfile below turns that silent corruption into a loud startup error:
 // stop the dev server before running db:seed / verify / one-off scripts.
 import fs from 'node:fs';
@@ -30,8 +30,8 @@ function acquireLock() {
     if (alive && pid !== process.pid) {
       throw new Error(
         `The PGlite database at ${DATA_DIR} is already open in process ${pid} ` +
-        `(PGlite is single-process). Stop that process first — e.g. the dev API ` +
-        `server — before running seeds, verifies or another server instance.`,
+        `(PGlite is single-process). Stop that process first - e.g. the dev API ` +
+        `server - before running seeds, verifies or another server instance.`,
       );
     }
   }

@@ -2,7 +2,7 @@
 //   - "Overall sales": stacked fiscal-year blocks; a header row containing
 //     "April ' YY" opens a block (12 months Apr..Mar), channel rows follow
 //     until the block's TOTAL row (which is reconciled against the channel
-//     sum per month — the FY22-23 grand total is known to be ₹2,900 off).
+//     sum per month - the FY22-23 grand total is known to be ₹2,900 off).
 //     The pivot tables below the blocks are never inside an open block.
 //   - "Category wise": fiscal-year blocks side by side, identified by the
 //     row-1 "YYYY-YYYY" labels (NOT the corrupted row-2 header dates, which
@@ -101,7 +101,7 @@ export function parseSienna(wb: ExcelJS.Workbook): ParsedWorkbook {
       if (!m) return;
       const y1 = Number(m[1]);
       if (Number(m[2]) !== y1 + 1) {
-        issues.push({ level: 'warning', sheet: 'Category wise', message: `block label "${s}" is not a single fiscal year — treated as ${y1}-${y1 + 1}` });
+        issues.push({ level: 'warning', sheet: 'Category wise', message: `block label "${s}" is not a single fiscal year - treated as ${y1}-${y1 + 1}` });
       }
       blocks.push({ offset: col, startYear: y1 });
     });

@@ -7,7 +7,7 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 
-// Every primitive field on a record, lowercased and space-joined — the
+// Every primitive field on a record, lowercased and space-joined - the
 // default search haystack when the caller doesn't supply getSearchableText.
 function defaultSearchableText(record: Record<string, unknown>): string {
   return Object.values(record)
@@ -38,7 +38,7 @@ export interface SearchableSelectProps<T> {
 
 /**
  * A combobox that searches across every field of each record (not just its
- * display label) — e.g. typing an employee's role, phone number, or division
+ * display label) - e.g. typing an employee's role, phone number, or division
  * finds them even though only their name is shown. Built on the existing
  * Popover + Command (cmdk) primitives; filtering is done here (not by cmdk's
  * built-in fuzzy match) so the "search everything" behavior is explicit and

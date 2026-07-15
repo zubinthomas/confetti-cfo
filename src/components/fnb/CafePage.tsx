@@ -19,11 +19,11 @@ export default function CafePage() {
     <OutletPage
       outletKey="bosarGhor"
       heading="Cafe (Bosar Ghor)"
-      description="The cafe section — pizzas, sandwiches, coffee and cafe specials — reported in the source workbook as the Bosar Ghor outlet."
+      description="The cafe section - pizzas, sandwiches, coffee and cafe specials - reported in the source workbook as the Bosar Ghor outlet."
     >
-      <MenuMixCard items={menuMix("bosarGhor")} title="Menu Mix — Top Sellers (Sep 2025 onwards)" />
+      <MenuMixCard items={menuMix("bosarGhor")} title="Menu Mix - Top Sellers (Sep 2025 onwards)" />
 
-      <DashCard title="Whole-Cafe Monthly P&L — Apr–Aug 2025 (before the outlet split)">
+      <DashCard title="Whole-Cafe Monthly P&L - Apr–Aug 2025 (before the outlet split)">
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={preSplit}>
             <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />

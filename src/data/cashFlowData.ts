@@ -8,7 +8,7 @@
 //
 // HONEST LIMIT: the source workbooks are P&L statements. They contain no bank
 // balance, receivables, payables, loan schedule or opening cash, so true
-// cash-position / working-capital metrics are NOT derivable — see
+// cash-position / working-capital metrics are NOT derivable - see
 // CASH_GAPS, which the Cash Flow page surfaces instead of invented numbers.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export const OUTFLOW_CATEGORIES: OutflowCategory[] = CATEGORY_LINES.map(([label,
   OUTFLOW_CATEGORIES.push({ label: "Other operating costs", monthly, total: sum(monthly) });
 }
 
-// GST memo — a real cash outflow, but reported outside the departmental
+// GST memo - a real cash outflow, but reported outside the departmental
 // expense totals in the source sheets (pass-through, not a P&L cost)
 const gstMonthly = monthlyAcrossUnits(liIdsByName("GST Paid", "GST Expenses"));
 export const GST_MEMO = { label: "GST paid", monthly: gstMonthly, total: sum(gstMonthly) };

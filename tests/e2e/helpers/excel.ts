@@ -1,6 +1,6 @@
 // Read the source Excel workbooks in data-sources/ and compute the same
 // aggregates the dashboard presents, WITHOUT going through
-// extracted_data.json or the src/data adapters — so the tests compare what
+// extracted_data.json or the src/data adapters - so the tests compare what
 // the UI shows against the spreadsheets themselves.
 import ExcelJS from "exceljs";
 import path from "node:path";
@@ -17,7 +17,7 @@ export const hasSources = () =>
 // Same compact-₹ formatter the dashboard uses (duplicated on purpose: the
 // tests must not import app code, or a data bug could cancel itself out).
 export const L = (n: number | null | undefined): string => {
-  if (n == null) return "—";
+  if (n == null) return "-";
   const abs = Math.abs(n);
   if (abs >= 10000000) return `${(n / 10000000).toFixed(2)}Cr`;
   if (abs >= 100000) return `${(n / 100000).toFixed(1)}L`;
@@ -25,7 +25,7 @@ export const L = (n: number | null | undefined): string => {
   return String(Math.round(n));
 };
 
-// exceljs returns formula cells as { formula, result } — unwrap to a number.
+// exceljs returns formula cells as { formula, result } - unwrap to a number.
 const num = (v: unknown): number | null => {
   if (v && typeof v === "object" && "result" in v) v = (v as { result: unknown }).result;
   return typeof v === "number" && Number.isFinite(v) ? v : null;

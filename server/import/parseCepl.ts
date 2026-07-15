@@ -10,7 +10,7 @@
 //     "... (Overview)" line items; the year already covered by the department
 //     sheets is skipped (it exists at full granularity);
 //   - per month, Sales − Expenses is reconciled against the sheet's own Net
-//     P&L row (warning when off — the source is known to disagree with
+//     P&L row (warning when off - the source is known to disagree with
 //     itself for Store June FY25-26).
 import type ExcelJS from 'exceljs';
 import { num, str, dateVal } from './xlsx.ts';
@@ -131,7 +131,7 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
   // ── Overview sheet: historical fiscal years ────────────────────────────────
   const ov = wb.getWorksheet('Overview');
   if (!ov) {
-    issues.push({ level: 'warning', sheet: 'Overview', message: 'sheet missing — historical years not imported' });
+    issues.push({ level: 'warning', sheet: 'Overview', message: 'sheet missing - historical years not imported' });
   } else {
     let fy: string | null = null;
     let unit: string | null = null;

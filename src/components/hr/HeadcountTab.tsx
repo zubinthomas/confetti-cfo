@@ -174,7 +174,7 @@ export default function HeadcountTab() {
               <button onClick={() => setSelected(null)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 space-y-3 text-sm">
-              {[["Division", selected.division], ["Role", selected.role], ["Type", selected.employment_type], ["Status", selected.status], ["Joining Date", selected.joining_date], ["Salary/mo", selected.monthly_salary ? `₹${selected.monthly_salary.toLocaleString()}` : "—"], ["Phone", selected.phone], ["Email", selected.email], ["Aadhar", selected.aadhar_number], ["PAN", selected.pan_number], ["Blood Group", selected.blood_group], ["Emergency Contact", selected.emergency_contact_name ? `${selected.emergency_contact_name} — ${selected.emergency_contact_phone}` : "—"]].map(([k, v]) => v ? (
+              {[["Division", selected.division], ["Role", selected.role], ["Type", selected.employment_type], ["Status", selected.status], ["Joining Date", selected.joining_date], ["Salary/mo", selected.monthly_salary ? `₹${selected.monthly_salary.toLocaleString()}` : "-"], ["Phone", selected.phone], ["Email", selected.email], ["Aadhar", selected.aadhar_number], ["PAN", selected.pan_number], ["Blood Group", selected.blood_group], ["Emergency Contact", selected.emergency_contact_name ? `${selected.emergency_contact_name} - ${selected.emergency_contact_phone}` : "-"]].map(([k, v]) => v ? (
                 <div key={k} className="flex justify-between border-b border-border pb-2 last:border-b-0">
                   <span className="text-muted-foreground">{k}</span>
                   <span className="text-foreground font-medium text-right">{v}</span>

@@ -76,7 +76,7 @@ export default function OpsPage() {
   return (
     <div className="space-y-6">
       <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-        Operations — Manager Dashboard
+        Operations - Manager Dashboard
       </p>
 
       <DashCard>

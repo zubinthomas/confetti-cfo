@@ -50,13 +50,13 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
     },
     {
       label: "Best Month",
-      value: bestMonthIdx >= 0 ? MONTHS[bestMonthIdx] : "—",
+      value: bestMonthIdx >= 0 ? MONTHS[bestMonthIdx] : "-",
       sub: bestMonthIdx >= 0 ? `₹${L(data.netPL[bestMonthIdx])} net P&L` : "",
       status: "green",
     },
     {
       label: "Weakest Month",
-      value: worstMonthIdx >= 0 ? MONTHS[worstMonthIdx] : "—",
+      value: worstMonthIdx >= 0 ? MONTHS[worstMonthIdx] : "-",
       sub: worstMonthIdx >= 0 ? `₹${L(data.netPL[worstMonthIdx])} net P&L` : "",
       status: "red",
     },
@@ -93,7 +93,7 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
       status: "amber",
       value: grossRange.length
         ? `${Math.min(...grossRange).toFixed(0)}%–${Math.max(...grossRange).toFixed(0)}% range across months`
-        : "—",
+        : "-",
     },
   ];
 
@@ -135,7 +135,7 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
         Figures are computed directly from the department&rsquo;s monthly financial records
         (Total Sales, Raw Materials/Trading Items Purchase, Total Expenses, and Net Profit &amp; Loss
         as reported in the source P&amp;L workbook). No depreciation/interest breakout exists in the
-        source data, so EBITDA is not shown — Net Margin (post all expenses) is used instead.
+        source data, so EBITDA is not shown - Net Margin (post all expenses) is used instead.
       </p>
     </div>
   );

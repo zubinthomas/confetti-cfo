@@ -91,7 +91,7 @@ export default function CashFlowTab() {
         <DashCard title="Not Derivable From the Source Data">
           <div className="flex items-center gap-1.5 mb-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-3 py-1.5 rounded-full w-fit">
             <Database className="w-3.5 h-3.5" />
-            The workbooks are P&L statements — no balance-sheet data
+            The workbooks are P&L statements - no balance-sheet data
           </div>
           <ul className="space-y-2">
             {CASH_GAPS.map((g) => (

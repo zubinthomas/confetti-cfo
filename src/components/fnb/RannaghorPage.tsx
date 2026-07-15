@@ -7,7 +7,7 @@ export default function RannaghorPage() {
     <OutletPage
       outletKey="rannaghor"
       heading="Rannaghor"
-      description="Rannaghor is the events kitchen — most of its revenue arrives through event bookings (it also appears as an 'Events' line for the other outlets)."
+      description="Rannaghor is the events kitchen - most of its revenue arrives through event bookings (it also appears as an 'Events' line for the other outlets)."
     >
       <MenuMixCard items={menuMix("rannaghor")} title="Direct Menu Sales (Sep 2025 onwards)" />
     </OutletPage>

@@ -70,7 +70,7 @@ let total = 0;
 for (const [businessName, file, parser] of SOURCES) {
   if (!fs.existsSync(file)) { console.log(`skipping ${businessName} (no ${file})`); continue; }
   const pw = parser(await loadWorkbook(file));
-  console.log(`== ${businessName} — issues: ${pw.issues.filter(i => i.level === 'error').length} error(s), ${pw.issues.filter(i => i.level === 'warning').length} warning(s)`);
+  console.log(`== ${businessName} - issues: ${pw.issues.filter(i => i.level === 'error').length} error(s), ${pw.issues.filter(i => i.level === 'warning').length} warning(s)`);
   for (const i of pw.issues.filter(i => i.level !== 'info').slice(0, 8)) console.log(`   ${i.level}: [${i.sheet}] ${i.message}`);
 
   total += diffMaps('financial', jsonFinancialMap(businessName), parsedFinancialMap(pw));
@@ -96,6 +96,6 @@ for (const [businessName, file, parser] of SOURCES) {
   }
 }
 
-if (total) { console.error(`PARSER CHECK FAILED — ${total} difference(s)`); process.exit(1); }
-console.log('PARSER CHECK OK — parsers reproduce the verified extraction exactly');
+if (total) { console.error(`PARSER CHECK FAILED - ${total} difference(s)`); process.exit(1); }
+console.log('PARSER CHECK OK - parsers reproduce the verified extraction exactly');
 process.exit(0);

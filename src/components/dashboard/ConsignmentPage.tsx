@@ -16,7 +16,7 @@ export default function ConsignmentPage() {
   const kpis: KpiData[] = [
     { label: `Consignment Sales (${year.label})`, value: `₹${L(year.total)}`, sub: `${year.vendors.length} active partners`, status: "green" },
     { label: "Est. Commission Earned", value: `₹${L(year.commission)}`, sub: "At each partner's listed rate" },
-    { label: "Top Partner", value: year.vendors[0] ? year.vendors[0].name.split("/")[0].trim() : "—", sub: year.vendors[0] ? `₹${L(year.vendors[0].total)}` : "", status: "green" },
+    { label: "Top Partner", value: year.vendors[0] ? year.vendors[0].name.split("/")[0].trim() : "-", sub: year.vendors[0] ? `₹${L(year.vendors[0].total)}` : "", status: "green" },
     { label: "Sienna × Other Brands", value: `₹${L(otherBrands.reduce((a, v) => a + v.total, 0))}`, sub: `${otherBrands.length} brand collaborations` },
   ];
 
@@ -24,7 +24,7 @@ export default function ConsignmentPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Store — Consignment & Partner Brands
+          Store - Consignment & Partner Brands
         </p>
         <div className="flex gap-1.5">
           {CONSIGNMENT.map((y, i) => (
@@ -47,7 +47,7 @@ export default function ConsignmentPage() {
         {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
-      <DashCard title={`Top Partners by Sales — ${year.label}`}>
+      <DashCard title={`Top Partners by Sales - ${year.label}`}>
         <ResponsiveContainer width="100%" height={Math.max(180, topVendors.length * 30)}>
           <BarChart data={topVendors} layout="vertical">
             <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
@@ -58,7 +58,7 @@ export default function ConsignmentPage() {
         </ResponsiveContainer>
       </DashCard>
 
-      <DashCard title={`All Partners — ${year.label}`}>
+      <DashCard title={`All Partners - ${year.label}`}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -77,7 +77,7 @@ export default function ConsignmentPage() {
                     {v.group === "other_brands" ? "Sienna × Other Brands" : "Consignment"}
                   </td>
                   <td className="py-2 pr-4 text-right text-muted-foreground">
-                    {v.rate != null ? `${(v.rate * 100).toFixed(0)}%` : "—"}
+                    {v.rate != null ? `${(v.rate * 100).toFixed(0)}%` : "-"}
                   </td>
                   <td className="py-2 text-right text-foreground">₹{L(v.total)}</td>
                 </tr>

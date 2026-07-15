@@ -21,7 +21,7 @@ const upload = multer({
 
 const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === 'error');
 
-// also used by routes/sheets.ts — keeps the heavy parsed payload out of responses
+// also used by routes/sheets.ts - keeps the heavy parsed payload out of responses
 export const batchSummary = (b: typeof schema.importBatches.$inferSelect) => ({
   id: b.id, filename: b.filename, kind: b.kind, status: b.status,
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
@@ -29,7 +29,7 @@ export const batchSummary = (b: typeof schema.importBatches.$inferSelect) => ({
   sourceType: b.sourceType, sheetSourceId: b.sheetSourceId,
 });
 
-/** POST /api/import/upload — parse + validate a workbook, store a preview batch. */
+/** POST /api/import/upload - parse + validate a workbook, store a preview batch. */
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file provided' });
@@ -38,7 +38,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const kind = detectKind(wb);
     if (!kind) {
       return res.status(400).json({
-        message: 'Unrecognised workbook — expected a CEPL P&L, Cafe Weekly P&L, or Sienna Store Sales file',
+        message: 'Unrecognised workbook - expected a CEPL P&L, Cafe Weekly P&L, or Sienna Store Sales file',
       });
     }
     const parsed = PARSERS[kind](wb);
@@ -61,7 +61,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-/** GET /api/import/batches — newest first, without payloads. */
+/** GET /api/import/batches - newest first, without payloads. */
 router.get('/batches', async (_req, res) => {
   await ready();
   const rows = await db.select().from(schema.importBatches).orderBy(desc(schema.importBatches.id));

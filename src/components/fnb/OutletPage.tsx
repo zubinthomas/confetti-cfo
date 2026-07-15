@@ -33,7 +33,7 @@ export default function OutletPage({ outletKey, heading, description, children }
     { label: "Avg Weekly Revenue", value: `₹${L(weeksWithData ? totalRevenue / weeksWithData : 0)}` },
     { label: "Net P&L (Sep–Jan)", value: `₹${L(totalPL)}`, sub: `${margin.toFixed(1)}% margin`, status: totalPL >= 0 ? "green" : "red" },
     { label: "Share of F&B outlets", value: `${share.toFixed(1)}%`, sub: "Of all-outlet revenue" },
-    { label: "Best Week", value: bestIdx >= 0 ? OUTLET_WEEKS[bestIdx].short : "—", sub: bestIdx >= 0 ? `₹${L(data.totalSales[bestIdx])}` : "" , status: "green" },
+    { label: "Best Week", value: bestIdx >= 0 ? OUTLET_WEEKS[bestIdx].short : "-", sub: bestIdx >= 0 ? `₹${L(data.totalSales[bestIdx])}` : "" , status: "green" },
   ];
 
   const weekly = OUTLET_WEEKS.map((w, i) => ({
@@ -54,7 +54,7 @@ export default function OutletPage({ outletKey, heading, description, children }
     <div className="space-y-6">
       <div>
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          {heading} — Weekly P&L · Sep 2025 onwards
+          {heading} - Weekly P&L · Sep 2025 onwards
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}

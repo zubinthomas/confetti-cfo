@@ -15,12 +15,12 @@ import { batchSummary } from './import.ts';
 const router = Router();
 router.use(authMiddleware);
 
-/** GET /api/sheets/config — lets the UI show the "share with…" hint. */
+/** GET /api/sheets/config - lets the UI show the "share with…" hint. */
 router.get('/config', (_req, res) => {
   res.json({ serviceAccountEmail: serviceAccountEmail() });
 });
 
-/** GET /api/sheets/available — spreadsheets the service account can see,
+/** GET /api/sheets/available - spreadsheets the service account can see,
  *  flagged with whether they are already connected as a source. */
 router.get('/available', async (_req, res) => {
   try {
@@ -33,7 +33,7 @@ router.get('/available', async (_req, res) => {
     res.json(files.map((f) => ({ ...f, connected: connected.has(f.id) })));
   } catch (err) {
     if (err instanceof SheetAccessError) {
-      // no_service_account isn't a failure — the UI just hides the picker
+      // no_service_account isn't a failure - the UI just hides the picker
       if (err.code === 'no_service_account') return res.json([]);
       return res.status(502).json({ message: err.message });
     }
@@ -42,14 +42,14 @@ router.get('/available', async (_req, res) => {
   }
 });
 
-/** GET /api/sheets/sources — newest first. */
+/** GET /api/sheets/sources - newest first. */
 router.get('/sources', async (_req, res) => {
   await ready();
   const rows = await db.select().from(schema.sheetSources).orderBy(desc(schema.sheetSources.id));
   res.json(rows);
 });
 
-/** POST /api/sheets/sources { url, label? } — validate access, save, sync now. */
+/** POST /api/sheets/sources { url, label? } - validate access, save, sync now. */
 router.post('/sources', async (req, res) => {
   try {
     const { url, label } = req.body as { url?: string; label?: string };
@@ -107,7 +107,7 @@ router.patch('/sources/:id', async (req, res) => {
   res.json(updated);
 });
 
-/** DELETE /api/sheets/sources/:id — pending previews are discarded; committed batches keep history. */
+/** DELETE /api/sheets/sources/:id - pending previews are discarded; committed batches keep history. */
 router.delete('/sources/:id', async (req, res) => {
   await ready();
   const id = Number(req.params.id);
@@ -123,7 +123,7 @@ router.delete('/sources/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-/** POST /api/sheets/sources/:id/sync — sync errors land on the source row, not as HTTP errors. */
+/** POST /api/sheets/sources/:id/sync - sync errors land on the source row, not as HTTP errors. */
 router.post('/sources/:id/sync', async (req, res) => {
   await ready();
   const id = Number(req.params.id);

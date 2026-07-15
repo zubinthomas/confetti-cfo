@@ -1,4 +1,4 @@
-# Confetti CFO — Express Backend
+# Confetti CFO - Express Backend
 
 This is the self-hosted Express server behind the dashboard (auth, entity CRUD, file uploads and the LLM proxy).
 
@@ -16,10 +16,10 @@ npm run dev                   # starts on http://localhost:3001
 Open two terminals:
 
 ```bash
-# Terminal 1 — backend
+# Terminal 1 - backend
 cd server && npm run dev
 
-# Terminal 2 — frontend
+# Terminal 2 - frontend
 npm run dev   # vite proxies /api → http://localhost:3001
 ```
 
@@ -39,7 +39,7 @@ npm run dev   # vite proxies /api → http://localhost:3001
 
 ## Data storage
 
-Entity data lives in the database (PGlite in development — an embedded PostgreSQL, no server to run; swap `server/db/client.ts` to a network driver + `DATABASE_URL` for production Postgres). Seed it from the verified Excel extraction with `npm run db:seed`, and prove the data model reconstructs `src/data/extracted_data.json` exactly with `npm run db:verify`.
+Entity data lives in the database (PGlite in development - an embedded PostgreSQL, no server to run; swap `server/db/client.ts` to a network driver + `DATABASE_URL` for production Postgres). Seed it from the verified Excel extraction with `npm run db:seed`, and prove the data model reconstructs `src/data/extracted_data.json` exactly with `npm run db:verify`.
 Uploaded files are stored in `server/uploads/`.
 
 > **For production** swap `server/db.js` for a real database (PostgreSQL, MongoDB, etc.) and use proper cloud file storage (S3, R2, etc.).
@@ -48,16 +48,16 @@ Uploaded files are stored in `server/uploads/`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | Register + send OTP |
-| POST | `/api/auth/verify-otp` | — | Verify OTP → get token |
-| POST | `/api/auth/resend-otp` | — | Re-send OTP |
-| POST | `/api/auth/login` | — | Email/password login |
+| POST | `/api/auth/register` | - | Register + send OTP |
+| POST | `/api/auth/verify-otp` | - | Verify OTP → get token |
+| POST | `/api/auth/resend-otp` | - | Re-send OTP |
+| POST | `/api/auth/login` | - | Email/password login |
 | GET | `/api/auth/me` | Bearer | Current user |
-| POST | `/api/auth/logout` | — | No-op (client drops token) |
-| POST | `/api/auth/reset-password-request` | — | Send reset email |
-| POST | `/api/auth/reset-password` | — | Consume reset token |
-| GET | `/api/auth/google` | — | Google OAuth redirect |
-| GET | `/api/auth/google/callback` | — | Google OAuth callback |
+| POST | `/api/auth/logout` | - | No-op (client drops token) |
+| POST | `/api/auth/reset-password-request` | - | Send reset email |
+| POST | `/api/auth/reset-password` | - | Consume reset token |
+| GET | `/api/auth/google` | - | Google OAuth redirect |
+| GET | `/api/auth/google/callback` | - | Google OAuth callback |
 | GET | `/api/entities/:entity` | Bearer | List (optional `?sort=`) |
 | POST | `/api/entities/:entity` | Bearer | Create |
 | PUT | `/api/entities/:entity/:id` | Bearer | Update |

@@ -50,28 +50,28 @@ const EMPTY = {
 
 // Pre-populated checklist of commonly required licences for Confetti Exports
 const CHECKLIST = [
-  { licence_name: "Trade Licence — Kolkata HO", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Head Office)", division: "Admin" },
-  { licence_name: "Trade Licence — Siena Restaurant & Bar", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Trade Licence — Birbhum Factory", licence_type: "Trade Licence", authority: "Birbhum Zila Parishad / Municipality", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
+  { licence_name: "Trade Licence - Kolkata HO", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Head Office)", division: "Admin" },
+  { licence_name: "Trade Licence - Siena Restaurant & Bar", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Trade Licence - Birbhum Factory", licence_type: "Trade Licence", authority: "Birbhum Zila Parishad / Municipality", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "GST Registration (Group)", licence_type: "GST Registration", authority: "GSTN / GST Department", location: "All Locations", division: "All" },
-  { licence_name: "FSSAI — Siena Food Business", licence_type: "FSSAI", authority: "FSSAI (Food Safety & Standards Authority)", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Excise / Bar Licence — Siena", licence_type: "Excise / Bar Licence", authority: "West Bengal Excise Dept.", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Fire NOC — Siena", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Fire NOC — Birbhum Factory", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
-  { licence_name: "Factory Licence — Ceramics", licence_type: "Factory Licence", authority: "WB Directorate of Factories", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
-  { licence_name: "Shops & Establishments — Kolkata HO", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Head Office)", division: "Admin" },
-  { licence_name: "Shops & Establishments — Siena", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "FSSAI - Siena Food Business", licence_type: "FSSAI", authority: "FSSAI (Food Safety & Standards Authority)", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Excise / Bar Licence - Siena", licence_type: "Excise / Bar Licence", authority: "West Bengal Excise Dept.", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Fire NOC - Siena", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Fire NOC - Birbhum Factory", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
+  { licence_name: "Factory Licence - Ceramics", licence_type: "Factory Licence", authority: "WB Directorate of Factories", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
+  { licence_name: "Shops & Establishments - Kolkata HO", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Head Office)", division: "Admin" },
+  { licence_name: "Shops & Establishments - Siena", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Siena)", division: "Siena" },
   { licence_name: "ESI Registration", licence_type: "ESI Registration", authority: "ESIC", location: "All Locations", division: "All" },
   { licence_name: "PF / EPF Registration", licence_type: "PF Registration", authority: "EPFO", location: "All Locations", division: "All" },
-  { licence_name: "Professional Tax — WB", licence_type: "Professional Tax", authority: "WB PT Department", location: "All Locations", division: "All" },
-  { licence_name: "Pollution Control NOC — Ceramics Factory", licence_type: "Pollution Control NOC", authority: "WBPCB", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
+  { licence_name: "Professional Tax - WB", licence_type: "Professional Tax", authority: "WB PT Department", location: "All Locations", division: "All" },
+  { licence_name: "Pollution Control NOC - Ceramics Factory", licence_type: "Pollution Control NOC", authority: "WBPCB", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "Pollution Control Consent (CTE/CTO)", licence_type: "Pollution Control Consent", authority: "WBPCB", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
-  { licence_name: "Labour Licence — Ceramics Factory", licence_type: "Labour Licence", authority: "WB Labour Dept.", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
+  { licence_name: "Labour Licence - Ceramics Factory", licence_type: "Labour Licence", authority: "WB Labour Dept.", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "Import Export Code (IEC)", licence_type: "Import Export Code", authority: "DGFT", location: "Kolkata (Head Office)", division: "Admin" },
   { licence_name: "MSME / Udyam Registration", licence_type: "MSME / Udyam", authority: "MSME Ministry", location: "All Locations", division: "All" },
-  { licence_name: "KMC Building Permission — Siena", licence_type: "KMC Permission", authority: "KMC Building Dept.", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Signage Permission — Siena", licence_type: "Signage Permission", authority: "KMC Advertisement Dept.", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Water / Sewage NOC — Birbhum", licence_type: "Water / Sewage Permit", authority: "PHED / Local Municipality", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
+  { licence_name: "KMC Building Permission - Siena", licence_type: "KMC Permission", authority: "KMC Building Dept.", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Signage Permission - Siena", licence_type: "Signage Permission", authority: "KMC Advertisement Dept.", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Water / Sewage NOC - Birbhum", licence_type: "Water / Sewage Permit", authority: "PHED / Local Municipality", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
 ];
 
 export default function ComplianceTab() {
@@ -194,7 +194,7 @@ export default function ComplianceTab() {
           <div className="space-y-1">
             {expiringSoon.map(l => (
               <p key={l.id} className="text-xs text-amber-700 dark:text-amber-400">
-                • <strong>{l.licence_name}</strong> — {l.location} — expires {l.expiry_date} ({daysUntil(l.expiry_date)} days)
+                • <strong>{l.licence_name}</strong> - {l.location} - expires {l.expiry_date} ({daysUntil(l.expiry_date)} days)
               </p>
             ))}
           </div>
@@ -265,7 +265,7 @@ export default function ComplianceTab() {
                         <p className="text-xs text-muted-foreground">{l.licence_type}</p>
                         {l.licence_number && <p className="text-xs text-muted-foreground font-mono">#{l.licence_number}</p>}
                       </td>
-                      <td className="py-2.5 pr-3 text-xs text-muted-foreground">{l.authority || "—"}</td>
+                      <td className="py-2.5 pr-3 text-xs text-muted-foreground">{l.authority || "-"}</td>
                       <td className="py-2.5 pr-3 text-xs text-muted-foreground">{l.location}</td>
                       <td className="py-2.5 pr-3">
                         {l.expiry_date ? (
@@ -275,7 +275,7 @@ export default function ComplianceTab() {
                               {days < 0 ? `${Math.abs(days)}d ago` : `${days}d left`}
                             </p>}
                           </div>
-                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                        ) : <span className="text-xs text-muted-foreground">-</span>}
                       </td>
                       <td className="py-2.5 pr-3">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusStyle[l.status] || ""}`}>{l.status}</span>
@@ -286,7 +286,7 @@ export default function ComplianceTab() {
                             <a href={l.document_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-0.5">
                               <FileText className="w-3.5 h-3.5" /> View
                             </a>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                          ) : <span className="text-xs text-muted-foreground">-</span>}
                           <label className="cursor-pointer ml-1">
                             <input type="file" className="hidden" onChange={e => e.target.files[0] && uploadDoc(l.id, e.target.files[0])} />
                             <Upload className="w-3.5 h-3.5 text-muted-foreground hover:text-primary transition-colors" />

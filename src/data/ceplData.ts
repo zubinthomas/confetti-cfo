@@ -18,7 +18,7 @@ const LI = {
   storeTotalExpense: 61, storeProfitLoss: 62,
 };
 
-// ── F&B (Siena restaurant) monthly P&L — FY 2025-26, fully real ─────────────
+// ── F&B (Siena restaurant) monthly P&L - FY 2025-26, fully real ─────────────
 export const FAB = {
   months: MONTHS,
   productSales:   series(FNB_BU, LI.productSales, FY2526_PIDS),
@@ -37,7 +37,7 @@ export const FAB = {
   plPct:          pctSeries(FNB_BU, LI.plPct, FY2526_PIDS),
 };
 
-// ── Store (Sienna retail, CEPL P&L sheet) monthly — FY 2025-26, fully real ─
+// ── Store (Sienna retail, CEPL P&L sheet) monthly - FY 2025-26, fully real ─
 export const STORE = {
   months: MONTHS,
   totalSales:     series(STORE_BU, LI.storeTotalSales, FY2526_PIDS),
@@ -51,7 +51,7 @@ export const STORE = {
   plPct:          pctSeries(STORE_BU, LI.plPct, FY2526_PIDS),
 };
 
-// ── CEPL Group Overview — FY 2025-26 monthly detail ────────────────────────
+// ── CEPL Group Overview - FY 2025-26 monthly detail ────────────────────────
 export const OVERVIEW = {
   fy2526: {
     fb: {
@@ -78,9 +78,9 @@ export const OVERVIEW = {
 // and have full FY 2025-26 monthly detail (financialRecords), but the sheet
 // layout differs department-to-department (each has its own mix of raw-material
 // / consumable / sub-category line items). Rather than summing every row tagged
-// `category: "cogs"|"hr_cost"|"operating_cost"` — which double-counts, since the
+// `category: "cogs"|"hr_cost"|"operating_cost"` - which double-counts, since the
 // sheets mix true totals with overlapping sub-breakdowns (see
-// raw._meta.knownSimplifications on category tagging) — the figures below use
+// raw._meta.knownSimplifications on category tagging) - the figures below use
 // only the line items that are the workbook's own reported totals:
 //   • Total Sales            (lineItemId 85)  → revenue
 //   • primary purchase cost  (Raw Materials / Trading Items Purchase)  → COGS
@@ -91,7 +91,7 @@ export const OVERVIEW = {
 // these four departments, so nothing here is fabricated or estimated.
 //
 // There isn't a depreciation/interest split in the source data, so a true
-// EBITDA figure isn't derivable — Net Profit & Loss (post all expenses) and
+// EBITDA figure isn't derivable - Net Profit & Loss (post all expenses) and
 // Net Margin are shown instead of an invented EBITDA number.
 export const DEPT_BU = { tradingItems: 3, pottery: 4, batik: 5, stitching: 6 };
 const DEPT_COGS_LINE_IDS = {

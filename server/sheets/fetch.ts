@@ -1,9 +1,9 @@
 // Fetch a Google Sheet as an xlsx buffer, so the existing exceljs import
 // pipeline (detect → parse → merge) works unchanged regardless of source.
 // Two access methods:
-//   link            — the sheet is shared "Anyone with the link can view";
+//   link            - the sheet is shared "Anyone with the link can view";
 //                     the public export endpoint needs no credentials.
-//   service_account — private sheets shared with the service account's
+//   service_account - private sheets shared with the service account's
 //                     client_email; exported via the Drive API.
 import { readFileSync } from 'fs';
 import { JWT } from 'google-auth-library';
@@ -99,7 +99,7 @@ function loadServiceAccount(): ServiceAccount | null {
     creds = JSON.parse(raw);
   } catch {
     raw = Buffer.from(raw, 'base64').toString('utf-8');
-    creds = JSON.parse(raw); // let a second failure propagate — misconfiguration
+    creds = JSON.parse(raw); // let a second failure propagate - misconfiguration
   }
   if (!creds.client_email || !creds.private_key) {
     throw new Error('Service account JSON is missing client_email/private_key');
@@ -163,7 +163,7 @@ export async function fetchViaServiceAccount(spreadsheetId: string): Promise<Buf
     try {
       const meta = (await metaRes.json()) as { mimeType?: string };
       isNativeSheet = meta.mimeType === 'application/vnd.google-apps.spreadsheet';
-    } catch { /* unexpected body — fall through to the export attempt */ }
+    } catch { /* unexpected body - fall through to the export attempt */ }
   } else {
     metaRes.body?.cancel();
     // let the export call below produce the proper 403/404 error mapping
@@ -171,17 +171,17 @@ export async function fetchViaServiceAccount(spreadsheetId: string): Promise<Buf
 
   const res = await driveFetch(sa, isNativeSheet ? driveExportUrl(spreadsheetId) : driveDownloadUrl(spreadsheetId));
   if (res.status === 404) {
-    throw new SheetAccessError('not_shared', `Sheet not found — make sure it is shared with ${sa.email}`);
+    throw new SheetAccessError('not_shared', `Sheet not found - make sure it is shared with ${sa.email}`);
   }
   if (res.status === 403) {
     // Google's message distinguishes "Drive API disabled on the project" from
-    // "this file isn't shared with the service account" — pass it through.
+    // "this file isn't shared with the service account" - pass it through.
     let detail: string | undefined;
     try {
       detail = ((await res.json()) as { error?: { message?: string } }).error?.message;
     } catch { /* non-JSON error body */ }
     throw new SheetAccessError('access_denied',
-      detail ?? `Drive API access denied for ${sa.email} — check the sheet is shared with it and the Drive API is enabled`);
+      detail ?? `Drive API access denied for ${sa.email} - check the sheet is shared with it and the Drive API is enabled`);
   }
   if (!res.ok) {
     throw new SheetAccessError('bad_response', `Drive export failed with HTTP ${res.status}`);
@@ -199,7 +199,7 @@ export interface DriveSpreadsheet {
 
 /**
  * Every spreadsheet the service account can see (shared with it directly or
- * via a shared drive) — native Google Sheets and plain .xlsx files.
+ * via a shared drive) - native Google Sheets and plain .xlsx files.
  */
 export async function listAccessibleSpreadsheets(): Promise<DriveSpreadsheet[]> {
   const sa = requireServiceAccount();

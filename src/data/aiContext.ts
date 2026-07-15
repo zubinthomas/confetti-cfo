@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Builds the CFO-assistant context string for the AI Queries page from the
-// real, verified data — so the LLM's answers agree with the dashboards
+// real, verified data - so the LLM's answers agree with the dashboards
 // instead of the fabricated placeholder figures it used to receive.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ F&B OUTLETS (weekly detail, Sep 2025 – Jan 2026, ${weeks} weeks): Bosar Ghor (
 
 TOP COST LINES (FY, all departments): ${topOutflows}. GST paid ${R(GST_MEMO.total)} (reported outside the P&L expense totals).
 
-DATA NOT AVAILABLE (do not invent these — say so if asked): ${CASH_GAPS.join("; ")}; depreciation/interest split (so true EBITDA is not derivable — use net margin).
+DATA NOT AVAILABLE (do not invent these - say so if asked): ${CASH_GAPS.join("; ")}; depreciation/interest split (so true EBITDA is not derivable - use net margin).
 
 Answer with specific numbers from the context above, actionable insights, and recommendations. Format with markdown headings and bullet points.`;
 }

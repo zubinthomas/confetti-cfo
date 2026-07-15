@@ -9,7 +9,7 @@ const pvStatusColor: Record<string, string> = { Verified: "text-emerald-500", Su
 const pvBadge: Record<string, string> = { Verified: "green", Submitted: "green", Pending: "amber", Rejected: "red" };
 
 // Module-scope (stable identity) so re-renders during an upload don't
-// remount every file input — see FormField.tsx for why this matters.
+// remount every file input - see FormField.tsx for why this matters.
 function DocCell({ empId, field, url, uploading, onUpload }: {
   empId: string; field: string; url?: string; uploading: boolean;
   onUpload: (empId: string, field: string, file: File) => void;
@@ -22,7 +22,7 @@ function DocCell({ empId, field, url, uploading, onUpload }: {
           <FileText className="w-3.5 h-3.5" /> View
         </a>
       ) : (
-        <span className="text-xs text-muted-foreground">—</span>
+        <span className="text-xs text-muted-foreground">-</span>
       )}
       <label className="cursor-pointer">
         <input type="file" className="hidden" onChange={e => e.target.files[0] && onUpload(empId, field, e.target.files[0])} />

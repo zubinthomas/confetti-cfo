@@ -31,7 +31,7 @@ const kpis: KpiData[] = [
   { label: "Retail & Bar Revenue (FY)", value: `₹${L(fyRetailBar)}`, sub: "F&B P&L line, FY 2025-26", status: "green" },
   { label: "Liquor Sales (Sep–Jan)", value: `₹${L(weeklyLiquor)}`, sub: "Weekly outlet detail" },
   { label: "Liquor Sales (Apr–Aug)", value: `₹${L(aprAugLiquor)}`, sub: "Whole-cafe monthly detail" },
-  { label: "Cocktail Share", value: liquorTotal ? `${((LIQUOR_MIX[0]?.value / liquorTotal) * 100).toFixed(0)}%` : "—", sub: "Of liquor revenue since Sep", status: "green" },
+  { label: "Cocktail Share", value: liquorTotal ? `${((LIQUOR_MIX[0]?.value / liquorTotal) * 100).toFixed(0)}%` : "-", sub: "Of liquor revenue since Sep", status: "green" },
 ];
 
 export default function BarPage() {
@@ -39,7 +39,7 @@ export default function BarPage() {
     <div className="space-y-6">
       <div>
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          Bar — Liquor & Retail-Bar Revenue · FY 2025-26
+          Bar - Liquor & Retail-Bar Revenue · FY 2025-26
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}

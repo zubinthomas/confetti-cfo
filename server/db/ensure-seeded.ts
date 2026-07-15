@@ -8,9 +8,9 @@ import { seed } from './seed.ts';
 await ready();
 const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.businesses);
 if (n === 0) {
-  console.log('database empty — seeding from extracted_data.json');
+  console.log('database empty - seeding from extracted_data.json');
   await seed();
 } else {
-  console.log(`database already seeded (${n} businesses) — leaving as is`);
+  console.log(`database already seeded (${n} businesses) - leaving as is`);
 }
 process.exit(0);

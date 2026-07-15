@@ -24,7 +24,7 @@ if (!id) { console.error('could not extract a spreadsheet id from:', arg); proce
 
 try {
   const buf = await fetchViaServiceAccount(id);
-  console.log(`export ok — ${buf.length} bytes, xlsx magic: ${buf.subarray(0, 2).toString() === 'PK'}`);
+  console.log(`export ok - ${buf.length} bytes, xlsx magic: ${buf.subarray(0, 2).toString() === 'PK'}`);
   const wb = await loadWorkbook(buf);
   console.log('worksheets:', wb.worksheets.map((w) => w.name).join(', '));
   console.log('detected workbook kind:', detectKind(wb) ?? '(not one of the three known shapes)');

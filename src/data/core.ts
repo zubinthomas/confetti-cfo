@@ -4,7 +4,7 @@
 // the dataset fetched from /api/dataset (the database-backed copy of the
 // verified Excel extraction) plus the lookup and formatting helpers.
 //
-// Nothing here is hand-entered — every number the adapters derive comes from
+// Nothing here is hand-entered - every number the adapters derive comes from
 // the businesses / businessUnits / periods / lineItems / financialRecords /
 // categories / channels / salesRecords / vendors / consignmentRecords tables,
 // which were extracted from the source Excel workbooks and verified
@@ -40,7 +40,7 @@ export type {
   Category, Channel, SalesRecord, Vendor, ConsignmentRecord, Dataset,
 } from "./datasetStore";
 
-// Evaluated when the gated dashboard chunk loads — after DatasetGate has
+// Evaluated when the gated dashboard chunk loads - after DatasetGate has
 // called setDataset() (see src/App.tsx).
 const raw = getDataset();
 
@@ -103,7 +103,7 @@ export const FY2526_PIDS = monthPeriodIds("2025-2026");
 
 // ── Format helpers ───────────────────────────────────────────────────────────
 export const L = (n: number | null | undefined): string => {
-  if (n == null) return "—";
+  if (n == null) return "-";
   const abs = Math.abs(n);
   if (abs >= 10000000) return `${(n/10000000).toFixed(2)}Cr`;
   if (abs >= 100000)   return `${(n/100000).toFixed(1)}L`;
@@ -111,4 +111,4 @@ export const L = (n: number | null | undefined): string => {
   return String(Math.round(n));
 };
 
-export const pct = (n: number | null | undefined): string => (n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(1)}%`);
+export const pct = (n: number | null | undefined): string => (n == null ? "-" : `${n > 0 ? "+" : ""}${n.toFixed(1)}%`);

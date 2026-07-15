@@ -31,7 +31,7 @@ const SOURCES = [
 
 for (const [file] of SOURCES) {
   if (!fs.existsSync(file)) {
-    console.log(`SKIPPED — ${file} not present`);
+    console.log(`SKIPPED - ${file} not present`);
     process.exit(0);
   }
 }
@@ -88,7 +88,7 @@ for (const table of ['financial', 'sales', 'consignment'] as const) {
   console.log(`[${table}] expected ${exp.size}, imported ${act.size}`);
 }
 
-// ── pass 2: idempotence — re-import must change nothing ─────────────────────
+// ── pass 2: idempotence - re-import must change nothing ─────────────────────
 for (const [file, parser] of SOURCES) {
   const plan = await buildMergePlan(parser(await loadWorkbook(file)));
   for (const [table, s] of Object.entries(plan.stats)) {
@@ -101,6 +101,6 @@ for (const [file, parser] of SOURCES) {
 
 fs.rmSync(process.env.PGLITE_DATA_DIR!, { recursive: true, force: true });
 
-if (bad) { console.error(`IMPORT EQUIVALENCE FAILED — ${bad} problem(s)`); process.exit(1); }
-console.log('IMPORT EQUIVALENCE OK — the importer reproduces the verified extraction and re-imports are no-ops');
+if (bad) { console.error(`IMPORT EQUIVALENCE FAILED - ${bad} problem(s)`); process.exit(1); }
+console.log('IMPORT EQUIVALENCE OK - the importer reproduces the verified extraction and re-imports are no-ops');
 process.exit(0);

@@ -44,10 +44,10 @@ const problems: string[] = [];
 diff(source, rebuilt, '$', problems);
 
 if (problems.length) {
-  console.error(`FIDELITY FAILED — ${problems.length}+ differences:`);
+  console.error(`FIDELITY FAILED - ${problems.length}+ differences:`);
   for (const p of problems) console.error(' ', p);
   process.exit(1);
 }
-console.log('FIDELITY OK — database reconstructs extracted_data.json exactly',
+console.log('FIDELITY OK - database reconstructs extracted_data.json exactly',
   `(${Object.keys(rebuilt).length - 1} tables + _meta)`);
 process.exit(0);

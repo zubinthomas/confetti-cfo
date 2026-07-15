@@ -55,9 +55,9 @@ export default function LeaveTab() {
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
-  // Selecting an employee auto-fills their division — no manual entry needed.
+  // Selecting an employee auto-fills their division - no manual entry needed.
   // Matched by full_name (LeaveRequest stores plain employee_name/division
-  // strings, not a foreign key) — two employees sharing an exact full name
+  // strings, not a foreign key) - two employees sharing an exact full name
   // would be ambiguous here; a real id-based link would need a schema change.
   const handleEmployeeChange = (value: string, emp: any | undefined) => {
     setForm(f => ({ ...f, employee_name: value, division: emp?.division ?? "" }));
@@ -112,7 +112,7 @@ export default function LeaveTab() {
                     <td className="py-2.5 pr-4 text-muted-foreground">{l.division}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{l.leave_type}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground text-xs">{l.from_date} → {l.to_date}</td>
-                    <td className="py-2.5 pr-4 text-muted-foreground">{l.days || "—"}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground">{l.days || "-"}</td>
                     <td className="py-2.5 pr-4"><StatusBadge status={statusMap[l.status]}>{l.status}</StatusBadge></td>
                     <td className="py-2.5">
                       <div className="flex gap-2 flex-wrap">

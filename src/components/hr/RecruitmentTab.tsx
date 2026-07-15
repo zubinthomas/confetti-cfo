@@ -103,13 +103,13 @@ export default function RecruitmentTab() {
                 {filtered.map(item => (
                   <tr key={item.id} className="border-b border-border last:border-b-0 hover:bg-muted/30">
                     <td className="py-2.5 pr-4">
-                      <p className="font-medium text-foreground">{item.applicant_name || "—"}</p>
+                      <p className="font-medium text-foreground">{item.applicant_name || "-"}</p>
                       <p className="text-xs text-muted-foreground">{item.applicant_email}</p>
                     </td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{item.role_title}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{item.division}</td>
                     <td className="py-2.5 pr-4"><StatusBadge status={stageStatus[item.stage]}>{item.stage}</StatusBadge></td>
-                    <td className="py-2.5 pr-4 text-muted-foreground">{item.expected_salary ? `₹${Number(item.expected_salary).toLocaleString()}` : "—"}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground">{item.expected_salary ? `₹${Number(item.expected_salary).toLocaleString()}` : "-"}</td>
                     <td className="py-2.5">
                       <div className="flex gap-2">
                         <button onClick={() => { setForm({ ...item }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>

@@ -73,10 +73,10 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
           forcedAmount = true;
         } else {
           label = `${rawLabel} (2)`;
-          issues.push({ level: 'warning', sheet: ws.name, message: `duplicate row label "${rawLabel}" — second occurrence imported as "${label}"` });
+          issues.push({ level: 'warning', sheet: ws.name, message: `duplicate row label "${rawLabel}" - second occurrence imported as "${label}"` });
         }
       } else if (n > 2) {
-        issues.push({ level: 'error', sheet: ws.name, message: `row label "${rawLabel}" appears ${n} times — only two occurrences are supported` });
+        issues.push({ level: 'error', sheet: ws.name, message: `row label "${rawLabel}" appears ${n} times - only two occurrences are supported` });
         return;
       }
       const reconRow = rawLabel === RECON_ROW && n === 1 ? { label, byCol: new Map<number, number>() } : null;
@@ -141,7 +141,7 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     if (monthNum !== undefined) {
       // whole-cafe month sheet: weekly columns + Total column
       if (fyStartYear == null) {
-        issues.push({ level: 'error', sheet: ws.name, message: 'cannot infer the calendar year — the workbook has no dated weekly sheets' });
+        issues.push({ level: 'error', sheet: ws.name, message: 'cannot infer the calendar year - the workbook has no dated weekly sheets' });
         continue;
       }
       const year = monthNum >= 4 ? fyStartYear : fyStartYear + 1;
@@ -176,7 +176,7 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     // special-event summary sheet
     const special = KNOWN_SPECIAL[ws.name];
     if (!special) {
-      issues.push({ level: 'error', sheet: ws.name, message: `unrecognised sheet — if it is a special-event summary, add its date range to KNOWN_SPECIAL in parseCafe.ts` });
+      issues.push({ level: 'error', sheet: ws.name, message: `unrecognised sheet - if it is a special-event summary, add its date range to KNOWN_SPECIAL in parseCafe.ts` });
       continue;
     }
     const period: ParsedPeriod = {
@@ -191,13 +191,13 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     });
     addRows(ws, targets);
 
-    // special events summarise regular weeks — check they don't add new money
+    // special events summarise regular weeks - check they don't add new money
     const covered = [...weekTotals.entries()]
       .filter(([start]) => start >= special.start && start <= special.end)
       .reduce((a, [, v]) => a + v, 0);
     const own = records.find((r) => r.unitName === 'Total' && r.periodType === 'custom' && r.periodStart === special.start && r.lineItemName === RECON_ROW)?.value;
     if (own != null && covered > 0 && Math.abs(own - covered) > 1) {
-      issues.push({ level: 'warning', sheet: ws.name, message: `special-event total ${own.toFixed(0)} ≠ sum of the overlapped weeks ${covered.toFixed(0)} — check for double counting` });
+      issues.push({ level: 'warning', sheet: ws.name, message: `special-event total ${own.toFixed(0)} ≠ sum of the overlapped weeks ${covered.toFixed(0)} - check for double counting` });
     }
   }
 

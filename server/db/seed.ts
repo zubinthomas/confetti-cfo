@@ -60,7 +60,7 @@ for (const [name] of entityMap) {
   const rows = raw.appEntities?.[name] ?? [];
   if (rows.length) {
     throw new Error(
-      `appEntities.${name} has ${rows.length} rows — add a field mapping here before seeding them.`,
+      `appEntities.${name} has ${rows.length} rows - add a field mapping here before seeding them.`,
     );
   }
 }

@@ -1,4 +1,4 @@
-// ⚠️  AUTH DISABLED FOR PROTOTYPING — always authenticated as dev user
+// ⚠️  AUTH DISABLED FOR PROTOTYPING - always authenticated as dev user
 import React, { createContext, useContext } from 'react';
 
 interface AuthContextValue {

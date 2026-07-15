@@ -69,7 +69,7 @@ export const DURGA_PUJA = {
   pl:         frGet(OUTLET_UNITS.total, DURGA_PID, OUTLET_STREAM_LIS.pl),
 };
 
-// menu mix per outlet — aggregated over all outlet weeks
+// menu mix per outlet - aggregated over all outlet weeks
 const MENU_ITEMS = [
   "Pizza", "Omlettes", "Sandwitch & Burgers", "Snacks", "Salads", "Soups",
   "Pastas", "Desserts", "Coffee", "Tea", "Lemonade", "Café Products",
@@ -87,7 +87,7 @@ export function menuMix(outletKey: OutletKey) {
     .sort((a, b) => b.value - a.value);
 }
 
-// liquor mix (all outlets) — "Beer" and "Wine/Beer" are the same row renamed
+// liquor mix (all outlets) - "Beer" and "Wine/Beer" are the same row renamed
 export const LIQUOR_MIX = [
   { name: "Cocktails", lis: ["Cocktails"] },
   { name: "Spirits", lis: ["Spirits"] },
@@ -97,7 +97,7 @@ export const LIQUOR_MIX = [
   value: sum(lis.flatMap((n) => OUTLET_WEEKS.map((w) => frGet(OUTLET_UNITS.total, w.id, li2(n))))),
 })).filter((x) => x.value > 0);
 
-// events detail — weekly totals plus named-event breakdown (all outlets)
+// events detail - weekly totals plus named-event breakdown (all outlets)
 const EVENT_SUB_LIS = [
   "Rannaghor", "Other Events", "Other Events (After Hours)", "Other Events (Mizu)",
   "Other Events (Beyond Berg)", "Other Events (Dali Gala After Hours)",

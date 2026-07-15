@@ -37,7 +37,7 @@ function IssueList({ issues }: { issues: ImportIssue[] }) {
   const [showInfo, setShowInfo] = useState(false);
   const important = issues.filter((i) => i.level !== "info");
   const info = issues.filter((i) => i.level === "info");
-  if (!issues.length) return <p className="text-xs text-muted-foreground">No validation findings — clean parse.</p>;
+  if (!issues.length) return <p className="text-xs text-muted-foreground">No validation findings - clean parse.</p>;
   return (
     <div className="space-y-1.5">
       {important.map((i, idx) => (
@@ -168,7 +168,7 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
       refresh();
       onBatchesChanged();
       if (result.source.lastSyncStatus === "auto_committed") {
-        // data landed in the dataset — reload so the dashboards pick it up
+        // data landed in the dataset - reload so the dashboards pick it up
         window.location.reload();
       }
     } finally {
@@ -313,7 +313,7 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {s.lastSyncAt ? `Last synced ${new Date(s.lastSyncAt).toLocaleString()}` : "Not synced yet"}
                   {s.lastSyncStatus === "error" && s.lastSyncError && (
-                    <span className="text-red-500"> — {s.lastSyncError}</span>
+                    <span className="text-red-500"> - {s.lastSyncError}</span>
                   )}
                 </p>
               </div>
@@ -407,7 +407,7 @@ export default function ImportPage() {
     try {
       await commitBatch(id);
       setCommitted(true);
-      // the dashboards' dataset is loaded once at startup — reload to pick up the import
+      // the dashboards' dataset is loaded once at startup - reload to pick up the import
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Commit failed");
@@ -438,7 +438,7 @@ export default function ImportPage() {
   return (
     <div className="space-y-6">
       <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-        Data — Import
+        Data - Import
       </p>
 
       <DashCard>
@@ -454,13 +454,13 @@ export default function ImportPage() {
           </label>
           <p className="text-xs text-muted-foreground">
             Accepts the CEPL P&L, Cafe Weekly P&L and Sienna Store Sales workbooks. Uploads are
-            validated and previewed first — nothing changes until you commit.
+            validated and previewed first - nothing changes until you commit.
           </p>
         </div>
         {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
         {committed && (
           <p className="flex items-center gap-2 text-sm text-emerald-600 mt-3">
-            <CheckCircle2 className="w-4 h-4" /> Imported — reloading the dashboards…
+            <CheckCircle2 className="w-4 h-4" /> Imported - reloading the dashboards…
           </p>
         )}
       </DashCard>

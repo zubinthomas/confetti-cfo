@@ -75,7 +75,7 @@ export const SIENNA_CATEGORIES_BY_FY = Object.fromEntries(
   ])
 );
 
-// ── Store revenue — multi-year history ─────────────────────────────────────
+// ── Store revenue - multi-year history ─────────────────────────────────────
 // Every fiscal year has a channel-level "Overall sales" block in the source,
 // so all totals are summed from monthly channel records.
 function fyStoreRevenue(fiscalYear: string) {
@@ -97,7 +97,7 @@ export const STORE_HISTORY = [
 
 // ── April-only channel revenue, one prior fiscal year at a time ────────────
 // Lets a page ask "is this year's April the strongest on record?" without
-// assuming which years exist — every FY with a first month is included.
+// assuming which years exist - every FY with a first month is included.
 function fyFirstMonthRevenue(fiscalYear: string): number | null {
   const pids = monthPeriodIds(fiscalYear);
   if (!pids.length) return null;

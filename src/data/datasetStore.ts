@@ -3,7 +3,7 @@
 //
 // The adapters (core/ceplData/storeData/…) compute their aggregates at module
 // evaluation time, so the app loads them through a lazy chunk that React only
-// imports AFTER setDataset() has run — see DatasetGate in src/App.tsx. Nothing
+// imports AFTER setDataset() has run - see DatasetGate in src/App.tsx. Nothing
 // outside that chunk may import the adapters.
 
 // ── Dataset model (field-verified against the extraction) ───────────────────
@@ -82,7 +82,7 @@ export function setDataset(d: Dataset): void {
 export function getDataset(): Dataset {
   if (!dataset) {
     throw new Error(
-      "Dataset not loaded — the data adapters were imported before DatasetGate fetched /api/dataset."
+      "Dataset not loaded - the data adapters were imported before DatasetGate fetched /api/dataset."
     );
   }
   return dataset;

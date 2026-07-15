@@ -70,10 +70,10 @@ const bestFbIdx = CUR.fb.plPct.indexOf(Math.max(...CUR.fb.plPct));
 const worstFbIdx = CUR.fb.plPct.indexOf(Math.min(...CUR.fb.plPct));
 
 const statusItems: StatusRowData[] = [
-  { label: "F&B FY net margin", status: fbMargin > 0 ? "green" : "red", value: `${fbMargin.toFixed(1)}% — ${fbMargin > 0 ? "profitable" : "loss-making"}` },
+  { label: "F&B FY net margin", status: fbMargin > 0 ? "green" : "red", value: `${fbMargin.toFixed(1)}% - ${fbMargin > 0 ? "profitable" : "loss-making"}` },
   { label: "Store FY net margin", status: storeMargin > 0 ? "green" : "amber", value: `${storeMargin.toFixed(1)}%` },
-  { label: "F&B best margin month", status: "green", value: `${MONTHS[bestFbIdx]} — ${CUR.fb.plPct[bestFbIdx]}%` },
-  { label: "F&B weakest margin month", status: "amber", value: `${MONTHS[worstFbIdx]} — ${CUR.fb.plPct[worstFbIdx]}%` },
+  { label: "F&B best margin month", status: "green", value: `${MONTHS[bestFbIdx]} - ${CUR.fb.plPct[bestFbIdx]}%` },
+  { label: "F&B weakest margin month", status: "amber", value: `${MONTHS[worstFbIdx]} - ${CUR.fb.plPct[worstFbIdx]}%` },
   { label: "Store revenue vs FY24-25", status: storeGrowthVsPrevYear >= 0 ? "green" : "amber", value: `${storeGrowthVsPrevYear >= 0 ? "+" : ""}${storeGrowthVsPrevYear.toFixed(0)}% YoY` },
 ];
 
@@ -83,7 +83,7 @@ export default function OverviewTab() {
       {/* KPIs */}
       <div>
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          Group Snapshot — FY 2025-26
+          Group Snapshot - FY 2025-26
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
@@ -91,7 +91,7 @@ export default function OverviewTab() {
       </div>
 
       {/* Monthly Revenue Chart */}
-      <DashCard title="Monthly Revenue — F&B vs Store (FY 2025-26)">
+      <DashCard title="Monthly Revenue - F&B vs Store (FY 2025-26)">
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={monthlyData} barGap={2}>
             <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -105,7 +105,7 @@ export default function OverviewTab() {
       </DashCard>
 
       {/* Monthly P&L Chart */}
-      <DashCard title="Monthly Net P&L — F&B vs Store (FY 2025-26)">
+      <DashCard title="Monthly Net P&L - F&B vs Store (FY 2025-26)">
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={monthlyData}>
             <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -119,8 +119,8 @@ export default function OverviewTab() {
         </ResponsiveContainer>
       </DashCard>
 
-      {/* Multi-year annual history — F&B + Store revenue and P&L */}
-      <DashCard title="Annual Revenue — F&B vs Store (FY 21-22 → 25-26)">
+      {/* Multi-year annual history - F&B + Store revenue and P&L */}
+      <DashCard title="Annual Revenue - F&B vs Store (FY 21-22 → 25-26)">
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={historyData} barGap={2}>
             <XAxis dataKey="year" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -132,13 +132,13 @@ export default function OverviewTab() {
           </BarChart>
         </ResponsiveContainer>
         <p className="text-xs text-muted-foreground mt-2">
-          F&B revenue grew {fbGrowthVsPrevYear >= 0 ? "+" : ""}{fbGrowthVsPrevYear.toFixed(0)}% in FY 25-26 —
+          F&B revenue grew {fbGrowthVsPrevYear >= 0 ? "+" : ""}{fbGrowthVsPrevYear.toFixed(0)}% in FY 25-26 -
           its first strongly profitable year (₹{L(FNB_STORE_HISTORY.at(-1).fb.pl)} net) after
           {" "}₹{L(Math.abs(FNB_STORE_HISTORY.at(-2).fb.pl))} of losses in FY 24-25.
         </p>
       </DashCard>
 
-      <DashCard title="Annual Net P&L — F&B vs Store (FY 21-22 → 25-26)">
+      <DashCard title="Annual Net P&L - F&B vs Store (FY 21-22 → 25-26)">
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={historyData} barGap={2}>
             <XAxis dataKey="year" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />

@@ -3,7 +3,7 @@
 // source (a fresh sync supersedes the previous preview). Zero-diff syncs
 // record "no_changes" on the source instead of creating an empty batch.
 // The source's syncMode decides what happens to the preview: 'manual' leaves
-// it for a human to commit; 'auto' commits it immediately — but only when the
+// it for a human to commit; 'auto' commits it immediately - but only when the
 // parse produced no warning- or error-level issues ('paused' sources are
 // skipped by the scheduler; Sync now still works on them).
 import { and, eq } from 'drizzle-orm';
@@ -53,7 +53,7 @@ export async function syncSource(source: SheetSource, prefetchedBuffer?: Buffer)
     const wb = await loadWorkbook(buffer);
     const kind = detectKind(wb);
     if (!kind) {
-      const msg = 'Unrecognised workbook — expected a CEPL P&L, Cafe Weekly P&L, or Sienna Store Sales file';
+      const msg = 'Unrecognised workbook - expected a CEPL P&L, Cafe Weekly P&L, or Sienna Store Sales file';
       return { status: 'error', error: msg, source: await recordOutcome(source.id, 'error', msg) };
     }
     const parsed = PARSERS[kind](wb);

@@ -13,7 +13,7 @@ export interface FormFieldProps {
 }
 
 // Module-scope (stable identity) so it never remounts when the parent form
-// re-renders on every keystroke — a component redefined inside a render
+// re-renders on every keystroke - a component redefined inside a render
 // body gets a new type each render, which makes React unmount/remount it
 // and drop input focus.
 export default function FormField({

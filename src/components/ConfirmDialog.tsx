@@ -13,7 +13,7 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
-  /** Styles the confirm button red — for delete/irreversible actions. */
+  /** Styles the confirm button red - for delete/irreversible actions. */
   destructive?: boolean;
   /** Disables both buttons and shows a spinner on confirm while an action is in flight. */
   loading?: boolean;
@@ -21,7 +21,7 @@ export interface ConfirmDialogProps {
 
 /**
  * A generic "are you sure?" dialog, built on the existing Dialog (Radix)
- * primitive rather than a hand-rolled modal — gets focus trapping, escape-
+ * primitive rather than a hand-rolled modal - gets focus trapping, escape-
  * to-close and backdrop-click for free. Reusable anywhere a destructive or
  * hard-to-reverse action needs a confirmation step before it fires.
  */
