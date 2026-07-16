@@ -83,6 +83,38 @@ export async function cafeOutletWeeklyTotal(outletHeader: string, rowLabel: stri
   return total;
 }
 
+// Whole-cafe weekly data before the outlet split (Apr-Aug 2025) lives in one
+// sheet per month ("April".."August"), each with one column per week plus a
+// "Total" column - summed here from the week columns rather than trusting
+// the sheet's own Total cell, because at least one month's Total cell (May)
+// is stale relative to its week columns (verified: short by exactly one
+// week's value). The app's import pipeline sums from the week-level cells
+// too, so this is what actually matches the dashboard.
+const CAFE_EARLY_MONTH_SHEETS = ["April", "May", "June", "July", "August"];
+
+export async function cafeEarlyWeeklyTotal(rowLabel: string): Promise<number> {
+  const wb = await workbook(CAFE_XLSX);
+  let total = 0;
+  for (const sheetName of CAFE_EARLY_MONTH_SHEETS) {
+    const ws = wb.getWorksheet(sheetName);
+    if (!ws) throw new Error(`sheet ${sheetName} not found in Cafe workbook`);
+    const header = ws.getRow(2);
+    let totalCol: number | null = null;
+    header.eachCell((cell, c) => {
+      if (String(cell.value ?? "").trim() === "Total") totalCol = c;
+    });
+    if (!totalCol) throw new Error(`no Total column in sheet ${sheetName}`);
+    for (let r = 1; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      if (String(row.getCell(1).value ?? "").trim() === rowLabel) {
+        for (let c = 2; c < totalCol; c++) total += num(row.getCell(c).value) ?? 0;
+        break; // first occurrence only (matches how the app reads it)
+      }
+    }
+  }
+  return total;
+}
+
 // ── Sienna store sales workbook ─────────────────────────────────────────────
 // "Overall sales": stacked fiscal-year blocks; each block header row contains
 // "April ' YY" and is followed by one row per sales channel (12 months in
