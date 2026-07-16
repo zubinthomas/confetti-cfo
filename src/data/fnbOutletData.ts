@@ -6,7 +6,7 @@
 // Apr-Aug 2025 monthly P&L from before the outlet split.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { FY2526_PIDS, periods, lineItems, frGet, series, sum, type Series } from "./core";
+import { periods, lineItems, frGet, series, sum, type Series } from "./core";
 
 const li2ByName: Record<string, Partial<Record<"amount" | "percentage", number>>> = {};
 for (const l of lineItems) {
@@ -108,17 +108,27 @@ export const EVENTS_BREAKDOWN = EVENT_SUB_LIS.map((name) => ({
   value: sum(OUTLET_WEEKS.map((w) => frGet(OUTLET_UNITS.total, w.id, li2(name)))),
 })).filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
 
-// Whole-cafe P&L, Apr-Aug 2025 (unit "Cafe": monthly Total column of the
-// weekly sheets; the outlet split doesn't exist yet for these months)
+// Whole-cafe P&L, weekly from the week of 31 Mar 2025 through the week
+// before the outlet split (unit "Cafe": the source workbook reports weekly
+// detail here too, same as the outlet-split era below - it's just not
+// broken out by Bosar Ghor / Dinning Room / Rannaghor yet).
 const CAFE_BU = 7;
-export const CAFE_MONTH_LABELS = ["Apr", "May", "Jun", "Jul", "Aug"];
-const CAFE_MONTH_PIDS = FY2526_PIDS.slice(0, 5);
-export const CAFE_MONTHLY = {
-  productSales: series(CAFE_BU, li2("Café Product Sales"), CAFE_MONTH_PIDS),
-  retailSales:  series(CAFE_BU, li2("Café Retail Sales"), CAFE_MONTH_PIDS),
-  liquor:       series(CAFE_BU, li2("Liquor"), CAFE_MONTH_PIDS),
-  eventSales:   series(CAFE_BU, li2("Cafe Event Sales"), CAFE_MONTH_PIDS),
-  totalSales:   series(CAFE_BU, li2("Total Cafe Sales"), CAFE_MONTH_PIDS),
-  opCost:       series(CAFE_BU, li2("Total Operation Cost"), CAFE_MONTH_PIDS),
-  pl:           series(CAFE_BU, li2("P+L = Gross Revenue - Operating Costs"), CAFE_MONTH_PIDS),
+export const CAFE_EARLY_WEEKS = periods
+  .filter((p) => p.periodType === "week" && p.startDate < "2025-09-01" && !p.isSpecialEvent)
+  .sort((a, b) => (a.startDate < b.startDate ? -1 : 1))
+  .map((p) => ({
+    id: p.id,
+    label: p.label,
+    short: p.startDate.slice(8, 10) + "/" + p.startDate.slice(5, 7),
+    month: new Date(p.startDate + "T00:00:00").toLocaleString("en", { month: "short" }),
+  }));
+const CAFE_EARLY_PIDS = CAFE_EARLY_WEEKS.map((w) => w.id);
+export const CAFE_EARLY_WEEKLY = {
+  productSales: series(CAFE_BU, li2("Café Product Sales"), CAFE_EARLY_PIDS),
+  retailSales:  series(CAFE_BU, li2("Café Retail Sales"), CAFE_EARLY_PIDS),
+  liquor:       series(CAFE_BU, li2("Liquor"), CAFE_EARLY_PIDS),
+  eventSales:   series(CAFE_BU, li2("Cafe Event Sales"), CAFE_EARLY_PIDS),
+  totalSales:   series(CAFE_BU, li2("Total Cafe Sales"), CAFE_EARLY_PIDS),
+  opCost:       series(CAFE_BU, li2("Total Operation Cost"), CAFE_EARLY_PIDS),
+  pl:           series(CAFE_BU, li2("P+L = Gross Revenue - Operating Costs"), CAFE_EARLY_PIDS),
 };
