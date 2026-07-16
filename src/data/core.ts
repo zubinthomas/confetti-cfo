@@ -101,6 +101,9 @@ export const lastValidIdx = (arr: (number | null | undefined)[]): number => {
 export const MONTHS = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
 export const FY2526_PIDS = monthPeriodIds("2025-2026");
 
+/** "2025-2026" -> "FY 25-26" */
+export const fyLabel = (fy: string): string => `FY ${fy.slice(2, 4)}-${fy.slice(7)}`;
+
 // ── Format helpers ───────────────────────────────────────────────────────────
 export const L = (n: number | null | undefined): string => {
   if (n == null) return "-";

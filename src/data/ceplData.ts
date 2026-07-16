@@ -4,7 +4,7 @@
 // F&B/Store history from the workbook's Overview sheet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { MONTHS, FY2526_PIDS, frGet, monthPeriodIds, series, pctSeries, sum, type Series } from "./core";
+import { MONTHS, FY2526_PIDS, frGet, monthPeriodIds, series, pctSeries, sum, fyLabel, periods, type Series } from "./core";
 
 export const FNB_BU = 1;   // CEPL > F&B department
 export const STORE_BU = 2; // CEPL > Store department
@@ -49,28 +49,6 @@ export const STORE = {
   totalExpense:   series(STORE_BU, LI.storeTotalExpense, FY2526_PIDS),
   profitLoss:     series(STORE_BU, LI.storeProfitLoss, FY2526_PIDS),
   plPct:          pctSeries(STORE_BU, LI.plPct, FY2526_PIDS),
-};
-
-// ── CEPL Group Overview - FY 2025-26 monthly detail ────────────────────────
-export const OVERVIEW = {
-  fy2526: {
-    fb: {
-      sales:   FAB.totalRevenue,
-      expense: FAB.totalExpense,
-      pl:      FAB.profitLoss,
-      plPct:   FAB.plPct,
-    },
-    store: {
-      sales:   STORE.totalSales,
-      expense: STORE.totalExpense,
-      pl:      STORE.profitLoss,
-      plPct:   STORE.plPct,
-    },
-    totals: {
-      fbSales: sum(FAB.totalRevenue), storeSales: sum(STORE.totalSales),
-      fbPL: sum(FAB.profitLoss), storePL: sum(STORE.profitLoss),
-    },
-  },
 };
 
 // ── Craft departments (Trading Items, Pottery, Batik, Stitching) ───────────
@@ -174,7 +152,7 @@ function overviewYear(unitId: number, fiscalYear: string) {
 export const FNB_STORE_HISTORY = [
   ...["2021-2022", "2022-2023", "2023-2024", "2024-2025"].map((fy) => ({
     fy,
-    label: `FY ${fy.slice(2, 4)}-${fy.slice(7)}`,
+    label: fyLabel(fy),
     fb: overviewYear(FNB_BU, fy),
     store: overviewYear(STORE_BU, fy),
   })),
@@ -185,3 +163,75 @@ export const FNB_STORE_HISTORY = [
     store: { sales: sum(STORE.totalSales), expense: sum(STORE.totalExpense), pl: sum(STORE.profitLoss) },
   },
 ];
+
+// ── CEPL Group Overview - per fiscal year, data-driven ──────────────────────
+// Full department-level monthly detail (financialRecords) only exists for
+// FY 2025-26 so far; other years only have the Overview sheet's annual
+// Sales/Expense/P&L totals (see overviewYear() above). This queries by
+// period ids for whichever year is asked for rather than assuming FY25-26,
+// so importing a real CEPL P&L workbook for another year makes full monthly
+// detail appear for it automatically, with no code change here.
+export interface OverviewYearData {
+  fy: string;
+  label: string;
+  hasMonthlyDetail: boolean;
+  fb: { sales: Series; expense: Series; pl: Series; plPct: Series };
+  store: { sales: Series; expense: Series; pl: Series; plPct: Series };
+  totals: { fbSales: number; storeSales: number; fbPL: number; storePL: number };
+}
+
+function overviewForFY(fiscalYear: string): OverviewYearData {
+  const pids = monthPeriodIds(fiscalYear);
+  const fbSales = series(FNB_BU, LI.totalRevenue, pids);
+  const hasMonthlyDetail = fbSales.some((v) => v != null);
+
+  if (hasMonthlyDetail) {
+    const fb = {
+      sales: fbSales,
+      expense: series(FNB_BU, LI.totalExpense, pids),
+      pl: series(FNB_BU, LI.profitLoss, pids),
+      plPct: pctSeries(FNB_BU, LI.plPct, pids),
+    };
+    const store = {
+      sales: series(STORE_BU, LI.storeTotalSales, pids),
+      expense: series(STORE_BU, LI.storeTotalExpense, pids),
+      pl: series(STORE_BU, LI.storeProfitLoss, pids),
+      plPct: pctSeries(STORE_BU, LI.plPct, pids),
+    };
+    return {
+      fy: fiscalYear, label: fyLabel(fiscalYear), hasMonthlyDetail: true, fb, store,
+      totals: {
+        fbSales: sum(fb.sales), storeSales: sum(store.sales),
+        fbPL: sum(fb.pl), storePL: sum(store.pl),
+      },
+    };
+  }
+
+  const fbAnnual = overviewYear(FNB_BU, fiscalYear);
+  const storeAnnual = overviewYear(STORE_BU, fiscalYear);
+  return {
+    fy: fiscalYear, label: fyLabel(fiscalYear), hasMonthlyDetail: false,
+    fb: { sales: [], expense: [], pl: [], plPct: [] },
+    store: { sales: [], expense: [], pl: [], plPct: [] },
+    totals: {
+      fbSales: fbAnnual.sales, storeSales: storeAnnual.sales,
+      fbPL: fbAnnual.pl, storePL: storeAnnual.pl,
+    },
+  };
+}
+
+const CANDIDATE_FYS = [...new Set(
+  periods.filter((p) => p.periodType === "month").map((p) => p.fiscalYear)
+)].sort();
+
+export const OVERVIEW_BY_FY: Record<string, OverviewYearData> = Object.fromEntries(
+  CANDIDATE_FYS.map((fy) => [fy, overviewForFY(fy)])
+);
+
+// Years with any real F&B/Store revenue at all (monthly or annual) - keeps a
+// future fiscal year with no CEPL data yet (neither department sheets nor
+// the Overview sheet) from showing up as an empty, pointless chip.
+export const OVERVIEW_FYS = CANDIDATE_FYS.filter((fy) => {
+  const t = OVERVIEW_BY_FY[fy].totals;
+  return t.fbSales !== 0 || t.storeSales !== 0;
+});
