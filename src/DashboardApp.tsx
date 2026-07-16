@@ -17,6 +17,7 @@ import ConsignmentPage from '@/components/dashboard/ConsignmentPage';
 import OpsPage from '@/components/dashboard/OpsPage';
 import ImportPage from '@/components/dashboard/ImportPage';
 import SettingsPage from '@/components/dashboard/SettingsPage';
+import UserSettingsPage from '@/components/dashboard/UserSettingsPage';
 import CafePage from '@/components/fnb/CafePage';
 import RestaurantPage from '@/components/fnb/RestaurantPage';
 import BarPage from '@/components/fnb/BarPage';
@@ -45,6 +46,7 @@ export default function DashboardApp() {
         <Route path="ai" element={<AIQueriesTab />} />
         <Route path="data/import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/user" element={<UserSettingsPage />} />
         <Route path="ops/:section" element={<OpsPage />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

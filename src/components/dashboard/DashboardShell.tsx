@@ -3,10 +3,18 @@ import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
-  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, LogOut, FileSpreadsheet,
-  MenuIcon, X, Settings,
+  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck,
+  MenuIcon, X, Plus,
 } from "lucide-react";
-import { auth } from "@/api/auth";
+import UserMenu from "./UserMenu";
+
+// Routes not shown in NAV_SECTIONS (relocated into the header/user menu) but
+// that still need a header title/subtitle.
+const EXTRA_TITLES: Record<string, string> = {
+  "/data/import": "Import Workbooks",
+  "/settings": "General Settings",
+  "/settings/user": "User Settings",
+};
 
 const NAV_SECTIONS = [
   {
@@ -45,13 +53,6 @@ const NAV_SECTIONS = [
     items: [
       { to: "/cashflow", label: "Cash Flow", icon: Banknote },
       { to: "/ai", label: "AI Queries", icon: Sparkles },
-    ],
-  },
-  {
-    title: "Data",
-    items: [
-      { to: "/data/import", label: "Import Workbooks", icon: FileSpreadsheet },
-      { to: "/settings", label: "Settings", icon: Settings },
     ],
   },
   {
@@ -102,23 +103,17 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           to="/hr"
           onClick={onNavigate}
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <Users className="w-4 h-4 shrink-0" /> HR Module
         </Link>
         <Link
           to="/compliance"
           onClick={onNavigate}
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
         </Link>
-        <button
-          onClick={() => auth.logout("/")}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <LogOut className="w-4 h-4 shrink-0" /> Sign out
-        </button>
       </div>
     </nav>
   );
@@ -131,7 +126,7 @@ function pageTitle(pathname: string) {
       if (item.to === pathname) return item.label;
     }
   }
-  return null;
+  return EXTRA_TITLES[pathname] ?? null;
 }
 
 export default function DashboardShell() {
@@ -191,12 +186,38 @@ export default function DashboardShell() {
               </h2>
               <p className="text-[11px] text-muted-foreground">Sienna · CFO Dashboard</p>
             </div>
+            <div className="flex items-center gap-4 ml-auto">
+              <div className="hidden md:flex items-center gap-4">
+                <Link
+                  to="/hr"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Users className="w-4 h-4 shrink-0" /> HR Module
+                </Link>
+                <Link
+                  to="/compliance"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
+                </Link>
+              </div>
+              <UserMenu />
+            </div>
           </div>
         </header>
         <main className="px-4 sm:px-6 py-6 max-w-7xl">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile-only shortcut to Import Workbooks */}
+      <Link
+        to="/data/import"
+        aria-label="Import Workbooks"
+        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+      >
+        <Plus className="w-6 h-6" />
+      </Link>
     </div>
   );
 }
