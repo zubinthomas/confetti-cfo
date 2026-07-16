@@ -113,16 +113,25 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
       }
     });
 
-    // outlet columns should sum to the Total column
+    // The parts should sum to the Total column - "Total" is distinguished
+    // differently depending on sheet shape: week-sheets have a dedicated
+    // unitName "Total" alongside the outlet columns (all sharing one week
+    // period); month-sheets instead have every column under unitName "Cafe"
+    // and distinguish the Total column by it being the whole-month period
+    // (monthPeriod()) rather than one of the individual week periods. This
+    // caught a real source-workbook bug: the Cafe weekly workbook's "May"
+    // sheet reports a Total Cafe Sales figure ₹2,28,375 short of what its
+    // own week columns actually sum to.
     for (const r of reconRows) {
-      const totalCol = targets.find((t) => t.unitName === 'Total');
-      if (!totalCol) continue;
-      const parts = targets.filter((t) => t.unitName !== 'Total' && t.period === totalCol.period);
+      const totalTarget = targets.find((t) => t.unitName === 'Total')
+        ?? targets.find((t) => t.period.periodType === 'month');
+      if (!totalTarget) continue;
+      const parts = targets.filter((t) => t !== totalTarget && t.period.periodType !== 'month');
       if (!parts.length) continue;
       const sum = parts.reduce((a, t) => a + (r.byCol.get(t.col) ?? 0), 0);
-      const total = r.byCol.get(totalCol.col);
+      const total = r.byCol.get(totalTarget.col);
       if (total != null && Math.abs(sum - total) > 1) {
-        issues.push({ level: 'warning', sheet: ws.name, message: `${RECON_ROW}: outlet columns sum to ${sum.toFixed(0)} but Total says ${total.toFixed(0)}` });
+        issues.push({ level: 'warning', sheet: ws.name, message: `${RECON_ROW}: parts sum to ${sum.toFixed(0)} but Total says ${total.toFixed(0)}` });
       }
     }
   };
