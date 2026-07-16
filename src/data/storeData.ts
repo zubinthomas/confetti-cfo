@@ -5,7 +5,7 @@
 
 import {
   MONTHS, FY2526_PIDS, periods, categories, channels, salesRecords,
-  vendors, consignmentRecords, monthPeriodIds, sum,
+  vendors, consignmentRecords, monthPeriodIds, sum, fyLabel,
 } from "./core";
 
 // ── Channel breakdown (real, "Overall sales" sheet) ─────────────────────────
@@ -66,13 +66,30 @@ function categoriesForFY(fiscalYear: string) {
     .sort((a, b) => b.value - a.value);
 }
 
+// Years with complete 12-month category + channel detail (FY26-27 is only
+// Apr-May so far - it's handled separately as a fixed "in progress" year,
+// not offered as a selectable fiscal year on this page).
+export const STORE_FYS = ["2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"];
+
 export const SIENNA_CATEGORIES_LABEL = "FY 2025-26";
 export const SIENNA_CATEGORIES = categoriesForFY("2025-2026");
 export const SIENNA_CATEGORIES_BY_FY = Object.fromEntries(
-  ["2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"].map((fy) => [
-    fy,
-    categoriesForFY(fy),
-  ])
+  STORE_FYS.map((fy) => [fy, categoriesForFY(fy)])
+);
+
+// ── Channel breakdown, per selectable fiscal year ───────────────────────────
+export interface StoreSalesYearData {
+  fy: string;
+  label: string;
+  months: string[];
+  channels: Record<string, number[]>;
+  totals: Record<string, number>;
+}
+export const SIENNA_STORE_BY_FY: Record<string, StoreSalesYearData> = Object.fromEntries(
+  STORE_FYS.map((fy) => {
+    const ch = channelBreakdown(monthPeriodIds(fy));
+    return [fy, { fy, label: fyLabel(fy), months: MONTHS, channels: ch, totals: channelTotals(ch) }];
+  })
 );
 
 // ── Store revenue - multi-year history ─────────────────────────────────────

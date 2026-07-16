@@ -235,3 +235,37 @@ export const OVERVIEW_FYS = CANDIDATE_FYS.filter((fy) => {
   const t = OVERVIEW_BY_FY[fy].totals;
   return t.fbSales !== 0 || t.storeSales !== 0;
 });
+
+// ── CEPL Store department cost structure, per fiscal year ──────────────────
+// Same data-driven / hasMonthlyDetail split as overviewForFY above, but
+// exposing the Store department's full cost breakdown (HR, trading items,
+// direct expenses, raw material, site cost) rather than just totals - used
+// by the Store P&L page's "Cost Structure" view.
+export interface StoreDeptYearData {
+  fy: string;
+  label: string;
+  hasMonthlyDetail: boolean;
+  totalSales: Series; rawMaterial: Series; tradingItems: Series; directExpenses: Series;
+  hrCost: Series; siteCost: Series; totalExpense: Series; profitLoss: Series; plPct: Series;
+}
+
+function storeForFY(fiscalYear: string): StoreDeptYearData {
+  const pids = monthPeriodIds(fiscalYear);
+  const totalSales = series(STORE_BU, LI.storeTotalSales, pids);
+  return {
+    fy: fiscalYear, label: fyLabel(fiscalYear), hasMonthlyDetail: totalSales.some((v) => v != null),
+    totalSales,
+    rawMaterial: series(STORE_BU, LI.storeRawMaterial, pids),
+    tradingItems: series(STORE_BU, LI.storeTradingItems, pids),
+    directExpenses: series(STORE_BU, LI.storeDirectExpenses, pids),
+    hrCost: series(STORE_BU, LI.hrCost, pids),
+    siteCost: series(STORE_BU, LI.siteCost, pids),
+    totalExpense: series(STORE_BU, LI.storeTotalExpense, pids),
+    profitLoss: series(STORE_BU, LI.storeProfitLoss, pids),
+    plPct: pctSeries(STORE_BU, LI.plPct, pids),
+  };
+}
+
+export const STORE_BY_FY: Record<string, StoreDeptYearData> = Object.fromEntries(
+  CANDIDATE_FYS.map((fy) => [fy, storeForFY(fy)])
+);

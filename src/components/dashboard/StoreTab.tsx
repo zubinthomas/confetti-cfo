@@ -2,15 +2,22 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
-import { SIENNA_STORE, SIENNA_CATEGORIES, SIENNA_CATEGORIES_LABEL, STORE_HISTORY, STORE_APRIL_BY_FY } from "@/data/storeData";
-import { STORE } from "@/data/ceplData";
-import { MONTHS, L, avg, maxIdx, minIdx } from "@/data/core";
+import {
+  SIENNA_STORE, SIENNA_STORE_BY_FY, SIENNA_CATEGORIES_BY_FY, STORE_FYS,
+  STORE_HISTORY, STORE_APRIL_BY_FY,
+} from "@/data/storeData";
+import { STORE_BY_FY } from "@/data/ceplData";
+import { MONTHS, L, avg, maxIdx, minIdx, sum } from "@/data/core";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
-const FY = SIENNA_STORE.fy2526;
+// FY26-27 is only Apr-May so far - the YoY view and its KPI/status items are
+// fixed to "FY 25-26 vs the newest in-progress year" regardless of which
+// year the page-level selector below is on, since that's what they're
+// actually answering (not "whichever year is selected").
+const FY2526 = SIENNA_STORE_BY_FY["2025-2026"];
 const FY27 = SIENNA_STORE.fy2627;
 
 const CHAN_COLORS: Record<string, string> = {
@@ -35,138 +42,164 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   );
 };
 
-// Monthly channel data for FY25-26
-const channelMonthly = MONTHS.map((m, i) => ({
-  month: m,
-  "HP Store":       FY.channels["HP Store"][i],
-  "Corporate":      FY.channels["Corporate"][i],
-  "Factory Outlet": FY.channels["Factory Outlet"][i],
-  "Online":         FY.channels["Online"][i],
-}));
-
-// YoY monthly comparison: FY25-26 vs FY26-27 (Apr, May only)
+// YoY monthly comparison: FY25-26 vs FY26-27 (Apr, May only) - fixed, not
+// tied to the page-level year selector.
 const yoyMonthly = [
-  { month: "Apr", "FY 25-26": FY.channels["Total"][0], "FY 26-27": FY27.channels["Total"][0] },
-  { month: "May", "FY 25-26": FY.channels["Total"][1], "FY 26-27": FY27.channels["Total"][1] },
+  { month: "Apr", "FY 25-26": FY2526.channels["Total"][0], "FY 26-27": FY27.channels["Total"][0] },
+  { month: "May", "FY 25-26": FY2526.channels["Total"][1], "FY 26-27": FY27.channels["Total"][1] },
 ];
 
-// Cost structure (from CEPL Store sheet)
-const costMonthly = MONTHS.map((m, i) => ({
-  month: m,
-  "HR Cost":       STORE.hrCost[i],
-  "Trading Items": STORE.tradingItems[i],
-  "Direct Exp":    STORE.directExpenses[i],
-  "Raw Material":  STORE.rawMaterial[i],
-  "Site Cost":     STORE.siteCost[i],
-}));
-
-// KPIs
-const t = FY.totals;
 const hp27 = FY27.totals["HP Store"];
-const hp26Apr = FY.channels["HP Store"][0];
-const hp26May = FY.channels["HP Store"][1];
-const storeFYPL = STORE.totalSales.reduce((a,b)=>a+b,0);
-const storeHR   = STORE.hrCost.reduce((a,b)=>a+b,0);
+const hp26Apr = FY2526.channels["HP Store"][0];
+const hp26May = FY2526.channels["HP Store"][1];
 
-// HP Store's share of total FY revenue.
-const hpSharePct = t["Total"] ? (t["HP Store"] / t["Total"]) * 100 : 0;
-
-// Online's share of total FY revenue.
-const onlineSharePct = t["Total"] ? (t["Online"] / t["Total"]) * 100 : 0;
-
-// Corporate channel concentration: peak month vs its own monthly average.
-const corpMonthly = FY.channels["Corporate"];
-const corpAvg = avg(corpMonthly);
-const corpPeakIdx = maxIdx(corpMonthly);
-const corpPeakRatio = corpPeakIdx >= 0 && corpAvg > 0 ? corpMonthly[corpPeakIdx]! / corpAvg : 0;
-
-// Seasonality: strongest/weakest revenue months, computed rather than assumed.
-const totalMonthly = FY.channels["Total"];
-const totalBestIdx = maxIdx(totalMonthly);
-const totalWorstIdx = minIdx(totalMonthly);
-
-// Is FY26-27's April the strongest April across every year with data?
+// Is FY26-27's April the strongest April across every year with data? - also
+// fixed, always about the newest in-progress year.
 const fy2627April = FY27.channels["Total"][0];
 const priorAprils = Object.values(STORE_APRIL_BY_FY);
 const isStrongestApril = priorAprils.length > 0 && priorAprils.every((v) => fy2627April >= v);
 const bestPriorApril = priorAprils.length ? Math.max(...priorAprils) : 0;
 
-// HR cost as % of sales, per month, H1 (Apr-Sep) vs H2 (Oct-Mar) average.
-const hrPctMonthly = MONTHS.map((_, i) =>
-  STORE.totalSales[i] ? ((STORE.hrCost[i] || 0) / (STORE.totalSales[i] as number)) * 100 : null);
-const hrH1Avg = avg(hrPctMonthly.slice(0, 6));
-const hrH2Avg = avg(hrPctMonthly.slice(6, 12));
-
-// Flag the lowest HR-cost month as a likely anomaly only if it's well below
-// the average of the other months (not just "the lowest one").
-const hrCostMinIdx = minIdx(STORE.hrCost);
-const hrCostOthersAvg = hrCostMinIdx >= 0
-  ? avg(STORE.hrCost.filter((_, i) => i !== hrCostMinIdx))
-  : 0;
-const hrCostMinIsAnomaly = hrCostMinIdx >= 0 && hrCostOthersAvg > 0
-  && (STORE.hrCost[hrCostMinIdx] as number) < hrCostOthersAvg * 0.5;
-
-const kpis: KpiData[] = [
-  { label: "HP Store Revenue (FY)",   value: L(t["HP Store"]),   sub: `${((t["HP Store"]/t["Total"])*100).toFixed(0)}% of total`, status: "green" },
-  { label: "Corporate Sales (FY)",    value: L(t["Corporate"]),  sub: `${((t["Corporate"]/t["Total"])*100).toFixed(0)}% of total`, status: "amber" },
-  { label: "Total Store Revenue (FY)",value: L(t["Total"]),      sub: "FY 2025-26", status: "green" },
-  { label: "Apr–May FY26-27",         value: L(FY27.totals["Total"]), sub: `${(((hp27)/(hp26Apr+hp26May)-1)*100).toFixed(0)}% HP YoY`, status: "green" },
-  { label: "Annual HR % of Revenue",  value: `${((storeHR/storeFYPL)*100).toFixed(1)}%`, sub: hrH2Avg < hrH1Avg ? "Improving H2" : "Higher in H2", status: "amber" },
-  { label: "Online Sales (FY)",       value: L(t["Online"]),     sub: `${((t["Online"]/t["Total"])*100).toFixed(1)}% share`, status: "amber" },
-];
-
-const statusItems: StatusRowData[] = [
-  {
-    label: "HP Store dominance",
-    status: hpSharePct >= 60 ? "amber" : "green",
-    value: `${hpSharePct.toFixed(1)}% of FY revenue - ${hpSharePct >= 60 ? "concentrated in one channel" : "reliable base"}`,
-  },
-  {
-    label: "Corporate concentration",
-    status: corpPeakRatio >= 2 ? "amber" : "green",
-    value: corpPeakIdx >= 0
-      ? `Peak in ${MONTHS[corpPeakIdx]} (${L(corpMonthly[corpPeakIdx])}, ${corpPeakRatio.toFixed(1)}× monthly avg)${corpPeakRatio >= 2 ? " - concentration risk" : ""}`
-      : "-",
-  },
-  {
-    label: "Online channel",
-    status: onlineSharePct < 5 ? "red" : "amber",
-    value: `${onlineSharePct.toFixed(1)}% share - ${onlineSharePct < 5 ? "growth opportunity" : "gaining traction"}`,
-  },
-  {
-    label: "Seasonal peak",
-    status: "green",
-    value: totalBestIdx >= 0 ? `${MONTHS[totalBestIdx]} - ${L(totalMonthly[totalBestIdx])}` : "-",
-  },
-  {
-    label: "Seasonal low",
-    status: "amber",
-    value: totalWorstIdx >= 0 ? `${MONTHS[totalWorstIdx]} - ${L(totalMonthly[totalWorstIdx])}` : "-",
-  },
-  {
-    label: "FY26-27 early trend",
-    status: isStrongestApril ? "green" : "amber",
-    value: priorAprils.length === 0
-      ? `Apr ${L(fy2627April)} - no prior April to compare`
-      : isStrongestApril
-        ? `Apr ${L(fy2627April)} - strongest April on record`
-        : `Apr ${L(fy2627April)} - below the best prior April (${L(bestPriorApril)})`,
-  },
-];
-
 export default function StoreTab() {
   const [view, setView] = useState("channels");
+  const [fy, setFy] = useState(STORE_FYS.at(-1)!);
+  const FY = SIENNA_STORE_BY_FY[fy];
+  const STORE = STORE_BY_FY[fy];
+  const CATEGORIES = SIENNA_CATEGORIES_BY_FY[fy];
 
+  const t = FY.totals;
   const pieData = Object.entries(t)
     .filter(([k]) => k !== "Total" && k !== "JP Store")
     .map(([name, value]) => ({ name, value }));
 
+  const channelMonthly = MONTHS.map((m, i) => ({
+    month: m,
+    "HP Store":       FY.channels["HP Store"][i],
+    "Corporate":      FY.channels["Corporate"][i],
+    "Factory Outlet": FY.channels["Factory Outlet"][i],
+    "Online":         FY.channels["Online"][i],
+  }));
+
+  const costMonthly = MONTHS.map((m, i) => ({
+    month: m,
+    "HR Cost":       STORE.hrCost[i],
+    "Trading Items": STORE.tradingItems[i],
+    "Direct Exp":    STORE.directExpenses[i],
+    "Raw Material":  STORE.rawMaterial[i],
+    "Site Cost":     STORE.siteCost[i],
+  }));
+
+  const storeFYPL = sum(STORE.totalSales);
+  const storeHR   = sum(STORE.hrCost);
+
+  // HP Store's share of total FY revenue.
+  const hpSharePct = t["Total"] ? (t["HP Store"] / t["Total"]) * 100 : 0;
+
+  // Online's share of total FY revenue.
+  const onlineSharePct = t["Total"] ? (t["Online"] / t["Total"]) * 100 : 0;
+
+  // Corporate channel concentration: peak month vs its own monthly average.
+  const corpMonthly = FY.channels["Corporate"];
+  const corpAvg = avg(corpMonthly);
+  const corpPeakIdx = maxIdx(corpMonthly);
+  const corpPeakRatio = corpPeakIdx >= 0 && corpAvg > 0 ? corpMonthly[corpPeakIdx]! / corpAvg : 0;
+
+  // Seasonality: strongest/weakest revenue months, computed rather than assumed.
+  const totalMonthly = FY.channels["Total"];
+  const totalBestIdx = maxIdx(totalMonthly);
+  const totalWorstIdx = minIdx(totalMonthly);
+
+  // HR cost as % of sales, per month, H1 (Apr-Sep) vs H2 (Oct-Mar) average.
+  const hrPctMonthly = MONTHS.map((_, i) =>
+    STORE.totalSales[i] ? ((STORE.hrCost[i] || 0) / (STORE.totalSales[i] as number)) * 100 : null);
+  const hrH1Avg = avg(hrPctMonthly.slice(0, 6));
+  const hrH2Avg = avg(hrPctMonthly.slice(6, 12));
+
+  // Flag the lowest HR-cost month as a likely anomaly only if it's well below
+  // the average of the other months (not just "the lowest one").
+  const hrCostMinIdx = minIdx(STORE.hrCost);
+  const hrCostOthersAvg = hrCostMinIdx >= 0
+    ? avg(STORE.hrCost.filter((_, i) => i !== hrCostMinIdx))
+    : 0;
+  const hrCostMinIsAnomaly = hrCostMinIdx >= 0 && hrCostOthersAvg > 0
+    && (STORE.hrCost[hrCostMinIdx] as number) < hrCostOthersAvg * 0.5;
+
+  const kpis: KpiData[] = [
+    { label: "HP Store Revenue (FY)",   value: L(t["HP Store"]),   sub: `${((t["HP Store"]/t["Total"])*100).toFixed(0)}% of total`, status: "green" },
+    { label: "Corporate Sales (FY)",    value: L(t["Corporate"]),  sub: `${((t["Corporate"]/t["Total"])*100).toFixed(0)}% of total`, status: "amber" },
+    { label: "Total Store Revenue (FY)",value: L(t["Total"]),      sub: FY.label, status: "green" },
+    { label: "Apr–May FY26-27",         value: L(FY27.totals["Total"]), sub: `${(((hp27)/(hp26Apr+hp26May)-1)*100).toFixed(0)}% HP YoY`, status: "green" },
+    { label: "Online Sales (FY)",       value: L(t["Online"]),     sub: `${((t["Online"]/t["Total"])*100).toFixed(1)}% share`, status: "amber" },
+  ];
+  if (STORE.hasMonthlyDetail) {
+    kpis.splice(4, 0, {
+      label: "Annual HR % of Revenue", value: `${((storeHR/storeFYPL)*100).toFixed(1)}%`,
+      sub: hrH2Avg < hrH1Avg ? "Improving H2" : "Higher in H2", status: "amber",
+    });
+  }
+
+  const statusItems: StatusRowData[] = [
+    {
+      label: "HP Store dominance",
+      status: hpSharePct >= 60 ? "amber" : "green",
+      value: `${hpSharePct.toFixed(1)}% of FY revenue - ${hpSharePct >= 60 ? "concentrated in one channel" : "reliable base"}`,
+    },
+    {
+      label: "Corporate concentration",
+      status: corpPeakRatio >= 2 ? "amber" : "green",
+      value: corpPeakIdx >= 0
+        ? `Peak in ${MONTHS[corpPeakIdx]} (${L(corpMonthly[corpPeakIdx])}, ${corpPeakRatio.toFixed(1)}× monthly avg)${corpPeakRatio >= 2 ? " - concentration risk" : ""}`
+        : "-",
+    },
+    {
+      label: "Online channel",
+      status: onlineSharePct < 5 ? "red" : "amber",
+      value: `${onlineSharePct.toFixed(1)}% share - ${onlineSharePct < 5 ? "growth opportunity" : "gaining traction"}`,
+    },
+    {
+      label: "Seasonal peak",
+      status: "green",
+      value: totalBestIdx >= 0 ? `${MONTHS[totalBestIdx]} - ${L(totalMonthly[totalBestIdx])}` : "-",
+    },
+    {
+      label: "Seasonal low",
+      status: "amber",
+      value: totalWorstIdx >= 0 ? `${MONTHS[totalWorstIdx]} - ${L(totalMonthly[totalWorstIdx])}` : "-",
+    },
+    {
+      label: "FY26-27 early trend",
+      status: isStrongestApril ? "green" : "amber",
+      value: priorAprils.length === 0
+        ? `Apr ${L(fy2627April)} - no prior April to compare`
+        : isStrongestApril
+          ? `Apr ${L(fy2627April)} - strongest April on record`
+          : `Apr ${L(fy2627April)} - below the best prior April (${L(bestPriorApril)})`,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          Sienna Store - Sales Analysis · FY 2025-26
-        </p>
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Sienna Store - Sales Analysis · {FY.label}
+          </p>
+          <div className="flex gap-1.5">
+            {STORE_FYS.map((y) => (
+              <button
+                key={y}
+                onClick={() => setFy(y)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  y === fy
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {SIENNA_STORE_BY_FY[y].label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
         </div>
@@ -196,7 +229,7 @@ export default function StoreTab() {
 
       {view === "channels" && (
         <>
-          <DashCard title="Monthly Revenue by Channel">
+          <DashCard title={`Monthly Revenue by Channel (${FY.label})`}>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={channelMonthly}>
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -212,7 +245,7 @@ export default function StoreTab() {
           </DashCard>
 
           {/* Channel pie */}
-          <DashCard title="Annual Channel Mix (FY 2025-26)">
+          <DashCard title={`Annual Channel Mix (${FY.label})`}>
             <div className="flex flex-col sm:flex-row items-center gap-6">
               <ResponsiveContainer width={200} height={200}>
                 <PieChart>
@@ -243,27 +276,27 @@ export default function StoreTab() {
       )}
 
       {view === "categories" && (
-        <DashCard title={`Annual Sales by Product Category (${SIENNA_CATEGORIES_LABEL})`}>
+        <DashCard title={`Annual Sales by Product Category (${FY.label})`}>
           <p className="text-xs text-muted-foreground -mt-1 mb-2">
-            Complete 12-month category breakdown for the current year.
+            Complete 12-month category breakdown for the selected year.
           </p>
           <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={SIENNA_CATEGORIES} layout="vertical">
+            <BarChart data={CATEGORIES} layout="vertical">
               <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} width={100} />
               <Tooltip formatter={(v) => [L(v as number), "Revenue"]} />
               <Bar dataKey="value" name="Revenue" radius={[0,4,4,0]}>
-                {SIENNA_CATEGORIES.map((_, i) => (
+                {CATEGORIES.map((_, i) => (
                   <Cell key={i} fill={CAT_COLORS[i % CAT_COLORS.length]} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-3 flex flex-wrap gap-2">
-            {SIENNA_CATEGORIES.map(({ name, value }, i) => (
+            {CATEGORIES.map(({ name, value }, i) => (
               <span key={name} className="text-xs text-muted-foreground flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CAT_COLORS[i] }} />
-                {name}: {((value / SIENNA_CATEGORIES.reduce((a,c)=>a+c.value,0))*100).toFixed(1)}%
+                {name}: {((value / CATEGORIES.reduce((a,c)=>a+c.value,0))*100).toFixed(1)}%
               </span>
             ))}
           </div>
@@ -303,7 +336,7 @@ export default function StoreTab() {
             <div className="space-y-3">
               {[
                 { label: "FY 2026-27 (Apr–May)", total: FY27.totals["Total"], hp: FY27.totals["HP Store"], corp: FY27.totals["Corporate"] },
-                { label: "FY 2025-26", total: t["Total"], hp: t["HP Store"], corp: t["Corporate"] },
+                { label: "FY 2025-26", total: FY2526.totals["Total"], hp: FY2526.totals["HP Store"], corp: FY2526.totals["Corporate"] },
               ].map(({ label, total, hp, corp }) => (
                 <div key={label} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <span className="text-sm text-muted-foreground">{label}</span>
@@ -349,27 +382,38 @@ export default function StoreTab() {
       )}
 
       {view === "costs" && (
-        <DashCard title="Monthly Store Cost Breakdown">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={costMonthly}>
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="HR Cost"       stackId="a" fill="#ef4444" />
-              <Bar dataKey="Trading Items" stackId="a" fill="#f59e0b" />
-              <Bar dataKey="Direct Exp"    stackId="a" fill="#3b82f6" />
-              <Bar dataKey="Raw Material"  stackId="a" fill="#10b981" />
-              <Bar dataKey="Site Cost"     stackId="a" fill="#8b5cf6" radius={[4,4,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          {hrCostMinIdx >= 0 && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Note: HR cost is lowest in {MONTHS[hrCostMinIdx]} ({L(STORE.hrCost[hrCostMinIdx])})
-              {hrCostMinIsAnomaly ? " - well below the other months' average, likely a one-month anomaly." : "."}
+        STORE.hasMonthlyDetail ? (
+          <DashCard title={`Monthly Store Cost Breakdown (${FY.label})`}>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={costMonthly}>
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="HR Cost"       stackId="a" fill="#ef4444" />
+                <Bar dataKey="Trading Items" stackId="a" fill="#f59e0b" />
+                <Bar dataKey="Direct Exp"    stackId="a" fill="#3b82f6" />
+                <Bar dataKey="Raw Material"  stackId="a" fill="#10b981" />
+                <Bar dataKey="Site Cost"     stackId="a" fill="#8b5cf6" radius={[4,4,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            {hrCostMinIdx >= 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Note: HR cost is lowest in {MONTHS[hrCostMinIdx]} ({L(STORE.hrCost[hrCostMinIdx])})
+                {hrCostMinIsAnomaly ? " - well below the other months' average, likely a one-month anomaly." : "."}
+              </p>
+            )}
+          </DashCard>
+        ) : (
+          <DashCard title={`Cost Structure - ${FY.label}`}>
+            <p className="text-sm text-muted-foreground">
+              Monthly cost-structure detail isn&rsquo;t available for {FY.label} yet - the CEPL P&L
+              workbook only has department-level monthly breakdowns (HR, trading items, direct
+              expenses, raw material, site cost) for FY 2025-26 so far. Once a workbook with that
+              detail is imported for this year, this chart will appear automatically.
             </p>
-          )}
-        </DashCard>
+          </DashCard>
+        )
       )}
 
       <DashCard title="Performance Health Check">
