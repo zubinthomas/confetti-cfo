@@ -3,7 +3,7 @@ import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
 import { FAB } from "@/data/ceplData";
-import { OUTLETS, OUTLET_WEEKS, EVENTS_BREAKDOWN, DURGA_PUJA } from "@/data/fnbOutletData";
+import { OUTLETS, OUTLET_WEEKS, EVENTS_BREAKDOWN, DURGA_PUJA, CAFE_EARLY_WEEKLY, CAFE_EARLY_WEEKS } from "@/data/fnbOutletData";
 import { MONTHS, L, sum } from "@/data/core";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
@@ -12,14 +12,17 @@ import {
 
 const fyEvents = sum(FAB.eventCatering);
 const weeklyEvents = sum(OUTLETS.total.events);
+const earlyEvents = sum(CAFE_EARLY_WEEKLY.eventSales);
 const bestMonthIdx = FAB.eventCatering.indexOf(Math.max(...FAB.eventCatering));
 
 const monthly = MONTHS.map((m, i) => ({ month: m, "Event & Catering Revenue": FAB.eventCatering[i] }));
 const weekly = OUTLET_WEEKS.map((w, i) => ({ week: w.short, "Event Sales": OUTLETS.total.events[i] }));
+const earlyWeekly = CAFE_EARLY_WEEKS.map((w, i) => ({ week: w.short, "Event Sales": CAFE_EARLY_WEEKLY.eventSales[i] }));
 
 const kpis: KpiData[] = [
   { label: "Event & Catering (FY)", value: `₹${L(fyEvents)}`, sub: `${((fyEvents / sum(FAB.totalRevenue)) * 100).toFixed(1)}% of F&B revenue`, status: "green" },
   { label: "Event Sales (Sep–Jan)", value: `₹${L(weeklyEvents)}`, sub: "Weekly cafe workbook detail" },
+  { label: "Event Sales (Apr–Aug)", value: `₹${L(earlyEvents)}`, sub: "Whole-cafe weekly detail" },
   { label: "Best Month", value: MONTHS[bestMonthIdx], sub: `₹${L(FAB.eventCatering[bestMonthIdx])}`, status: "green" },
   { label: "Durga Puja 2025", value: `₹${L(DURGA_PUJA.totalSales)}`, sub: `₹${L(DURGA_PUJA.pl)} P&L over the two festival weeks`, status: "green" },
 ];
@@ -71,11 +74,28 @@ export default function EventsPage() {
         </DashCard>
       </div>
 
+      <DashCard title="Whole-Cafe Weekly Event Sales - Apr–Aug 2025 (before the outlet split)">
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={earlyWeekly}>
+            <XAxis dataKey="week" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="Event Sales" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+        <p className="text-xs text-muted-foreground mt-2">
+          Event weeks are naturally sparse (events don&rsquo;t happen every week) - only 8 of these 22
+          weeks report event sales. No by-source breakdown exists for this period, only the combined
+          weekly total (no Cafe / Restaurant / Rannaghor split existed yet).
+        </p>
+      </DashCard>
+
       <p className="text-xs text-muted-foreground">
         The monthly series is the F&B department&rsquo;s &ldquo;Event &amp; Catering Receipt&rdquo; P&L line.
-        The weekly view and the by-source breakdown come from the cafe workbook&rsquo;s &ldquo;Sales from
-        Events&rdquo; section (September 2025 onwards) - most event revenue flows through the Rannaghor
-        events kitchen and named one-off events.
+        The weekly views and the by-source breakdown come from the cafe workbook&rsquo;s &ldquo;Sales from
+        Events&rdquo; section - September 2025 onwards is split by outlet, April–August 2025 is
+        whole-cafe only - most event revenue flows through the Rannaghor events kitchen and named
+        one-off events.
       </p>
     </div>
   );
