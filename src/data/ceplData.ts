@@ -84,6 +84,7 @@ const DEPT_NET_PL_LI = 62;
 
 export interface DeptFinancials {
   months: string[];
+  hasMonthlyDetail: boolean;
   revenue: Series;
   cogs: Series;
   grossProfit: Series;
@@ -121,6 +122,7 @@ export function deptFinancials(deptKey: DeptKey, periodIds: number[]): DeptFinan
   );
   return {
     months: MONTHS,
+    hasMonthlyDetail: revenue.some((v) => v != null),
     revenue,
     cogs,
     grossProfit,
@@ -316,3 +318,19 @@ function fabForFY(fiscalYear: string): FabYearData {
 export const FAB_BY_FY: Record<string, FabYearData> = Object.fromEntries(
   CANDIDATE_FYS.map((fy) => [fy, fabForFY(fy)])
 );
+
+// ── Craft departments, per fiscal year ──────────────────────────────────────
+// Same story as F&B: no secondary workbook, no Overview-sheet annual
+// fallback either (only F&B/Store have those historical rows) - a craft
+// department's data is either the full FY2025-26 monthly detail or nothing
+// at all for that year. deptFinancials() is already generic over periodIds,
+// so this just calls it per candidate year instead of the hardcoded
+// FY2526_PIDS the standalone TRADING_ITEMS/POTTERY/BATIK/STITCHING use.
+const CRAFT_KEYS: DeptKey[] = ["tradingItems", "pottery", "batik", "stitching"];
+
+export const CRAFT_BY_FY: Record<DeptKey, Record<string, DeptFinancials>> = Object.fromEntries(
+  CRAFT_KEYS.map((key) => [
+    key,
+    Object.fromEntries(CANDIDATE_FYS.map((fy) => [fy, deptFinancials(key, monthPeriodIds(fy))])),
+  ])
+) as Record<DeptKey, Record<string, DeptFinancials>>;

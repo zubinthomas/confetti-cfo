@@ -23,7 +23,6 @@ import RestaurantPage from '@/components/fnb/RestaurantPage';
 import BarPage from '@/components/fnb/BarPage';
 import EventsPage from '@/components/fnb/EventsPage';
 import RannaghorPage from '@/components/fnb/RannaghorPage';
-import { POTTERY, BATIK, STITCHING, TRADING_ITEMS } from '@/data/ceplData';
 
 export default function DashboardApp() {
   return (
@@ -38,10 +37,10 @@ export default function DashboardApp() {
         <Route path="fnb/rannaghor" element={<RannaghorPage />} />
         <Route path="store" element={<StoreTab />} />
         <Route path="store/consignment" element={<ConsignmentPage />} />
-        <Route path="crafts/pottery" element={<CraftDeptPage data={POTTERY} heading="Pottery Division" />} />
-        <Route path="crafts/batik" element={<CraftDeptPage data={BATIK} heading="Batik Division" />} />
-        <Route path="crafts/stitching" element={<CraftDeptPage data={STITCHING} heading="Stitching Division" />} />
-        <Route path="crafts/trading-items" element={<CraftDeptPage data={TRADING_ITEMS} heading="Trading Items" />} />
+        <Route path="crafts/pottery" element={<CraftDeptPage deptKey="pottery" heading="Pottery Division" />} />
+        <Route path="crafts/batik" element={<CraftDeptPage deptKey="batik" heading="Batik Division" />} />
+        <Route path="crafts/stitching" element={<CraftDeptPage deptKey="stitching" heading="Stitching Division" />} />
+        <Route path="crafts/trading-items" element={<CraftDeptPage deptKey="tradingItems" heading="Trading Items" />} />
         <Route path="cashflow" element={<CashFlowTab />} />
         <Route path="ai" element={<AIQueriesTab />} />
         <Route path="data/import" element={<ImportPage />} />

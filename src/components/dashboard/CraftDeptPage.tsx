@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import StatusRow from "./StatusRow";
 import ChartTooltip from "./ChartTooltip";
-import { MONTHS, L, pct, sum, maxIdx, minIdx } from "@/data/core";
-import type { DeptFinancials } from "@/data/ceplData";
+import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel } from "@/data/core";
+import { CRAFT_BY_FY, OVERVIEW_FYS, type DeptKey, type DeptFinancials } from "@/data/ceplData";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 import type { StatusRowData } from "./StatusRow";
@@ -13,9 +13,52 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
-// One craft department's FY view (Pottery / Batik / Stitching / Trading Items).
-// `data` is a deptFinancials() export from ceplData.js.
-export default function CraftDeptPage({ data, heading }: { data: DeptFinancials; heading: string }) {
+// One craft department's page (Pottery / Batik / Stitching / Trading Items).
+export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; heading: string }) {
+  const [fy, setFy] = useState(OVERVIEW_FYS.at(-1)!);
+  const data = CRAFT_BY_FY[deptKey][fy];
+  const label = fyLabel(fy);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          {heading} · {label}
+        </p>
+        <div className="flex gap-1.5">
+          {OVERVIEW_FYS.map((y) => (
+            <button
+              key={y}
+              onClick={() => setFy(y)}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                y === fy
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              {fyLabel(y)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {data.hasMonthlyDetail ? (
+        <DeptDetail data={data} label={label} />
+      ) : (
+        <DashCard title={`Monthly detail - ${label}`}>
+          <p className="text-sm text-muted-foreground">
+            {heading} has no data at all for {label} - unlike F&B/Store, the craft departments have
+            no Overview-sheet annual fallback either, so there&rsquo;s nothing to show until a full
+            CEPL P&L workbook with this department&rsquo;s monthly data is imported for this year.
+            Once it is, this page will populate automatically.
+          </p>
+        </DashCard>
+      )}
+    </div>
+  );
+}
+
+function DeptDetail({ data, label }: { data: DeptFinancials; label: string }) {
   const fyRevenue = sum(data.revenue);
   const fyCogs = sum(data.cogs);
   const fyGrossProfit = fyRevenue - fyCogs;
@@ -29,7 +72,7 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
   const profitableMonths = data.netPL.filter((v) => v != null && v > 0).length;
 
   const kpis: KpiData[] = [
-    { label: "Revenue (FY 25-26)", value: `₹${L(fyRevenue)}` },
+    { label: `Revenue (${label})`, value: `₹${L(fyRevenue)}` },
     {
       label: "Gross Margin (FY)",
       value: `${fyGrossMarginPct.toFixed(1)}%`,
@@ -81,7 +124,7 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
     {
       label: "FY net position",
       status: fyNetPL >= 0 ? "green" : "red",
-      value: fyNetPL >= 0 ? `₹${L(fyNetPL)} profit for FY 25-26` : `₹${L(Math.abs(fyNetPL))} loss for FY 25-26`,
+      value: fyNetPL >= 0 ? `₹${L(fyNetPL)} profit for ${label}` : `₹${L(Math.abs(fyNetPL))} loss for ${label}`,
     },
     {
       label: "Loss-making months",
@@ -98,14 +141,9 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          {heading} · FY 2025-26
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
-        </div>
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
       <DashCard title="Monthly Revenue vs Net P&L">
@@ -122,7 +160,7 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
       </DashCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DashCard title="FY 2025-26 P&L Breakdown">
+        <DashCard title={`${label} P&L Breakdown`}>
           {plRows.map((r) => <PLRow key={r.label} {...r} />)}
         </DashCard>
 
@@ -137,6 +175,6 @@ export default function CraftDeptPage({ data, heading }: { data: DeptFinancials;
         as reported in the source P&amp;L workbook). No depreciation/interest breakout exists in the
         source data, so EBITDA is not shown - Net Margin (post all expenses) is used instead.
       </p>
-    </div>
+    </>
   );
 }
