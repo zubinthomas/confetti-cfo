@@ -142,7 +142,7 @@ export default function DashboardShell() {
           <h1 className="text-lg font-bold font-heading text-foreground tracking-tight">
             Confetti Exports
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">CFO Dashboard · FY 2025-26</p>
+          <p className="text-xs text-muted-foreground mt-0.5">CFO Dashboard</p>
         </div>
         <SidebarNav />
       </aside>
@@ -158,7 +158,7 @@ export default function DashboardShell() {
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <h1 className="text-base font-bold font-heading text-foreground">Confetti Exports</h1>
-                <p className="text-[11px] text-muted-foreground">CFO Dashboard · FY 2025-26</p>
+                <p className="text-[11px] text-muted-foreground">CFO Dashboard</p>
               </div>
               <button onClick={() => setMobileOpen(false)} aria-label="Close menu">
                 <X className="w-5 h-5 text-muted-foreground" />
