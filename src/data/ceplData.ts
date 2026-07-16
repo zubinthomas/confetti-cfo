@@ -94,9 +94,9 @@ export interface DeptFinancials {
   netMarginPct: Series;
 }
 
-type DeptKey = keyof typeof DEPT_BU;
+export type DeptKey = keyof typeof DEPT_BU;
 
-function deptFinancials(deptKey: DeptKey, periodIds: number[]): DeptFinancials {
+export function deptFinancials(deptKey: DeptKey, periodIds: number[]): DeptFinancials {
   const buId = DEPT_BU[deptKey];
   const cogsIds = DEPT_COGS_LINE_IDS[deptKey];
   const revenue = series(buId, DEPT_TOTAL_SALES_LI, periodIds);

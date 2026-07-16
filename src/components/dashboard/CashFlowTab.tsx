@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import ChartTooltip from "./ChartTooltip";
-import { CASHFLOW, OUTFLOW_CATEGORIES, GST_MEMO, CASH_GAPS } from "@/data/cashFlowData";
+import { CASHFLOW_BY_FY, CASH_GAPS, type CashFlowYearData } from "@/data/cashFlowData";
+import { OVERVIEW_FYS } from "@/data/ceplData";
 import { MONTHS, L, sum } from "@/data/core";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
@@ -12,53 +13,92 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
 
-const fyIn = sum(CASHFLOW.inflows);
-const fyOut = sum(CASHFLOW.outflows);
-const fyNet = fyIn - fyOut;
-const bestIdx = CASHFLOW.net.indexOf(Math.max(...CASHFLOW.net));
-const worstIdx = CASHFLOW.net.indexOf(Math.min(...CASHFLOW.net));
-const negativeMonths = CASHFLOW.net.filter((v) => v < 0).length;
-
-const kpis: KpiData[] = [
-  { label: "Money In (FY 25-26)", value: `₹${L(fyIn)}`, sub: "All six departments' sales", status: "green" },
-  { label: "Money Out (FY 25-26)", value: `₹${L(fyOut)}`, sub: "All reported expenses", status: "amber" },
-  { label: "Net (FY 25-26)", value: `₹${L(fyNet)}`, sub: `${((fyNet / fyIn) * 100).toFixed(1)}% of inflows`, status: fyNet >= 0 ? "green" : "red" },
-  { label: "Cash-negative Months", value: `${negativeMonths}/12`, sub: negativeMonths ? `Worst: ${MONTHS[worstIdx]} (₹${L(CASHFLOW.net[worstIdx])})` : "None", status: negativeMonths > 3 ? "red" : negativeMonths ? "amber" : "green" },
-  { label: "Best Month", value: MONTHS[bestIdx], sub: `₹${L(CASHFLOW.net[bestIdx])} net`, status: "green" },
-];
-
-const monthly = MONTHS.map((m, i) => ({
-  month: m,
-  "Money In": CASHFLOW.inflows[i],
-  "Money Out": CASHFLOW.outflows[i],
-  "Cumulative Net": CASHFLOW.cumulative[i],
-}));
-
-const outflowRows: PLRowData[] = [...OUTFLOW_CATEGORIES]
-  .sort((a, b) => b.total - a.total)
-  .map((c) => ({
-    label: c.label,
-    value: `₹${L(c.total)} (${((c.total / fyOut) * 100).toFixed(1)}%)`,
-    status: c.label === "Payroll & staff" || c.label === "Materials & purchases" ? "red" : undefined,
-  }));
-
-const outflowMonthly = MONTHS.map((m, i) => {
-  const row: Record<string, string | number> = { month: m };
-  for (const c of OUTFLOW_CATEGORIES) row[c.label] = c.monthly[i];
-  return row;
-});
 const CAT_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4", "#10b981", "#ec4899", "#84cc16", "#94a3b8"];
 
 export default function CashFlowTab() {
+  const [fy, setFy] = useState(OVERVIEW_FYS.at(-1)!);
+  const CUR = CASHFLOW_BY_FY[fy];
+
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-          Group Money In / Money Out · FY 2025-26 (P&L basis)
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Group Money In / Money Out · {CUR.label} (P&L basis)
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+        <div className="flex gap-1.5">
+          {OVERVIEW_FYS.map((y) => (
+            <button
+              key={y}
+              onClick={() => setFy(y)}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                y === fy
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              {CASHFLOW_BY_FY[y].label}
+            </button>
+          ))}
         </div>
+      </div>
+
+      {CUR.hasFullDetail ? <FullDetail CUR={CUR} /> : (
+        <DashCard title={`Group cash flow - ${CUR.label}`}>
+          <p className="text-sm text-muted-foreground">
+            Group money in/out isn&rsquo;t available for {CUR.label} - it&rsquo;s summed across all
+            six CEPL departments (F&B, Store, Trading Items, Pottery, Batik, Stitching), and the four
+            craft departments have no data at all outside FY 2025-26 (not even annual totals, unlike
+            F&B/Store). Showing a partial total from just F&B and Store would misrepresent itself as
+            the group figure, so nothing is shown instead. Once monthly data for all six departments
+            is imported for this year, group cash flow will appear here automatically.
+          </p>
+        </DashCard>
+      )}
+    </div>
+  );
+}
+
+function FullDetail({ CUR }: { CUR: CashFlowYearData }) {
+  const fyIn = sum(CUR.inflows);
+  const fyOut = sum(CUR.outflows);
+  const fyNet = fyIn - fyOut;
+  const bestIdx = CUR.net.indexOf(Math.max(...CUR.net));
+  const worstIdx = CUR.net.indexOf(Math.min(...CUR.net));
+  const negativeMonths = CUR.net.filter((v) => v < 0).length;
+
+  const kpis: KpiData[] = [
+    { label: `Money In (${CUR.label})`, value: `₹${L(fyIn)}`, sub: "All six departments' sales", status: "green" },
+    { label: `Money Out (${CUR.label})`, value: `₹${L(fyOut)}`, sub: "All reported expenses", status: "amber" },
+    { label: `Net (${CUR.label})`, value: `₹${L(fyNet)}`, sub: `${((fyNet / fyIn) * 100).toFixed(1)}% of inflows`, status: fyNet >= 0 ? "green" : "red" },
+    { label: "Cash-negative Months", value: `${negativeMonths}/12`, sub: negativeMonths ? `Worst: ${MONTHS[worstIdx]} (₹${L(CUR.net[worstIdx])})` : "None", status: negativeMonths > 3 ? "red" : negativeMonths ? "amber" : "green" },
+    { label: "Best Month", value: MONTHS[bestIdx], sub: `₹${L(CUR.net[bestIdx])} net`, status: "green" },
+  ];
+
+  const monthly = MONTHS.map((m, i) => ({
+    month: m,
+    "Money In": CUR.inflows[i],
+    "Money Out": CUR.outflows[i],
+    "Cumulative Net": CUR.cumulative[i],
+  }));
+
+  const outflowRows: PLRowData[] = [...CUR.outflowCategories]
+    .sort((a, b) => b.total - a.total)
+    .map((c) => ({
+      label: c.label,
+      value: `₹${L(c.total)} (${((c.total / fyOut) * 100).toFixed(1)}%)`,
+      status: c.label === "Payroll & staff" || c.label === "Materials & purchases" ? "red" : undefined,
+    }));
+
+  const outflowMonthly = MONTHS.map((m, i) => {
+    const row: Record<string, string | number> = { month: m };
+    for (const c of CUR.outflowCategories) row[c.label] = c.monthly[i];
+    return row;
+  });
+
+  return (
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
       <DashCard title="Monthly Money In vs Out, with Cumulative Net">
@@ -77,9 +117,9 @@ export default function CashFlowTab() {
       </DashCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DashCard title="Where the Money Goes (FY 2025-26)">
+        <DashCard title={`Where the Money Goes (${CUR.label})`}>
           {outflowRows.map((r) => <PLRow key={r.label} {...r} />)}
-          <PLRow label="GST paid (memo)" value={`₹${L(GST_MEMO.total)}`} status="amber" />
+          <PLRow label="GST paid (memo)" value={`₹${L(CUR.gstMemo.total)}`} status="amber" />
           <p className="text-xs text-muted-foreground mt-3">
             Categories are the workbooks&rsquo; own cost lines summed across all six departments;
             &ldquo;Other operating costs&rdquo; is the remainder of reported total expenses. GST is a
@@ -115,13 +155,13 @@ export default function CashFlowTab() {
             <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            {OUTFLOW_CATEGORIES.map((c, i) => (
+            {CUR.outflowCategories.map((c, i) => (
               <Bar key={c.label} dataKey={c.label} stackId="a" fill={CAT_COLORS[i % CAT_COLORS.length]}
-                   radius={i === OUTFLOW_CATEGORIES.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+                   radius={i === CUR.outflowCategories.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
             ))}
           </ComposedChart>
         </ResponsiveContainer>
       </DashCard>
-    </div>
+    </>
   );
 }
