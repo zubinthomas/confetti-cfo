@@ -269,3 +269,50 @@ function storeForFY(fiscalYear: string): StoreDeptYearData {
 export const STORE_BY_FY: Record<string, StoreDeptYearData> = Object.fromEntries(
   CANDIDATE_FYS.map((fy) => [fy, storeForFY(fy)])
 );
+
+// ── CEPL F&B department, per fiscal year ────────────────────────────────────
+// Same data-driven / hasMonthlyDetail split, for the F&B P&L page. Unlike
+// Store, F&B has no secondary workbook with multi-year detail to fall back
+// on - years without department-sheet data only get the two Overview-sheet
+// annual totals (revenue, P&L), nothing else.
+export interface FabYearData {
+  fy: string;
+  label: string;
+  hasMonthlyDetail: boolean;
+  productSales: Series; retailBarSales: Series; eventCatering: Series; totalRevenue: Series;
+  rawMaterial: Series; cogsPct: Series; hrCost: Series; hrPct: Series; siteCost: Series;
+  marketingCost: Series; deliveryComm: Series; totalExpense: Series; profitLoss: Series; plPct: Series;
+  totals: { revenue: number; pl: number };
+}
+
+function fabForFY(fiscalYear: string): FabYearData {
+  const pids = monthPeriodIds(fiscalYear);
+  const totalRevenue = series(FNB_BU, LI.totalRevenue, pids);
+  const hasMonthlyDetail = totalRevenue.some((v) => v != null);
+  const base = {
+    fy: fiscalYear, label: fyLabel(fiscalYear), hasMonthlyDetail,
+    productSales: series(FNB_BU, LI.productSales, pids),
+    retailBarSales: series(FNB_BU, LI.retailBarSales, pids),
+    eventCatering: series(FNB_BU, LI.eventCatering, pids),
+    totalRevenue,
+    rawMaterial: series(FNB_BU, LI.rawMaterial, pids),
+    cogsPct: pctSeries(FNB_BU, LI.cogsPct, pids),
+    hrCost: series(FNB_BU, LI.hrCost, pids),
+    hrPct: pctSeries(FNB_BU, LI.hrPct, pids),
+    siteCost: series(FNB_BU, LI.siteCost, pids),
+    marketingCost: series(FNB_BU, LI.marketingCost, pids),
+    deliveryComm: series(FNB_BU, LI.deliveryComm, pids),
+    totalExpense: series(FNB_BU, LI.totalExpense, pids),
+    profitLoss: series(FNB_BU, LI.profitLoss, pids),
+    plPct: pctSeries(FNB_BU, LI.plPct, pids),
+  };
+  if (hasMonthlyDetail) {
+    return { ...base, totals: { revenue: sum(base.totalRevenue), pl: sum(base.profitLoss) } };
+  }
+  const annual = overviewYear(FNB_BU, fiscalYear);
+  return { ...base, totals: { revenue: annual.sales, pl: annual.pl } };
+}
+
+export const FAB_BY_FY: Record<string, FabYearData> = Object.fromEntries(
+  CANDIDATE_FYS.map((fy) => [fy, fabForFY(fy)])
+);
