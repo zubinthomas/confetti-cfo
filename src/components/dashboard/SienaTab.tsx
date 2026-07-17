@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
-import { FAB_BY_FY, OVERVIEW_FYS } from "@/data/ceplData";
-import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum } from "@/data/core";
+import PageSpinner from "./PageSpinner";
+import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useFabYear } from "@/hooks/useFabYear";
+import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel } from "@/data/seriesKernel";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -31,8 +33,12 @@ const COGS_TARGET_PCT = 35;
 
 export default function SienaTab() {
   const [view, setView] = useState("revenue");
-  const [fy, setFy] = useState(OVERVIEW_FYS.at(-1)!);
-  const FAB = FAB_BY_FY[fy];
+  const fys = useOverviewFiscalYears();
+  const [selectedFy, setSelectedFy] = useState<string | null>(null);
+  const fy = selectedFy ?? fys?.at(-1);
+  const FAB = useFabYear(fy);
+
+  if (!fys || !fy || !FAB) return <PageSpinner />;
 
   const fyTotal = FAB.totals.revenue;
   const fyPL = FAB.totals.pl;
@@ -146,17 +152,17 @@ export default function SienaTab() {
             Siena F&B - Monthly P&L · {FAB.label}
           </p>
           <div className="flex gap-1.5">
-            {OVERVIEW_FYS.map((y) => (
+            {fys.map((y) => (
               <button
                 key={y}
-                onClick={() => setFy(y)}
+                onClick={() => setSelectedFy(y)}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                   y === fy
                     ? "bg-primary text-primary-foreground border-primary"
                     : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
-                {FAB_BY_FY[y].label}
+                {fyLabel(y)}
               </button>
             ))}
           </div>

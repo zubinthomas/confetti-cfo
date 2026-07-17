@@ -1,6 +1,15 @@
 import React, { useState } from "react";
 import { invokeLLM } from "@/api/integrations";
 import { buildCFOContext } from "@/data/aiContext";
+import { CASH_GAPS } from "@/data/cashFlowFinancials";
+import { useFabMonthly } from "@/hooks/useFabMonthly";
+import { useStoreData } from "@/hooks/useStoreData";
+import { useCraftFinancials } from "@/hooks/useCraftFinancials";
+import { useFnbStoreHistory } from "@/hooks/useFnbStoreHistory";
+import { useCashFlowYear } from "@/hooks/useCashFlowYear";
+import { useAllOutlets } from "@/hooks/useAllOutlets";
+import { useConsignmentData } from "@/hooks/useConsignmentData";
+import PageSpinner from "./PageSpinner";
 import { TrendingUp, Truck, BarChart3, CalendarDays, AlertTriangle, Tag, Building2, UtensilsCrossed, RefreshCw, Search, Sparkles, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -23,20 +32,53 @@ const queries: CannedQuery[] = [
   { icon: Search, label: "What data are we missing?", prompt: "As CFO, what financial data are we not capturing yet, and what decisions does that limit?" },
 ];
 
+const FY = "2025-2026";
+
 export default function AIQueriesTab() {
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState(null);
-  const [activeQuery, setActiveQuery] = useState(null);
+  const [response, setResponse] = useState<string | null>(null);
+  const [activeQuery, setActiveQuery] = useState<string | null>(null);
+
+  const fab = useFabMonthly();
+  const storeData = useStoreData();
+  const craft = useCraftFinancials();
+  const fnbStoreHistory = useFnbStoreHistory();
+  const cashFlow = useCashFlowYear(FY);
+  const outlets = useAllOutlets();
+  const consignmentData = useConsignmentData();
+
+  const ready = fab && storeData && craft && fnbStoreHistory && cashFlow && outlets && consignmentData;
 
   const handleQuery = async (query: CannedQuery) => {
+    if (!ready) return;
     setLoading(true);
     setActiveQuery(query.label);
     setResponse(null);
-    const contextPrompt = `${buildCFOContext()}\n\nQuestion: ${query.prompt}`;
+    const context = buildCFOContext({
+      fab,
+      store: storeData.storeFinancialsByFy[FY],
+      craft,
+      fnbStoreHistoryPrevYear: fnbStoreHistory.at(-2)!,
+      cashflowInflows: cashFlow.inflows,
+      cashflowOutflows: cashFlow.outflows,
+      outflowCategories: cashFlow.outflowCategories,
+      gstMemoTotal: cashFlow.gstMemo.total,
+      outlets: outlets.outlets,
+      outletWeeksCount: outlets.weeks.length,
+      durgaPuja: outlets.durgaPuja,
+      liquorMix: outlets.liquorMix,
+      siennaStoreFy2526Totals: storeData.siennaStore.fy2526.totals,
+      siennaCategories: storeData.categoriesByFy[FY],
+      consignment: consignmentData.find((c) => c.fy === FY),
+      cashGaps: CASH_GAPS,
+    });
+    const contextPrompt = `${context}\n\nQuestion: ${query.prompt}`;
     const result = await invokeLLM(contextPrompt);
     setResponse(result);
     setLoading(false);
   };
+
+  if (!ready) return <PageSpinner />;
 
   return (
     <div className="space-y-6">

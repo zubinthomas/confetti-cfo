@@ -1,11 +1,15 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import StatusRow from "./StatusRow";
 import ChartTooltip from "./ChartTooltip";
-import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel } from "@/data/core";
-import { CRAFT_BY_FY, OVERVIEW_FYS, type DeptKey, type DeptFinancials } from "@/data/ceplData";
+import PageSpinner from "./PageSpinner";
+import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
+import { computeDeptFinancials, DEPT_BU, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
+import { useReferenceData } from "@/hooks/useReferenceData";
+import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 import type { StatusRowData } from "./StatusRow";
@@ -15,8 +19,24 @@ import {
 
 // One craft department's page (Pottery / Batik / Stitching / Trading Items).
 export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; heading: string }) {
-  const [fy, setFy] = useState(OVERVIEW_FYS.at(-1)!);
-  const data = CRAFT_BY_FY[deptKey][fy];
+  const { data: ref } = useReferenceData();
+  const fys = useOverviewFiscalYears();
+  const [selectedFy, setSelectedFy] = useState<string | null>(null);
+  const fy = selectedFy ?? fys?.at(-1);
+
+  const { data: records } = useFinancialRecords({
+    businessUnitId: fy ? [DEPT_BU[deptKey]] : undefined,
+    fiscalYear: fy ? [fy] : undefined,
+  });
+
+  const data = useMemo(() => {
+    if (!ref || !records || !fy) return null;
+    const idx = buildFrIndex(records);
+    return computeDeptFinancials(idx, deptKey, monthPeriodIds(ref.periods, fy));
+  }, [ref, records, fy, deptKey]);
+
+  if (!ref || !fys || !fy || !data) return <PageSpinner />;
+
   const label = fyLabel(fy);
 
   return (
@@ -26,10 +46,10 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
           {heading} · {label}
         </p>
         <div className="flex gap-1.5">
-          {OVERVIEW_FYS.map((y) => (
+          {fys.map((y) => (
             <button
               key={y}
-              onClick={() => setFy(y)}
+              onClick={() => setSelectedFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

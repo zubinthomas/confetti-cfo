@@ -1,48 +1,39 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Cash-flow adapter (CEPL workbook). Derives group-wide monthly money-in /
-// money-out from all six departments' P&L records:
-//   inflows  = every department's reported total sales
-//   outflows = every department's reported total expenses
-// and splits outflows into the workbook's own cost lines (payroll, materials,
-// GST, licences, delivery commissions, site costs, …).
+// Pure, parametrized group cash-flow computation (CEPL workbook, business
+// units 1-6).
 //
 // This only produces a real number for a fiscal year when ALL SIX
 // departments have monthly detail for it - unlike F&B/Store, the four craft
-// departments have no annual-only fallback at all (checked directly against
-// the dataset: only F&B and Store have Overview-sheet historical rows), so a
-// partial (F&B+Store-only) total would silently misrepresent itself as
-// "group cash flow." Years without full six-department detail get no
-// computed numbers at all, not a partial one - see hasFullDetail below.
+// departments have no annual-only fallback at all, so a partial
+// (F&B+Store-only) total would silently misrepresent itself as "group cash
+// flow." Years without full six-department detail get no computed numbers
+// at all, not a partial one - see hasFullDetail below.
 //
-// HONEST LIMIT: the source workbooks are P&L statements. They contain no bank
-// balance, receivables, payables, loan schedule or opening cash, so true
-// cash-position / working-capital metrics are NOT derivable - see
-// CASH_GAPS, which the Cash Flow page surfaces instead of invented numbers.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { MONTHS, monthPeriodIds, lineItems, frGet, sum, fyLabel } from "./core";
-import { FAB_BY_FY, STORE_BY_FY, OVERVIEW_FYS, deptFinancials, type DeptKey } from "./ceplData";
+// HONEST LIMIT: the source workbooks are P&L statements. They contain no
+// bank balance, receivables, payables, loan schedule or opening cash, so
+// true cash-position / working-capital metrics are NOT derivable - see
+// CASH_GAPS below, which the Cash Flow page and the AI context builder
+// surface instead of invented numbers.
+import { MONTHS, frGet, sum, fyLabel, type FrIndex } from "./seriesKernel";
+import type { LineItem } from "./types";
+import { computeFabMonthly } from "./fabData";
+import { computeStoreYear } from "./storeFinancials";
+import { computeDeptFinancials, type DeptKey } from "./deptFinancials";
 
 const CEPL_UNITS = [1, 2, 3, 4, 5, 6];
 const CRAFT_KEYS: DeptKey[] = ["tradingItems", "pottery", "batik", "stitching"];
 
 // sum one-or-more line items (by exact name) across all CEPL departments
-const liIdsByName = (...names: string[]): number[] =>
+const liIdsByName = (lineItems: LineItem[], ...names: string[]): number[] =>
   lineItems
     .filter((l) => l.businessId === 1 && l.valueType === "amount" && names.includes(l.name))
     .map((l) => l.id);
 
-function monthlyAcrossUnits(liIds: number[], pids: number[]): number[] {
-  return pids.map((pid) =>
-    sum(CEPL_UNITS.flatMap((u) => liIds.map((lid) => frGet(u, pid, lid))))
+function monthlyAcrossUnits(idx: FrIndex, liIds: number[], periodIds: number[]): number[] {
+  return periodIds.map((pid) =>
+    sum(CEPL_UNITS.flatMap((u) => liIds.map((lid) => frGet(idx, u, pid, lid))))
   );
 }
 
-// 'HR Cost' is each sheet's salary + staff-welfare total, so the Salary /
-// Staff Welfare sub-rows are deliberately not added on top of it. GST is NOT
-// a category here: the 'GST Paid'/'GST Expenses' rows sit outside the sheets'
-// own Total Expenses (verified: including them makes the residual negative in
-// January), so GST is exported separately as a memo cash item below.
 export interface OutflowCategory { label: string; monthly: number[]; total: number }
 
 const CATEGORY_LINES: [string, string[]][] = [
@@ -68,13 +59,15 @@ export interface CashFlowYearData {
   gstMemo: { label: string; monthly: number[]; total: number };
 }
 
-function cashFlowForFY(fiscalYear: string): CashFlowYearData {
-  const pids = monthPeriodIds(fiscalYear);
-  const fab = FAB_BY_FY[fiscalYear];
-  const store = STORE_BY_FY[fiscalYear];
-  const crafts = CRAFT_KEYS.map((k) => deptFinancials(k, pids));
+export function computeCashFlowForFY(
+  idx: FrIndex, lineItems: LineItem[], fiscalYear: string, periodIds: number[]
+): CashFlowYearData {
+  const fab = computeFabMonthly(idx, periodIds);
+  const fabHasMonthlyDetail = fab.totalRevenue.some((v) => v != null);
+  const store = computeStoreYear(idx, fiscalYear, fyLabel(fiscalYear), periodIds);
+  const crafts = CRAFT_KEYS.map((k) => computeDeptFinancials(idx, k, periodIds));
 
-  const hasFullDetail = !!fab?.hasMonthlyDetail && !!store?.hasMonthlyDetail
+  const hasFullDetail = fabHasMonthlyDetail && store.hasMonthlyDetail
     && crafts.every((c) => c.revenue.some((v) => v != null));
 
   if (!hasFullDetail) {
@@ -93,7 +86,7 @@ function cashFlowForFY(fiscalYear: string): CashFlowYearData {
   const cumulative = net.reduce((acc: number[], v) => [...acc, (acc.at(-1) ?? 0) + v], [] as number[]);
 
   const outflowCategories: OutflowCategory[] = CATEGORY_LINES.map(([label, names]) => {
-    const monthly = monthlyAcrossUnits(liIdsByName(...names), pids);
+    const monthly = monthlyAcrossUnits(idx, liIdsByName(lineItems, ...names), periodIds);
     return { label, monthly, total: sum(monthly) };
   });
   // residual = reported total expenses minus the categorised lines
@@ -103,7 +96,7 @@ function cashFlowForFY(fiscalYear: string): CashFlowYearData {
 
   // GST memo - a real cash outflow, but reported outside the departmental
   // expense totals in the source sheets (pass-through, not a P&L cost)
-  const gstMonthly = monthlyAcrossUnits(liIdsByName("GST Paid", "GST Expenses"), pids);
+  const gstMonthly = monthlyAcrossUnits(idx, liIdsByName(lineItems, "GST Paid", "GST Expenses"), periodIds);
 
   return {
     fy: fiscalYear, label: fyLabel(fiscalYear), hasFullDetail: true,
@@ -113,17 +106,11 @@ function cashFlowForFY(fiscalYear: string): CashFlowYearData {
   };
 }
 
-export const CASHFLOW_BY_FY: Record<string, CashFlowYearData> = Object.fromEntries(
-  OVERVIEW_FYS.map((fy) => [fy, cashFlowForFY(fy)])
-);
-
-// Kept for aiContext.ts, which is scoped to the current fiscal year only.
-const CURRENT = CASHFLOW_BY_FY["2025-2026"];
-export const CASHFLOW = { months: CURRENT.months, inflows: CURRENT.inflows, outflows: CURRENT.outflows, net: CURRENT.net, cumulative: CURRENT.cumulative };
-export const OUTFLOW_CATEGORIES = CURRENT.outflowCategories;
-export const GST_MEMO = CURRENT.gstMemo;
-
 // ── What the source data cannot answer ──────────────────────────────────────
+// The source workbooks are P&L statements: no bank balance, receivables,
+// payables, loan schedule or opening cash, so true cash-position /
+// working-capital metrics are NOT derivable - the Cash Flow page and the AI
+// context builder surface this list instead of inventing numbers.
 export const CASH_GAPS = [
   "Opening / current bank balance",
   "Accounts receivable & collection timing",

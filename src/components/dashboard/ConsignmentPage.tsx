@@ -2,13 +2,17 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import ChartTooltip from "./ChartTooltip";
-import { CONSIGNMENT } from "@/data/storeData";
-import { L } from "@/data/core";
+import PageSpinner from "./PageSpinner";
+import { useConsignmentData } from "@/hooks/useConsignmentData";
+import { L } from "@/data/seriesKernel";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function ConsignmentPage() {
-  const [fyIdx, setFyIdx] = useState(CONSIGNMENT.length - 2); // default: current FY 25-26
-  const year = CONSIGNMENT[fyIdx];
+  const CONSIGNMENT = useConsignmentData();
+  const [fyIdx, setFyIdx] = useState<number | null>(null);
+  if (!CONSIGNMENT) return <PageSpinner />;
+  const activeIdx = fyIdx ?? CONSIGNMENT.length - 2; // default: current FY 25-26
+  const year = CONSIGNMENT[activeIdx];
   const consigned = year.vendors.filter((v) => v.group === "consignment");
   const otherBrands = year.vendors.filter((v) => v.group === "other_brands");
   const topVendors = year.vendors.slice(0, 10).map((v) => ({ name: v.name.split("/")[0].trim(), value: v.total }));
@@ -32,7 +36,7 @@ export default function ConsignmentPage() {
               key={y.fy}
               onClick={() => setFyIdx(i)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                i === fyIdx
+                i === activeIdx
                   ? "bg-primary text-primary-foreground border-primary"
                   : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}

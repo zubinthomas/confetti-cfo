@@ -1,33 +1,44 @@
-import React from "react";
+import React, { useMemo } from "react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import { FAB } from "@/data/ceplData";
-import { OUTLETS, OUTLET_WEEKS, EVENTS_BREAKDOWN, DURGA_PUJA, CAFE_EARLY_WEEKLY, CAFE_EARLY_WEEKS } from "@/data/fnbOutletData";
-import { MONTHS, L, sum } from "@/data/core";
+import PageSpinner from "@/components/dashboard/PageSpinner";
+import { useFabMonthly } from "@/hooks/useFabMonthly";
+import { useAllOutlets } from "@/hooks/useAllOutlets";
+import { useCafeEarlyWeekly } from "@/hooks/useCafeEarlyWeekly";
+import { MONTHS, L, sum } from "@/data/seriesKernel";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-const fyEvents = sum(FAB.eventCatering);
-const weeklyEvents = sum(OUTLETS.total.events);
-const earlyEvents = sum(CAFE_EARLY_WEEKLY.eventSales);
-const bestMonthIdx = FAB.eventCatering.indexOf(Math.max(...FAB.eventCatering));
-
-const monthly = MONTHS.map((m, i) => ({ month: m, "Event & Catering Revenue": FAB.eventCatering[i] }));
-const weekly = OUTLET_WEEKS.map((w, i) => ({ week: w.short, "Event Sales": OUTLETS.total.events[i] }));
-const earlyWeekly = CAFE_EARLY_WEEKS.map((w, i) => ({ week: w.short, "Event Sales": CAFE_EARLY_WEEKLY.eventSales[i] }));
-
-const kpis: KpiData[] = [
-  { label: "Event & Catering (FY)", value: `₹${L(fyEvents)}`, sub: `${((fyEvents / sum(FAB.totalRevenue)) * 100).toFixed(1)}% of F&B revenue`, status: "green" },
-  { label: "Event Sales (Sep–Jan)", value: `₹${L(weeklyEvents)}`, sub: "Weekly cafe workbook detail" },
-  { label: "Event Sales (Apr–Aug)", value: `₹${L(earlyEvents)}`, sub: "Whole-cafe weekly detail" },
-  { label: "Best Month", value: MONTHS[bestMonthIdx], sub: `₹${L(FAB.eventCatering[bestMonthIdx])}`, status: "green" },
-  { label: "Durga Puja 2025", value: `₹${L(DURGA_PUJA.totalSales)}`, sub: `₹${L(DURGA_PUJA.pl)} P&L over the two festival weeks`, status: "green" },
-];
-
 export default function EventsPage() {
+  const fab = useFabMonthly();
+  const outlets = useAllOutlets();
+  const early = useCafeEarlyWeekly();
+
+  const view = useMemo(() => {
+    if (!fab || !outlets || !early) return null;
+    const fyEvents = sum(fab.eventCatering);
+    const bestMonthIdx = fab.eventCatering.indexOf(Math.max(...fab.eventCatering));
+    return {
+      kpis: [
+        { label: "Event & Catering (FY)", value: `₹${L(fyEvents)}`, sub: `${((fyEvents / sum(fab.totalRevenue)) * 100).toFixed(1)}% of F&B revenue`, status: "green" },
+        { label: "Event Sales (Sep–Jan)", value: `₹${L(sum(outlets.outlets.total.events))}`, sub: "Weekly cafe workbook detail" },
+        { label: "Event Sales (Apr–Aug)", value: `₹${L(sum(early.weekly.eventSales))}`, sub: "Whole-cafe weekly detail" },
+        { label: "Best Month", value: MONTHS[bestMonthIdx], sub: `₹${L(fab.eventCatering[bestMonthIdx])}`, status: "green" },
+        { label: "Durga Puja 2025", value: `₹${L(outlets.durgaPuja.totalSales)}`, sub: `₹${L(outlets.durgaPuja.pl)} P&L over the two festival weeks`, status: "green" },
+      ] satisfies KpiData[],
+      monthly: MONTHS.map((m, i) => ({ month: m, "Event & Catering Revenue": fab.eventCatering[i] })),
+      weekly: outlets.weeks.map((w, i) => ({ week: w.short, "Event Sales": outlets.outlets.total.events[i] })),
+      earlyWeekly: early.weeks.map((w, i) => ({ week: w.short, "Event Sales": early.weekly.eventSales[i] })),
+      eventsBreakdown: outlets.eventsBreakdown,
+    };
+  }, [fab, outlets, early]);
+
+  if (!view) return <PageSpinner />;
+  const { kpis, monthly, weekly, earlyWeekly, eventsBreakdown: EVENTS_BREAKDOWN } = view;
+
   return (
     <div className="space-y-6">
       <div>

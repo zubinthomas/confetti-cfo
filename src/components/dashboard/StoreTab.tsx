@@ -2,23 +2,13 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
-import {
-  SIENNA_STORE, SIENNA_STORE_BY_FY, SIENNA_CATEGORIES_BY_FY, STORE_FYS,
-  STORE_HISTORY, STORE_APRIL_BY_FY,
-} from "@/data/storeData";
-import { STORE_BY_FY } from "@/data/ceplData";
-import { MONTHS, L, avg, maxIdx, minIdx, sum } from "@/data/core";
+import PageSpinner from "./PageSpinner";
+import { useStoreData, STORE_FYS } from "@/hooks/useStoreData";
+import { MONTHS, L, avg, maxIdx, minIdx, sum } from "@/data/seriesKernel";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-
-// FY26-27 is only Apr-May so far - the YoY view and its KPI/status items are
-// fixed to "FY 25-26 vs the newest in-progress year" regardless of which
-// year the page-level selector below is on, since that's what they're
-// actually answering (not "whichever year is selected").
-const FY2526 = SIENNA_STORE_BY_FY["2025-2026"];
-const FY27 = SIENNA_STORE.fy2627;
 
 const CHAN_COLORS: Record<string, string> = {
   "HP Store": "#3b82f6",
@@ -28,7 +18,8 @@ const CHAN_COLORS: Record<string, string> = {
 };
 const CAT_COLORS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#06b6d4","#84cc16","#f97316","#ec4899"];
 
-const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
+interface TooltipPayloadItem { color: string; name: string; value: number }
+const CustomTooltip = ({ active = false, payload = [], label = "" }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
@@ -42,30 +33,43 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   );
 };
 
-// YoY monthly comparison: FY25-26 vs FY26-27 (Apr, May only) - fixed, not
-// tied to the page-level year selector.
-const yoyMonthly = [
-  { month: "Apr", "FY 25-26": FY2526.channels["Total"][0], "FY 26-27": FY27.channels["Total"][0] },
-  { month: "May", "FY 25-26": FY2526.channels["Total"][1], "FY 26-27": FY27.channels["Total"][1] },
-];
-
-const hp27 = FY27.totals["HP Store"];
-const hp26Apr = FY2526.channels["HP Store"][0];
-const hp26May = FY2526.channels["HP Store"][1];
-
-// Is FY26-27's April the strongest April across every year with data? - also
-// fixed, always about the newest in-progress year.
-const fy2627April = FY27.channels["Total"][0];
-const priorAprils = Object.values(STORE_APRIL_BY_FY);
-const isStrongestApril = priorAprils.length > 0 && priorAprils.every((v) => fy2627April >= v);
-const bestPriorApril = priorAprils.length ? Math.max(...priorAprils) : 0;
-
 export default function StoreTab() {
+  const storeData = useStoreData();
   const [view, setView] = useState("channels");
   const [fy, setFy] = useState(STORE_FYS.at(-1)!);
-  const FY = SIENNA_STORE_BY_FY[fy];
-  const STORE = STORE_BY_FY[fy];
-  const CATEGORIES = SIENNA_CATEGORIES_BY_FY[fy];
+
+  if (!storeData) return <PageSpinner />;
+
+  const { siennaStore, storeSalesByFy, categoriesByFy, storeHistory, aprilByFy, storeFinancialsByFy } = storeData;
+
+  // FY26-27 is only Apr-May so far - the YoY view and its KPI/status items are
+  // fixed to "FY 25-26 vs the newest in-progress year" regardless of which
+  // year the page-level selector below is on, since that's what they're
+  // actually answering (not "whichever year is selected").
+  const FY2526 = storeSalesByFy["2025-2026"];
+  const FY27 = siennaStore.fy2627;
+
+  // YoY monthly comparison: FY25-26 vs FY26-27 (Apr, May only) - fixed, not
+  // tied to the page-level year selector.
+  const yoyMonthly = [
+    { month: "Apr", "FY 25-26": FY2526.channels["Total"][0], "FY 26-27": FY27.channels["Total"][0] },
+    { month: "May", "FY 25-26": FY2526.channels["Total"][1], "FY 26-27": FY27.channels["Total"][1] },
+  ];
+
+  const hp27 = FY27.totals["HP Store"];
+  const hp26Apr = FY2526.channels["HP Store"][0];
+  const hp26May = FY2526.channels["HP Store"][1];
+
+  // Is FY26-27's April the strongest April across every year with data? - also
+  // fixed, always about the newest in-progress year.
+  const fy2627April = FY27.channels["Total"][0];
+  const priorAprils = Object.values(aprilByFy);
+  const isStrongestApril = priorAprils.length > 0 && priorAprils.every((v) => fy2627April >= v);
+  const bestPriorApril = priorAprils.length ? Math.max(...priorAprils) : 0;
+
+  const FY = storeSalesByFy[fy];
+  const STORE = storeFinancialsByFy[fy];
+  const CATEGORIES = categoriesByFy[fy];
 
   const t = FY.totals;
   const pieData = Object.entries(t)
@@ -195,7 +199,7 @@ export default function StoreTab() {
                     : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
-                {SIENNA_STORE_BY_FY[y].label}
+                {storeSalesByFy[y].label}
               </button>
             ))}
           </div>
@@ -361,7 +365,7 @@ export default function StoreTab() {
 
           <DashCard title="Store Revenue - Full Multi-Year History">
             <div className="space-y-2">
-              {[...STORE_HISTORY].reverse().map(({ label, total, method }) => (
+              {[...storeHistory].reverse().map(({ label, total, method }) => (
                 <div key={label} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
                   <span className="text-sm text-muted-foreground">{label}</span>
                   <div className="flex items-center gap-2">

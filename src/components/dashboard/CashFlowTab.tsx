@@ -3,9 +3,11 @@ import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import ChartTooltip from "./ChartTooltip";
-import { CASHFLOW_BY_FY, CASH_GAPS, type CashFlowYearData } from "@/data/cashFlowData";
-import { OVERVIEW_FYS } from "@/data/ceplData";
-import { MONTHS, L, sum } from "@/data/core";
+import PageSpinner from "./PageSpinner";
+import { CASH_GAPS, type CashFlowYearData } from "@/data/cashFlowFinancials";
+import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useCashFlowYear } from "@/hooks/useCashFlowYear";
+import { MONTHS, L, sum, fyLabel } from "@/data/seriesKernel";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 import { Database } from "lucide-react";
@@ -16,8 +18,12 @@ import {
 const CAT_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4", "#10b981", "#ec4899", "#84cc16", "#94a3b8"];
 
 export default function CashFlowTab() {
-  const [fy, setFy] = useState(OVERVIEW_FYS.at(-1)!);
-  const CUR = CASHFLOW_BY_FY[fy];
+  const fys = useOverviewFiscalYears();
+  const [selectedFy, setSelectedFy] = useState<string | null>(null);
+  const fy = selectedFy ?? fys?.at(-1);
+  const CUR = useCashFlowYear(fy);
+
+  if (!fys || !fy || !CUR) return <PageSpinner />;
 
   return (
     <div className="space-y-6">
@@ -26,17 +32,17 @@ export default function CashFlowTab() {
           Group Money In / Money Out · {CUR.label} (P&L basis)
         </p>
         <div className="flex gap-1.5">
-          {OVERVIEW_FYS.map((y) => (
+          {fys.map((y) => (
             <button
               key={y}
-              onClick={() => setFy(y)}
+              onClick={() => setSelectedFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"
                   : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
-              {CASHFLOW_BY_FY[y].label}
+              {fyLabel(y)}
             </button>
           ))}
         </div>

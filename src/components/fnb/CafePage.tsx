@@ -1,27 +1,37 @@
-import React from "react";
+import React, { useMemo } from "react";
 import OutletPage, { MenuMixCard } from "./OutletPage";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import { menuMix, CAFE_EARLY_WEEKLY, CAFE_EARLY_WEEKS } from "@/data/fnbOutletData";
-import { L } from "@/data/core";
+import PageSpinner from "@/components/dashboard/PageSpinner";
+import { useOutletData } from "@/hooks/useOutletData";
+import { useCafeEarlyWeekly } from "@/hooks/useCafeEarlyWeekly";
+import { L } from "@/data/seriesKernel";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
 
-const preSplit = CAFE_EARLY_WEEKS.map((w, i) => ({
-  week: w.short,
-  Revenue: CAFE_EARLY_WEEKLY.totalSales[i],
-  "Net P&L": CAFE_EARLY_WEEKLY.pl[i],
-}));
-
 export default function CafePage() {
+  const outletData = useOutletData("bosarGhor");
+  const early = useCafeEarlyWeekly();
+
+  const preSplit = useMemo(() => {
+    if (!early) return null;
+    return early.weeks.map((w, i) => ({
+      week: w.short,
+      Revenue: early.weekly.totalSales[i],
+      "Net P&L": early.weekly.pl[i],
+    }));
+  }, [early]);
+
+  if (!preSplit) return <PageSpinner />;
+
   return (
     <OutletPage
       outletKey="bosarGhor"
       heading="Cafe (Bosar Ghor)"
       description="The cafe section - pizzas, sandwiches, coffee and cafe specials - reported in the source workbook as the Bosar Ghor outlet."
     >
-      <MenuMixCard items={menuMix("bosarGhor")} title="Menu Mix - Top Sellers (Sep 2025 onwards)" />
+      <MenuMixCard items={outletData?.menuMix ?? []} title="Menu Mix - Top Sellers (Sep 2025 onwards)" />
 
       <DashCard title="Whole-Cafe Weekly P&L - Apr–Aug 2025 (before the outlet split)">
         <ResponsiveContainer width="100%" height={220}>

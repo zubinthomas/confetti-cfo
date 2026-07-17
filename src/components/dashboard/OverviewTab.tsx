@@ -2,14 +2,18 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
-import { OVERVIEW_BY_FY, OVERVIEW_FYS, FNB_STORE_HISTORY } from "@/data/ceplData";
-import { MONTHS, L, lastValidIdx } from "@/data/core";
+import PageSpinner from "./PageSpinner";
+import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useOverviewYear } from "@/hooks/useOverviewYear";
+import { useFnbStoreHistory } from "@/hooks/useFnbStoreHistory";
+import { MONTHS, L, lastValidIdx, fyLabel } from "@/data/seriesKernel";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
 
-const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
+interface TooltipPayloadItem { color: string; name: string; value: number }
+const CustomTooltip = ({ active = false, payload = [], label = "" }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
@@ -23,23 +27,30 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   );
 };
 
-// Multi-year F&B + Store history (annual sales & P&L, from the workbook's
-// Overview sheet for FY21-22 … 24-25 and the department sheets for FY25-26)
-// - always shows every year, independent of the selector below.
-const historyData = FNB_STORE_HISTORY.map((y) => ({
-  year: y.label,
-  "F&B Revenue": y.fb.sales,
-  "Store Revenue": y.store.sales,
-  "F&B P&L": y.fb.pl,
-  "Store P&L": y.store.pl,
-}));
-
 export default function OverviewTab() {
-  const [fy, setFy] = useState(OVERVIEW_FYS.at(-1)!);
-  const CUR = OVERVIEW_BY_FY[fy];
-  const fyIdx = OVERVIEW_FYS.indexOf(fy);
-  const prevFY = fyIdx > 0 ? OVERVIEW_FYS[fyIdx - 1] : null;
-  const prevTotals = prevFY ? OVERVIEW_BY_FY[prevFY].totals : null;
+  const fys = useOverviewFiscalYears();
+  const [selectedFy, setSelectedFy] = useState<string | null>(null);
+  const fy = selectedFy ?? fys?.at(-1);
+  const fyIdx = fys && fy ? fys.indexOf(fy) : -1;
+  const prevFY = fys && fyIdx > 0 ? fys[fyIdx - 1] : null;
+  const overview = useOverviewYear(fy, prevFY);
+  const fnbStoreHistory = useFnbStoreHistory();
+
+  if (!fys || !fy || !overview || !fnbStoreHistory) return <PageSpinner />;
+
+  const CUR = overview.cur;
+  const prevTotals = overview.prev?.totals ?? null;
+
+  // Multi-year F&B + Store history (annual sales & P&L, from the workbook's
+  // Overview sheet for FY21-22 … 24-25 and the department sheets for FY25-26)
+  // - always shows every year, independent of the selector below.
+  const historyData = fnbStoreHistory.map((y) => ({
+    year: y.label,
+    "F&B Revenue": y.fb.sales,
+    "Store Revenue": y.store.sales,
+    "F&B P&L": y.fb.pl,
+    "Store P&L": y.store.pl,
+  }));
 
   const monthlyData = MONTHS.map((m, i) => ({
     month: m,
@@ -64,7 +75,7 @@ export default function OverviewTab() {
     {
       label: `Store Revenue (${CUR.label})`, value: L(CUR.totals.storeSales),
       sub: prevFY && storeGrowthVsPrevYear != null
-        ? `${storeGrowthVsPrevYear >= 0 ? "+" : ""}${storeGrowthVsPrevYear.toFixed(0)}% vs ${OVERVIEW_BY_FY[prevFY].label}`
+        ? `${storeGrowthVsPrevYear >= 0 ? "+" : ""}${storeGrowthVsPrevYear.toFixed(0)}% vs ${fyLabel(prevFY)}`
         : "No prior year to compare",
       status: "green",
     },
@@ -97,7 +108,7 @@ export default function OverviewTab() {
   }
   if (prevFY && storeGrowthVsPrevYear != null) {
     statusItems.push({
-      label: `Store revenue vs ${OVERVIEW_BY_FY[prevFY].label}`,
+      label: `Store revenue vs ${fyLabel(prevFY)}`,
       status: storeGrowthVsPrevYear >= 0 ? "green" : "amber",
       value: `${storeGrowthVsPrevYear >= 0 ? "+" : ""}${storeGrowthVsPrevYear.toFixed(0)}% YoY`,
     });
@@ -112,17 +123,17 @@ export default function OverviewTab() {
             Group Snapshot - {CUR.label}
           </p>
           <div className="flex gap-1.5">
-            {OVERVIEW_FYS.map((y) => (
+            {fys.map((y) => (
               <button
                 key={y}
-                onClick={() => setFy(y)}
+                onClick={() => setSelectedFy(y)}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                   y === fy
                     ? "bg-primary text-primary-foreground border-primary"
                     : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
-                {OVERVIEW_BY_FY[y].label}
+                {fyLabel(y)}
               </button>
             ))}
           </div>
@@ -187,10 +198,10 @@ export default function OverviewTab() {
           </BarChart>
         </ResponsiveContainer>
         <p className="text-xs text-muted-foreground mt-2">
-          F&B revenue grew {(((FNB_STORE_HISTORY.at(-1)!.fb.sales / FNB_STORE_HISTORY.at(-2)!.fb.sales) - 1) * 100) >= 0 ? "+" : ""}
-          {((((FNB_STORE_HISTORY.at(-1)!.fb.sales / FNB_STORE_HISTORY.at(-2)!.fb.sales) - 1) * 100)).toFixed(0)}% in FY 25-26 -
-          its first strongly profitable year (₹{L(FNB_STORE_HISTORY.at(-1)!.fb.pl)} net) after
-          {" "}₹{L(Math.abs(FNB_STORE_HISTORY.at(-2)!.fb.pl))} of losses in FY 24-25.
+          F&B revenue grew {(((fnbStoreHistory.at(-1)!.fb.sales / fnbStoreHistory.at(-2)!.fb.sales) - 1) * 100) >= 0 ? "+" : ""}
+          {((((fnbStoreHistory.at(-1)!.fb.sales / fnbStoreHistory.at(-2)!.fb.sales) - 1) * 100)).toFixed(0)}% in FY 25-26 -
+          its first strongly profitable year (₹{L(fnbStoreHistory.at(-1)!.fb.pl)} net) after
+          {" "}₹{L(Math.abs(fnbStoreHistory.at(-2)!.fb.pl))} of losses in FY 24-25.
         </p>
       </DashCard>
 

@@ -1,40 +1,50 @@
-import React from "react";
+import React, { useMemo } from "react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import { FAB } from "@/data/ceplData";
-import { OUTLETS, OUTLET_WEEKS, LIQUOR_MIX, CAFE_EARLY_WEEKLY } from "@/data/fnbOutletData";
-import { MONTHS, L, sum } from "@/data/core";
+import PageSpinner from "@/components/dashboard/PageSpinner";
+import { useFabMonthly } from "@/hooks/useFabMonthly";
+import { useAllOutlets } from "@/hooks/useAllOutlets";
+import { useCafeEarlyWeekly } from "@/hooks/useCafeEarlyWeekly";
+import { MONTHS, L, sum } from "@/data/seriesKernel";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
 
-const fyRetailBar = sum(FAB.retailBarSales);
-const weeklyLiquor = sum(OUTLETS.total.liquor);
-const aprAugLiquor = sum(CAFE_EARLY_WEEKLY.liquor);
-const liquorTotal = sum(LIQUOR_MIX.map((x) => x.value));
-
-const monthly = MONTHS.map((m, i) => ({ month: m, "Retail & Bar Sales": FAB.retailBarSales[i] }));
-
-const weekly = OUTLET_WEEKS.map((w, i) => ({
-  week: w.short,
-  "Dinning Room": OUTLETS.dinningRoom.liquor[i],
-  "Bosar Ghor": OUTLETS.bosarGhor.liquor[i],
-  Rannaghor: OUTLETS.rannaghor.liquor[i],
-}));
-
 const PIE_COLORS = ["#8b5cf6", "#f59e0b", "#10b981"];
 
-const kpis: KpiData[] = [
-  { label: "Retail & Bar Revenue (FY)", value: `₹${L(fyRetailBar)}`, sub: "F&B P&L line, FY 2025-26", status: "green" },
-  { label: "Liquor Sales (Sep–Jan)", value: `₹${L(weeklyLiquor)}`, sub: "Weekly outlet detail" },
-  { label: "Liquor Sales (Apr–Aug)", value: `₹${L(aprAugLiquor)}`, sub: "Whole-cafe weekly detail" },
-  { label: "Cocktail Share", value: liquorTotal ? `${((LIQUOR_MIX[0]?.value / liquorTotal) * 100).toFixed(0)}%` : "-", sub: "Of liquor revenue since Sep", status: "green" },
-];
-
 export default function BarPage() {
+  const fab = useFabMonthly();
+  const outlets = useAllOutlets();
+  const early = useCafeEarlyWeekly();
+
+  const view = useMemo(() => {
+    if (!fab || !outlets || !early) return null;
+    const { liquorMix, outlets: byOutlet, weeks } = outlets;
+    const liquorTotal = sum(liquorMix.map((x) => x.value));
+    return {
+      kpis: [
+        { label: "Retail & Bar Revenue (FY)", value: `₹${L(sum(fab.retailBarSales))}`, sub: "F&B P&L line, FY 2025-26", status: "green" },
+        { label: "Liquor Sales (Sep–Jan)", value: `₹${L(sum(byOutlet.total.liquor))}`, sub: "Weekly outlet detail" },
+        { label: "Liquor Sales (Apr–Aug)", value: `₹${L(sum(early.weekly.liquor))}`, sub: "Whole-cafe weekly detail" },
+        { label: "Cocktail Share", value: liquorTotal ? `${((liquorMix[0]?.value / liquorTotal) * 100).toFixed(0)}%` : "-", sub: "Of liquor revenue since Sep", status: "green" },
+      ] satisfies KpiData[],
+      monthly: MONTHS.map((m, i) => ({ month: m, "Retail & Bar Sales": fab.retailBarSales[i] })),
+      weekly: weeks.map((w, i) => ({
+        week: w.short,
+        "Dinning Room": byOutlet.dinningRoom.liquor[i],
+        "Bosar Ghor": byOutlet.bosarGhor.liquor[i],
+        Rannaghor: byOutlet.rannaghor.liquor[i],
+      })),
+      liquorMix,
+    };
+  }, [fab, outlets, early]);
+
+  if (!view) return <PageSpinner />;
+  const { kpis, monthly, weekly, liquorMix: LIQUOR_MIX } = view;
+
   return (
     <div className="space-y-6">
       <div>

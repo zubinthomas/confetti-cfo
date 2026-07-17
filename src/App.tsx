@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -14,12 +14,9 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import HR from '@/pages/HR';
 import Compliance from '@/pages/Compliance';
-import { get } from '@/api/http';
-import { setDataset, type Dataset } from '@/data/datasetStore';
+import { useReferenceData } from '@/hooks/useReferenceData';
 import PageNotFound from '@/lib/PageNotFound';
 
-// The dashboard (and the data adapters it imports) loads only after the
-// dataset has been fetched - see the note in src/data/datasetStore.ts.
 const DashboardApp = lazy(() => import('./DashboardApp'));
 
 const Splash = ({ message }: { message?: string }) => (
@@ -29,36 +26,22 @@ const Splash = ({ message }: { message?: string }) => (
   </div>
 );
 
-/** Fetches the dataset from the API, then mounts the dashboard chunk. */
-const DatasetGate = () => {
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [error, setError] = useState('');
+/** Fetches the small reference/dimension tables, then mounts the dashboard
+ * chunk. Each page fetches its own filtered financial data via hooks (see
+ * src/hooks/useFinancialRecords.ts et al.) once mounted. */
+const ReferenceDataGate = () => {
+  const { isLoading, error, refetch } = useReferenceData();
 
-  const load = useCallback(() => {
-    setState('loading');
-    get<Dataset>('/dataset')
-      .then((d) => {
-        setDataset(d);
-        setState('ready');
-      })
-      .catch((err: Error) => {
-        setError(err.message || 'Failed to load the dataset');
-        setState('error');
-      });
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  if (state === 'loading') return <Splash message="Loading financial data…" />;
-  if (state === 'error') {
+  if (isLoading) return <Splash message="Loading financial data…" />;
+  if (error) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-foreground font-medium">Couldn&rsquo;t load the financial dataset</p>
         <p className="text-sm text-muted-foreground max-w-md">
-          {error}. Make sure the API server is running (and seeded - <code>npm run db:seed</code> in <code>server/</code>).
+          {error.message}. Make sure the API server is running (and seeded - <code>npm run db:seed</code> in <code>server/</code>).
         </p>
         <button
-          onClick={load}
+          onClick={() => refetch()}
           className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
         >
           Retry
@@ -104,7 +87,7 @@ const AuthenticatedApp = () => {
         <Route path="/hr" element={<HR />} />
         <Route path="/compliance" element={<Compliance />} />
         {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
-        <Route path="/*" element={<DatasetGate />} />
+        <Route path="/*" element={<ReferenceDataGate />} />
       </Route>
     </Routes>
   );

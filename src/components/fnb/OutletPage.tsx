@@ -2,8 +2,10 @@ import React from "react";
 import KpiCard from "@/components/dashboard/KpiCard";
 import DashCard from "@/components/dashboard/DashCard";
 import ChartTooltip from "@/components/dashboard/ChartTooltip";
-import { OUTLETS, OUTLET_WEEKS, type OutletKey } from "@/data/fnbOutletData";
-import { L, sum } from "@/data/core";
+import PageSpinner from "@/components/dashboard/PageSpinner";
+import { type OutletKey } from "@/data/outletData";
+import { L, sum } from "@/data/seriesKernel";
+import { useOutletData } from "@/hooks/useOutletData";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
   ComposedChart, AreaChart, Area, BarChart, Bar, Line,
@@ -18,10 +20,13 @@ interface OutletPageProps {
 }
 
 export default function OutletPage({ outletKey, heading, description, children }: OutletPageProps) {
-  const data = OUTLETS[outletKey];
+  const outletData = useOutletData(outletKey);
+  if (!outletData) return <PageSpinner />;
+  const { weeks, outlet: data, total } = outletData;
+
   const totalRevenue = sum(data.totalSales);
   const totalPL = sum(data.pl);
-  const allRevenue = sum(OUTLETS.total.totalSales);
+  const allRevenue = sum(total.totalSales);
   const share = allRevenue ? (totalRevenue / allRevenue) * 100 : 0;
   const margin = totalRevenue ? (totalPL / totalRevenue) * 100 : 0;
   const weeksWithData = data.totalSales.filter((v) => v != null).length;
@@ -33,16 +38,16 @@ export default function OutletPage({ outletKey, heading, description, children }
     { label: "Avg Weekly Revenue", value: `₹${L(weeksWithData ? totalRevenue / weeksWithData : 0)}` },
     { label: "Net P&L (Sep–Jan)", value: `₹${L(totalPL)}`, sub: `${margin.toFixed(1)}% margin`, status: totalPL >= 0 ? "green" : "red" },
     { label: "Share of F&B outlets", value: `${share.toFixed(1)}%`, sub: "Of all-outlet revenue" },
-    { label: "Best Week", value: bestIdx >= 0 ? OUTLET_WEEKS[bestIdx].short : "-", sub: bestIdx >= 0 ? `₹${L(data.totalSales[bestIdx])}` : "" , status: "green" },
+    { label: "Best Week", value: bestIdx >= 0 ? weeks[bestIdx].short : "-", sub: bestIdx >= 0 ? `₹${L(data.totalSales[bestIdx])}` : "" , status: "green" },
   ];
 
-  const weekly = OUTLET_WEEKS.map((w, i) => ({
+  const weekly = weeks.map((w, i) => ({
     week: w.short,
     Revenue: data.totalSales[i],
     "Net P&L": data.pl[i],
   }));
 
-  const streams = OUTLET_WEEKS.map((w, i) => ({
+  const streams = weeks.map((w, i) => ({
     week: w.short,
     "Inhouse Menu": data.inhouse[i],
     Liquor: data.liquor[i],

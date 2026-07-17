@@ -1,5 +1,5 @@
 import React from "react";
-import { L } from "@/data/core";
+import { L } from "@/data/seriesKernel";
 
 interface TooltipEntry { name?: string | number; value?: number; color?: string }
 interface ChartTooltipProps {
