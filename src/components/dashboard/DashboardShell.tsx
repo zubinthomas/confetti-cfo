@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
+import PageSpinner from "./PageSpinner";
 import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
@@ -206,7 +207,13 @@ export default function DashboardShell() {
           </div>
         </header>
         <main className="px-4 sm:px-6 py-6 max-w-7xl">
-          <Outlet />
+          {/* Only AIQueriesTab/ImportPage are still lazy-loaded (see
+              DashboardApp.tsx) - this boundary keeps the sidebar/header
+              mounted during their chunk load instead of blanking the whole
+              viewport. */}
+          <Suspense fallback={<PageSpinner />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

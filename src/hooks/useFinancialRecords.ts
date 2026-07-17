@@ -23,6 +23,10 @@ export function useFinancialRecords(filters: FinancialRecordFilters) {
     // Avoid an accidental unfiltered full-table fetch - callers must supply
     // at least one filter dimension.
     enabled: hasAnyFilter(key),
-    staleTime: 5 * 60 * 1000,
+    // This data only changes via an explicit Import-page commit, which does
+    // a full page reload (see ImportPage.tsx's onCommit) - so caching for
+    // the whole session, like useReferenceData, is safe.
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 }

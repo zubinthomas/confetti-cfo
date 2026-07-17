@@ -424,7 +424,12 @@ export default function ImportPage() {
     try {
       await commitBatch(id);
       setCommitted(true);
-      // the dashboards' dataset is loaded once at startup - reload to pick up the import
+      // The financial-records/sales-records/consignment-records React Query
+      // caches use staleTime/gcTime: Infinity (see useFinancialRecords.ts et
+      // al.) on the assumption that this reload is the only way that data
+      // changes - it wipes the whole in-memory cache. If this reload is ever
+      // removed, those three query keys need explicit
+      // queryClient.invalidateQueries() calls instead.
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Commit failed");

@@ -18,6 +18,10 @@ export function useConsignmentRecords(filters: ConsignmentRecordFilters) {
     queryKey: ['consignment-records', key],
     queryFn: () => get<ConsignmentRecord[]>(`/consignment-records${toQueryString(key)}`),
     enabled: hasAnyFilter(key),
-    staleTime: 5 * 60 * 1000,
+    // This data only changes via an explicit Import-page commit, which does
+    // a full page reload (see ImportPage.tsx's onCommit) - so caching for
+    // the whole session, like useReferenceData, is safe.
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 }
