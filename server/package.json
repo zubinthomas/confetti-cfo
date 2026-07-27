@@ -14,7 +14,19 @@
     "user:create": "node db/users.ts create",
     "user:list": "node db/users.ts list",
     "user:delete": "node db/users.ts delete",
-    "user:password": "node db/users.ts password"
+    "user:password": "node db/users.ts password",
+    "user:permissions": "node db/roles.ts user:permissions",
+    "role:create": "node db/roles.ts role:create",
+    "role:list": "node db/roles.ts role:list",
+    "role:delete": "node db/roles.ts role:delete",
+    "role:set-rank": "node db/roles.ts role:set-rank",
+    "role:assign": "node db/roles.ts role:assign",
+    "role:unassign": "node db/roles.ts role:unassign",
+    "role:show": "node db/roles.ts role:show",
+    "permission:list": "node db/roles.ts permission:list",
+    "permission:grant": "node db/roles.ts permission:grant",
+    "permission:deny": "node db/roles.ts permission:deny",
+    "permission:clear": "node db/roles.ts permission:clear"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

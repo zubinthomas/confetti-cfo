@@ -10,6 +10,8 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { db, ready, schema, close } from './client.ts';
 
+const ADMIN_ROLE = 'Admin';
+
 const USAGE = `usage: node db/users.ts <command>   (stop the dev server first)
 
   create <email> [full name] [--password <pw>]   add a user
@@ -97,6 +99,7 @@ switch (command) {
   case 'create': {
     const mail = requireEmail();
     if (await findUser(mail)) fail(`a user with email ${mail} already exists`);
+    const isFirstUser = (await db.select().from(schema.users)).length === 0;
     const passwordHash = await getPassword();
     const [u] = await db.insert(schema.users).values({
       email: mail,
@@ -105,6 +108,16 @@ switch (command) {
       createdAt: new Date().toISOString(),
     }).returning();
     console.log(`created user #${u.id} ${u.email}${u.fullName ? ` (${u.fullName})` : ''}`);
+    // The very first user ever created is auto-assigned Admin, so a fresh
+    // `npm run user:create` isn't locked out of their own app once RBAC
+    // enforcement is on. Every subsequent user needs an explicit role:assign.
+    if (isFirstUser) {
+      const [admin] = await db.select().from(schema.roles).where(eq(schema.roles.name, ADMIN_ROLE));
+      if (admin) {
+        await db.insert(schema.userRoles).values({ userId: u.id, roleId: admin.id });
+        console.log(`(first user - assigned role ${ADMIN_ROLE})`);
+      }
+    }
     break;
   }
   case 'list': {

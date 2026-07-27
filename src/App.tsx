@@ -3,11 +3,12 @@ import { ThemeProvider } from 'next-themes';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import AccessRestricted from '@/components/AccessRestricted';
 import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import RequirePermission from '@/components/RequirePermission';
 import { Navigate } from 'react-router-dom';
 import Login from '@/pages/Login';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -56,23 +57,29 @@ const ReferenceDataGate = () => {
   );
 };
 
+// Routes reachable while logged out - the auth_required redirect below must
+// never fire on these, or visiting /login while logged out would redirect to
+// /login, re-run the same failed auth check, and redirect again forever.
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const location = useLocation();
+  const isPublicPath = PUBLIC_PATHS.includes(location.pathname);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return <Splash />;
   }
 
-  // Handle authentication errors
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
+  // Handle authentication errors (not on the public auth pages themselves)
+  if (authError && !isPublicPath) {
+    if (authError.type === 'auth_required') {
       // Redirect to login automatically
       navigateToLogin();
       return null;
     }
+    return <AccessRestricted />;
   }
 
   // Render the main app
@@ -84,8 +91,18 @@ const AuthenticatedApp = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route path="/hr" element={<HR />} />
-        <Route path="/compliance" element={<Compliance />} />
+        {/* Coarse "can enter the module at all" gate - each tab inside HR.tsx
+            additionally self-checks its own specific permission via can(). */}
+        <Route element={<RequirePermission mode="any" requires={[
+          { resource: 'Employee', action: 'read' },
+          { resource: 'LeaveRequest', action: 'read' },
+          { resource: 'Recruitment', action: 'read' },
+        ]} />}>
+          <Route path="/hr" element={<HR />} />
+        </Route>
+        <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
+          <Route path="/compliance" element={<Compliance />} />
+        </Route>
         {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
         <Route path="/*" element={<ReferenceDataGate />} />
       </Route>

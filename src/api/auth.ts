@@ -1,10 +1,18 @@
 // Auth calls against the Express server (server/routes/auth.ts).
-import { get, post, setToken, clearToken, API_BASE } from "./http";
+import { get, post, setToken, clearToken } from "./http";
+
+export interface Role {
+  id: number;
+  name: string;
+  rank: number;
+}
 
 export interface User {
-  id: string;
+  id: number;
   email: string;
   full_name: string;
+  roles: Role[];
+  permissions: string[]; // "Resource:action", e.g. "Employee:write"
 }
 
 export const auth = {
@@ -23,10 +31,6 @@ export const auth = {
   },
 
   resendOtp: (email: string) => post("/auth/resend-otp", { email }),
-
-  loginWithProvider: (provider: string, redirect: string): void => {
-    window.location.href = `${API_BASE}/auth/${provider}?redirect=${encodeURIComponent(redirect)}`;
-  },
 
   me: () => get<User>("/auth/me"),
 

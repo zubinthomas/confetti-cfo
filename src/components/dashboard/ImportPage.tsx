@@ -15,6 +15,7 @@ import {
   RefreshCw, Trash2, ExternalLink, FileSpreadsheet, Link2, Filter,
   ChevronLeft, ChevronRight, Eye,
 } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 
 const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   cepl: "CEPL P&L",
@@ -378,6 +379,9 @@ const localDay = (iso: string) => {
 };
 
 export default function ImportPage() {
+  const { can } = useAuth();
+  const canWrite = can("Import", "write");
+  const canDelete = can("Import", "delete");
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [rejected, setRejected] = useState<RejectedUpload | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -475,29 +479,31 @@ export default function ImportPage() {
         Data - Import
       </p>
 
-      <DashCard>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <label className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer
-            ${uploading ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground hover:opacity-90"}`}>
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {uploading ? "Validating…" : "Upload workbook (.xlsx)"}
-            <input
-              ref={fileRef} type="file" accept=".xlsx" className="hidden" disabled={uploading}
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-            />
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Accepts the CEPL P&L, Cafe Weekly P&L and Sienna Store Sales workbooks. Uploads are
-            validated and previewed first - nothing changes until you commit.
-          </p>
-        </div>
-        {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
-        {committed && (
-          <p className="flex items-center gap-2 text-sm text-emerald-600 mt-3">
-            <CheckCircle2 className="w-4 h-4" /> Imported - reloading the dashboards…
-          </p>
-        )}
-      </DashCard>
+      {canWrite && (
+        <DashCard>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <label className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer
+              ${uploading ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground hover:opacity-90"}`}>
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {uploading ? "Validating…" : "Upload workbook (.xlsx)"}
+              <input
+                ref={fileRef} type="file" accept=".xlsx" className="hidden" disabled={uploading}
+                onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Accepts the CEPL P&L, Cafe Weekly P&L and Sienna Store Sales workbooks. Uploads are
+              validated and previewed first - nothing changes until you commit.
+            </p>
+          </div>
+          {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
+          {committed && (
+            <p className="flex items-center gap-2 text-sm text-emerald-600 mt-3">
+              <CheckCircle2 className="w-4 h-4" /> Imported - reloading the dashboards…
+            </p>
+          )}
+        </DashCard>
+      )}
 
       {rejected && (
         <DashCard
@@ -630,23 +636,27 @@ export default function ImportPage() {
               <IssueList issues={b.issues} />
             </div>
           </div>
-          {b.status === "preview" && (
+          {b.status === "preview" && (canWrite || canDelete) && (
             <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => onCommit(b.id)}
-                disabled={busyId === b.id || b.issues.some((i) => i.level === "error")}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
-              >
-                {busyId === b.id ? "Committing…" : "Commit import"}
-              </button>
-              <button
-                onClick={() => onDiscard(b.id)}
-                disabled={busyId === b.id}
-                className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
-              >
-                Discard
-              </button>
-              {b.issues.some((i) => i.level === "error") && (
+              {canWrite && (
+                <button
+                  onClick={() => onCommit(b.id)}
+                  disabled={busyId === b.id || b.issues.some((i) => i.level === "error")}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
+                >
+                  {busyId === b.id ? "Committing…" : "Commit import"}
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  onClick={() => onDiscard(b.id)}
+                  disabled={busyId === b.id}
+                  className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  Discard
+                </button>
+              )}
+              {canWrite && b.issues.some((i) => i.level === "error") && (
                 <span className="text-xs text-red-500 self-center">Fix the errors above and re-upload to commit.</span>
               )}
             </div>

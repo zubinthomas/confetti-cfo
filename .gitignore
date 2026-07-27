@@ -4,6 +4,7 @@ dist
 data-sources
 test-results
 playwright-report
+tests/e2e/.auth-state.json
 .vscode
 keys
 .env

@@ -3,7 +3,7 @@
 // preview batches handled by the /api/import commit/discard flow.
 import { Router } from 'express';
 import { and, desc, eq } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 import { db, ready, schema } from '../db/client.ts';
 import {
   extractSpreadsheetId, resolveAccessMethod, serviceAccountEmail, SheetAccessError,
@@ -16,13 +16,13 @@ const router = Router();
 router.use(authMiddleware);
 
 /** GET /api/sheets/config - lets the UI show the "share with…" hint. */
-router.get('/config', (_req, res) => {
+router.get('/config', requirePermission('SheetSource', 'read'), (_req, res) => {
   res.json({ serviceAccountEmail: serviceAccountEmail() });
 });
 
 /** GET /api/sheets/available - spreadsheets the service account can see,
  *  flagged with whether they are already connected as a source. */
-router.get('/available', async (_req, res) => {
+router.get('/available', requirePermission('SheetSource', 'read'), async (_req, res) => {
   try {
     await ready();
     const [files, sources] = await Promise.all([
@@ -43,14 +43,14 @@ router.get('/available', async (_req, res) => {
 });
 
 /** GET /api/sheets/sources - newest first. */
-router.get('/sources', async (_req, res) => {
+router.get('/sources', requirePermission('SheetSource', 'read'), async (_req, res) => {
   await ready();
   const rows = await db.select().from(schema.sheetSources).orderBy(desc(schema.sheetSources.id));
   res.json(rows);
 });
 
 /** POST /api/sheets/sources { url, label? } - validate access, save, sync now. */
-router.post('/sources', async (req, res) => {
+router.post('/sources', requirePermission('SheetSource', 'write'), async (req, res) => {
   try {
     const { url, label } = req.body as { url?: string; label?: string };
     if (!url) return res.status(400).json({ message: 'No sheet URL provided' });
@@ -88,7 +88,7 @@ router.post('/sources', async (req, res) => {
 const SYNC_MODES = ['auto', 'manual', 'paused'] as const;
 
 /** PATCH /api/sheets/sources/:id { label?, syncMode? } */
-router.patch('/sources/:id', async (req, res) => {
+router.patch('/sources/:id', requirePermission('SheetSource', 'write'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
   const { label, syncMode } = req.body as { label?: string; syncMode?: string };
@@ -108,7 +108,7 @@ router.patch('/sources/:id', async (req, res) => {
 });
 
 /** DELETE /api/sheets/sources/:id - pending previews are discarded; committed batches keep history. */
-router.delete('/sources/:id', async (req, res) => {
+router.delete('/sources/:id', requirePermission('SheetSource', 'delete'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
   const [source] = await db.select().from(schema.sheetSources).where(eq(schema.sheetSources.id, id));
@@ -124,7 +124,7 @@ router.delete('/sources/:id', async (req, res) => {
 });
 
 /** POST /api/sheets/sources/:id/sync - sync errors land on the source row, not as HTTP errors. */
-router.post('/sources/:id/sync', async (req, res) => {
+router.post('/sources/:id/sync', requirePermission('SheetSource', 'write'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
   const [source] = await db.select().from(schema.sheetSources).where(eq(schema.sheetSources.id, id));

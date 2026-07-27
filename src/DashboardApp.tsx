@@ -13,6 +13,7 @@
 import React, { lazy, useEffect } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import PageNotFound from '@/lib/PageNotFound';
+import RequirePermission from '@/components/RequirePermission';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import OverviewTab from '@/components/dashboard/OverviewTab';
 import SienaTab from '@/components/dashboard/SienaTab';
@@ -53,23 +54,48 @@ export default function DashboardApp() {
   return (
     <Routes>
       <Route element={<DashboardShell />}>
-        <Route index element={<OverviewTab />} />
-        <Route path="fnb" element={<SienaTab />} />
-        <Route path="fnb/cafe" element={<CafePage />} />
-        <Route path="fnb/restaurant" element={<RestaurantPage />} />
-        <Route path="fnb/bar" element={<BarPage />} />
-        <Route path="fnb/events" element={<EventsPage />} />
-        <Route path="fnb/rannaghor" element={<RannaghorPage />} />
-        <Route path="store" element={<StoreTab />} />
-        <Route path="store/consignment" element={<ConsignmentPage />} />
-        <Route path="crafts/pottery" element={<CraftDeptPage deptKey="pottery" heading="Pottery Division" />} />
-        <Route path="crafts/batik" element={<CraftDeptPage deptKey="batik" heading="Batik Division" />} />
-        <Route path="crafts/stitching" element={<CraftDeptPage deptKey="stitching" heading="Stitching Division" />} />
-        <Route path="crafts/trading-items" element={<CraftDeptPage deptKey="tradingItems" heading="Trading Items" />} />
-        <Route path="cashflow" element={<CashFlowTab />} />
-        <Route path="ai" element={<AIQueriesTab />} />
-        <Route path="data/import" element={<ImportPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route element={<RequirePermission requires={[{ resource: 'FinancialRecord', action: 'read' }]} />}>
+          <Route index element={<OverviewTab />} />
+          <Route path="fnb" element={<SienaTab />} />
+          <Route path="fnb/cafe" element={<CafePage />} />
+          <Route path="fnb/restaurant" element={<RestaurantPage />} />
+          <Route path="fnb/bar" element={<BarPage />} />
+          <Route path="fnb/events" element={<EventsPage />} />
+          <Route path="fnb/rannaghor" element={<RannaghorPage />} />
+          <Route path="crafts/pottery" element={<CraftDeptPage deptKey="pottery" heading="Pottery Division" />} />
+          <Route path="crafts/batik" element={<CraftDeptPage deptKey="batik" heading="Batik Division" />} />
+          <Route path="crafts/stitching" element={<CraftDeptPage deptKey="stitching" heading="Stitching Division" />} />
+          <Route path="crafts/trading-items" element={<CraftDeptPage deptKey="tradingItems" heading="Trading Items" />} />
+          <Route path="cashflow" element={<CashFlowTab />} />
+        </Route>
+
+        <Route element={<RequirePermission mode="all" requires={[
+          { resource: 'FinancialRecord', action: 'read' },
+          { resource: 'SalesRecord', action: 'read' },
+        ]} />}>
+          <Route path="store" element={<StoreTab />} />
+        </Route>
+
+        <Route element={<RequirePermission requires={[{ resource: 'ConsignmentRecord', action: 'read' }]} />}>
+          <Route path="store/consignment" element={<ConsignmentPage />} />
+        </Route>
+
+        <Route element={<RequirePermission requires={[{ resource: 'Integration', action: 'read' }]} />}>
+          <Route path="ai" element={<AIQueriesTab />} />
+        </Route>
+
+        <Route element={<RequirePermission mode="any" requires={[
+          { resource: 'Import', action: 'read' },
+          { resource: 'SheetSource', action: 'read' },
+        ]} />}>
+          <Route path="data/import" element={<ImportPage />} />
+        </Route>
+
+        <Route element={<RequirePermission requires={[{ resource: 'Settings', action: 'read' }]} />}>
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+
+        {/* No backend resource is read on either page - open to any authenticated user */}
         <Route path="settings/user" element={<UserSettingsPage />} />
         <Route path="ops/:section" element={<OpsPage />} />
       </Route>

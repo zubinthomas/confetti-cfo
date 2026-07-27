@@ -119,7 +119,7 @@ export const datasetMeta = pgTable('dataset_meta', {
   meta: jsonb('meta').notNull(),
 });
 
-// ── Users (managed via the db/users.ts CLI; dormant until auth is enabled) ──
+// ── Users (created via the db/users.ts CLI or by accepting an invite) ──────
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: text('email').notNull(),
@@ -128,6 +128,47 @@ export const users = pgTable('users', {
   createdAt: text('created_at').notNull(),  // ISO-8601
 }, (t) => [
   uniqueIndex('users_email').on(t.email),
+]);
+
+// ── RBAC (roles composed of allow/deny permission grants, ranked to resolve
+// conflicts when a user holds multiple roles - see server/db/permissions.ts) ─
+export const permissionEffectEnum = pgEnum('permission_effect', ['allow', 'deny']);
+
+export const roles = pgTable('roles', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  rank: integer('rank').notNull(), // higher rank wins conflicts; must be unique
+  createdAt: text('created_at').notNull(), // ISO-8601
+}, (t) => [
+  uniqueIndex('roles_name').on(t.name),
+  uniqueIndex('roles_rank').on(t.rank),
+]);
+
+// Fixed catalog owned by code (server/db/permissions.ts), upserted on boot -
+// this table only exists so role_permissions has a real FK target.
+export const permissions = pgTable('permissions', {
+  id: serial('id').primaryKey(),
+  resource: text('resource').notNull(),
+  action: text('action').notNull(), // read | write | delete
+}, (t) => [
+  uniqueIndex('permissions_resource_action').on(t.resource, t.action),
+]);
+
+export const rolePermissions = pgTable('role_permissions', {
+  id: serial('id').primaryKey(),
+  roleId: integer('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  permissionId: integer('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  effect: permissionEffectEnum('effect').notNull(),
+}, (t) => [
+  uniqueIndex('role_permissions_role_permission').on(t.roleId, t.permissionId),
+]);
+
+export const userRoles = pgTable('user_roles', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  roleId: integer('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+}, (t) => [
+  uniqueIndex('user_roles_user_role').on(t.userId, t.roleId),
 ]);
 
 // ── Settings (mirrors server/.env; read-only via the API for now - see

@@ -57,9 +57,17 @@ const client = new PGlite(DATA_DIR);
 export const db = drizzle(client, { schema });
 
 let migrated: Promise<void> | null = null;
-/** Apply pending migrations once per process before first use. */
+/** Apply pending migrations once per process before first use, then seed the
+ *  RBAC permission catalog and default roles (deterministic and code-only,
+ *  so - unlike the dataset/settings seeds - this runs unconditionally). The
+ *  seeder is dynamically imported to avoid a circular import with
+ *  db/permissions.ts, which itself imports { db, ready, schema } from here. */
 export function ready(): Promise<void> {
-  migrated ??= migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  migrated ??= migrate(db, { migrationsFolder: MIGRATIONS_DIR })
+    .then(async () => {
+      const { seedPermissionsCatalog } = await import('./permissions.ts');
+      await seedPermissionsCatalog();
+    });
   return migrated;
 }
 

@@ -4,12 +4,16 @@ import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "./FormField";
+import { useAuth } from "@/lib/AuthContext";
 
 const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Siena: "#f59e0b", Admin: "#8b5cf6" };
 
 const EMPTY = { full_name: "", employee_id: "", division: "Ceramics", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "" };
 
 export default function HeadcountTab() {
+  const { can } = useAuth();
+  const canWrite = can("Employee", "write");
+  const canDelete = can("Employee", "delete");
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -77,12 +81,14 @@ export default function HeadcountTab() {
       </div>
 
       <DashCard title="Employee Directory">
-        <div className="flex justify-end mb-3">
-          <button onClick={() => { setForm(EMPTY); setShowForm(true); }}
-            className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition">
-            <Plus className="w-4 h-4" /> Add Employee
-          </button>
-        </div>
+        {canWrite && (
+          <div className="flex justify-end mb-3">
+            <button onClick={() => { setForm(EMPTY); setShowForm(true); }}
+              className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition">
+              <Plus className="w-4 h-4" /> Add Employee
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
@@ -116,8 +122,8 @@ export default function HeadcountTab() {
                     <td className="py-2.5 pr-4 text-muted-foreground">₹{(emp.monthly_salary||0).toLocaleString()}</td>
                     <td className="py-2.5">
                       <div className="flex gap-2">
-                        <button onClick={() => { setForm({ ...emp }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>
-                        <button onClick={() => remove(emp.id)} className="text-xs text-red-500 hover:underline">Delete</button>
+                        {canWrite && <button onClick={() => { setForm({ ...emp }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>}
+                        {canDelete && <button onClick={() => remove(emp.id)} className="text-xs text-red-500 hover:underline">Delete</button>}
                       </div>
                     </td>
                   </tr>

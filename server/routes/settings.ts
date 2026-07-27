@@ -2,7 +2,7 @@
 // table doesn't drive runtime config yet, so edits here wouldn't do anything;
 // re-enable once the app actually reads from it instead of process.env.
 import { Router } from 'express';
-import { authMiddleware } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 import { listSettings, getSetting } from '../db/settings.ts';
 
 const router = Router();
@@ -19,13 +19,13 @@ function mask(row: NonNullable<SettingRow>) {
 }
 
 /** GET /api/settings - the full catalog, in category order. */
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('Settings', 'read'), async (_req, res) => {
   const rows = await listSettings();
   res.json(rows.map(mask));
 });
 
 /** GET /api/settings/:key */
-router.get('/:key', async (req, res) => {
+router.get('/:key', requirePermission('Settings', 'read'), async (req, res) => {
   const row = await getSetting(req.params.key.toUpperCase());
   if (!row) return res.status(404).json({ message: 'Not found' });
   res.json(mask(row));

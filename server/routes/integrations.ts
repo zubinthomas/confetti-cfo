@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
-import { authMiddleware } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
@@ -30,7 +30,7 @@ const upload = multer({
  * POST /api/integrations/upload
  * Returns { file_url } for the uploaded file.
  */
-router.post('/upload', upload.single('file'), (req, res) => {
+router.post('/upload', requirePermission('Integration', 'write'), upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file provided' });
   const serverUrl = process.env.SERVER_URL || 'http://localhost:3001';
   const file_url = `${serverUrl}/uploads/${req.file.filename}`;
@@ -66,7 +66,7 @@ function resolveMaxTokens(): number | undefined {
  * to let the model use as much as it needs (OpenAI/OpenRouter only - Anthropic
  * falls back to ANTHROPIC_UNLIMITED_MAX_TOKENS since it requires a numeric cap).
  */
-router.post('/llm', async (req, res) => {
+router.post('/llm', requirePermission('Integration', 'read'), async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ message: 'prompt is required' });

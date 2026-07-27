@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { listFinancialRecords } from '../db/financialRecords.ts';
-import { authMiddleware } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 import { csvInts, csvStrs } from './queryFilters.ts';
 
 const router = Router();
@@ -10,7 +10,7 @@ router.use(authMiddleware);
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** GET /api/financial-records?businessUnitId=1,2&fiscalYear=2025-2026&periodType=month */
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('FinancialRecord', 'read'), async (req, res) => {
   try {
     const records = await listFinancialRecords({
       businessUnitId: csvInts(req.query.businessUnitId),

@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { eq, desc } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 import { db, ready, schema } from '../db/client.ts';
 import { loadWorkbook } from '../import/xlsx.ts';
 import { detectKind, PARSERS } from '../import/detect.ts';
@@ -30,7 +30,7 @@ export const batchSummary = (b: typeof schema.importBatches.$inferSelect) => ({
 });
 
 /** POST /api/import/upload - parse + validate a workbook, store a preview batch. */
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', requirePermission('Import', 'write'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file provided' });
     await ready();
@@ -73,14 +73,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 /** GET /api/import/batches - newest first, without payloads. */
-router.get('/batches', async (_req, res) => {
+router.get('/batches', requirePermission('Import', 'read'), async (_req, res) => {
   await ready();
   const rows = await db.select().from(schema.importBatches).orderBy(desc(schema.importBatches.id));
   res.json(rows.map(batchSummary));
 });
 
 /** POST /api/import/:id/commit */
-router.post('/:id/commit', async (req, res) => {
+router.post('/:id/commit', requirePermission('Import', 'write'), async (req, res) => {
   try {
     await ready();
     const id = Number(req.params.id);
@@ -107,7 +107,7 @@ router.post('/:id/commit', async (req, res) => {
 });
 
 /** GET /api/import/:id/details - full row-level change details for one batch. */
-router.get('/:id/details', async (req, res) => {
+router.get('/:id/details', requirePermission('Import', 'read'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
   const [batch] = await db.select({ details: schema.importBatches.details })
@@ -117,7 +117,7 @@ router.get('/:id/details', async (req, res) => {
 });
 
 /** POST /api/import/:id/discard */
-router.post('/:id/discard', async (req, res) => {
+router.post('/:id/discard', requirePermission('Import', 'delete'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
   const [batch] = await db.select().from(schema.importBatches).where(eq(schema.importBatches.id, id));
