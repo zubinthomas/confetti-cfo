@@ -21,17 +21,6 @@ export const auth = {
     setToken(access_token);
   },
 
-  register: (data: { email: string; password: string; full_name?: string }) =>
-    post("/auth/register", data),
-
-  verifyOtp: async ({ email, otpCode }: { email: string; otpCode: string }) => {
-    const result = await post<{ access_token?: string }>("/auth/verify-otp", { email, otpCode });
-    if (result.access_token) setToken(result.access_token);
-    return result;
-  },
-
-  resendOtp: (email: string) => post("/auth/resend-otp", { email }),
-
   me: () => get<User>("/auth/me"),
 
   logout: (redirectUrl?: string): void => {

@@ -15,14 +15,14 @@ import { db, ready, schema } from './client.ts';
 export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord',
-  'Import', 'SheetSource', 'Integration', 'Settings',
+  'Import', 'SheetSource', 'Integration', 'Settings', 'Invite',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
 export const ACTIONS = ['read', 'write', 'delete'] as const;
 export type Action = typeof ACTIONS[number];
 
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'Import', 'SheetSource'];
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'Import', 'SheetSource', 'Invite'];
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Settings'];
 const READ_WRITE: Resource[] = ['Integration'];
 
@@ -79,11 +79,33 @@ export async function seedPermissionsCatalog() {
   }
 }
 
-/** Resolves whether a user has (resource, action): among the user's assigned
- *  roles, the highest-ranked role with an explicit opinion wins; no assigned
- *  role having an opinion defaults to deny (fail closed). */
+/** A user's direct (resource, action) opinion, if any - always takes
+ *  precedence over role-based resolution (see hasPermission below). This is
+ *  what an accepted invite's permissions become, and what the
+ *  user-permission:* CLI commands manage directly. */
+async function directEffect(userId: number, resource: Resource, action: Action): Promise<'allow' | 'deny' | undefined> {
+  const [row] = await db
+    .select({ effect: schema.userPermissions.effect })
+    .from(schema.userPermissions)
+    .innerJoin(schema.permissions, eq(schema.permissions.id, schema.userPermissions.permissionId))
+    .where(and(
+      eq(schema.userPermissions.userId, userId),
+      eq(schema.permissions.resource, resource),
+      eq(schema.permissions.action, action),
+    ));
+  return row?.effect;
+}
+
+/** Resolves whether a user has (resource, action). Two tiers: a direct
+ *  per-user grant/deny (user_permissions) always wins if present - it's the
+ *  most specific statement about this exact user. Otherwise, among the
+ *  user's assigned roles, the highest-ranked role with an explicit opinion
+ *  wins. No opinion anywhere defaults to deny (fail closed). */
 export async function hasPermission(userId: number, resource: Resource, action: Action): Promise<boolean> {
   await ready();
+  const direct = await directEffect(userId, resource, action);
+  if (direct) return direct === 'allow';
+
   const [row] = await db
     .select({ effect: schema.rolePermissions.effect })
     .from(schema.userRoles)
@@ -101,10 +123,11 @@ export async function hasPermission(userId: number, resource: Resource, action: 
 }
 
 /** All of a user's effective (allowed) permissions, one entry per resource:action -
- *  used by GET /auth/me and the user:permissions CLI command. */
+ *  used by GET /auth/me and the user:permissions CLI command. Direct grants
+ *  override role-derived ones key-for-key, same precedence as hasPermission. */
 export async function getEffectivePermissions(userId: number): Promise<{ resource: Resource; action: Action }[]> {
   await ready();
-  const rows = await db
+  const roleRows = await db
     .select({
       resource: schema.permissions.resource,
       action: schema.permissions.action,
@@ -118,12 +141,64 @@ export async function getEffectivePermissions(userId: number): Promise<{ resourc
     .where(eq(schema.userRoles.userId, userId));
 
   const byKey = new Map<string, { resource: Resource; action: Action; effect: 'allow' | 'deny'; rank: number }>();
-  for (const row of rows) {
+  for (const row of roleRows) {
     const key = `${row.resource}:${row.action}`;
     const existing = byKey.get(key);
     if (!existing || row.rank > existing.rank) byKey.set(key, row as never);
   }
-  return [...byKey.values()]
-    .filter((v) => v.effect === 'allow')
-    .map(({ resource, action }) => ({ resource: resource as Resource, action: action as Action }));
+  const effectByKey = new Map<string, 'allow' | 'deny'>();
+  for (const [key, v] of byKey) effectByKey.set(key, v.effect);
+
+  const directRows = await getUserDirectPermissions(userId);
+  for (const row of directRows) effectByKey.set(`${row.resource}:${row.action}`, row.effect);
+
+  return [...effectByKey.entries()]
+    .filter(([, effect]) => effect === 'allow')
+    .map(([key]) => {
+      const [resource, action] = key.split(':') as [Resource, Action];
+      return { resource, action };
+    });
+}
+
+/** A user's raw direct grants/denies (not merged with role-derived ones) -
+ *  used by the user-permission:show CLI command. */
+export async function getUserDirectPermissions(userId: number): Promise<{ resource: Resource; action: Action; effect: 'allow' | 'deny' }[]> {
+  await ready();
+  const rows = await db
+    .select({
+      resource: schema.permissions.resource,
+      action: schema.permissions.action,
+      effect: schema.userPermissions.effect,
+    })
+    .from(schema.userPermissions)
+    .innerJoin(schema.permissions, eq(schema.permissions.id, schema.userPermissions.permissionId))
+    .where(eq(schema.userPermissions.userId, userId));
+  return rows as { resource: Resource; action: Action; effect: 'allow' | 'deny' }[];
+}
+
+/** Every role with its allow-listed permissions - used by GET /api/roles,
+ *  purely as a client-side preset picker for the invite-creation form
+ *  (picking a role there just prechecks its boxes; the invite itself never
+ *  references a role afterward). */
+export async function listRolesWithPermissions(): Promise<{ id: number; name: string; rank: number; permissions: { resource: Resource; action: Action }[] }[]> {
+  await ready();
+  const roleRows = await db.select().from(schema.roles).orderBy(desc(schema.roles.rank));
+  const grantRows = await db
+    .select({
+      roleId: schema.rolePermissions.roleId,
+      resource: schema.permissions.resource,
+      action: schema.permissions.action,
+      effect: schema.rolePermissions.effect,
+    })
+    .from(schema.rolePermissions)
+    .innerJoin(schema.permissions, eq(schema.permissions.id, schema.rolePermissions.permissionId));
+
+  return roleRows.map((role) => ({
+    id: role.id,
+    name: role.name,
+    rank: role.rank,
+    permissions: grantRows
+      .filter((g) => g.roleId === role.id && g.effect === 'allow')
+      .map(({ resource, action }) => ({ resource: resource as Resource, action: action as Action })),
+  }));
 }

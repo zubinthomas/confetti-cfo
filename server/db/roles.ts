@@ -13,10 +13,14 @@
 //   node db/roles.ts role:unassign <email> <role>
 //   node db/roles.ts role:show <role>
 //   node db/roles.ts user:permissions <email>
+//   node db/roles.ts user-permission:grant <email> <resource> <action>
+//   node db/roles.ts user-permission:deny <email> <resource> <action>
+//   node db/roles.ts user-permission:clear <email> <resource> <action>
+//   node db/roles.ts user-permission:show <email>
 import { and, eq } from 'drizzle-orm';
 import { db, ready, schema, close } from './client.ts';
 import {
-  RESOURCES, ACTIONS, PERMISSIONS_CATALOG, getEffectivePermissions,
+  RESOURCES, ACTIONS, PERMISSIONS_CATALOG, getEffectivePermissions, getUserDirectPermissions,
   type Resource, type Action,
 } from './permissions.ts';
 
@@ -36,6 +40,11 @@ const USAGE = `usage: node db/roles.ts <command>   (stop the dev server first)
   role:unassign <email> <role>               remove a role from a user
   role:show <role>                           a role's full permission table (allow/deny/unset)
   user:permissions <email>                   a user's RESOLVED effective permissions
+
+  user-permission:grant <email> <resource> <action>  set a DIRECT allow on this user (always wins over any role)
+  user-permission:deny  <email> <resource> <action>  set a DIRECT deny on this user (always wins over any role)
+  user-permission:clear <email> <resource> <action>  remove the direct setting (falls back to roles)
+  user-permission:show <email>                       this user's raw direct grants/denies (unmerged with roles)
 
 Resources: ${RESOURCES.join(', ')}
 Actions: ${ACTIONS.join(', ')}`;
@@ -104,6 +113,20 @@ async function setEffect(roleName: string, resourceArg: string | undefined, acti
       set: { effect },
     });
   console.log(`${role.name}: ${resource}:${action} -> ${effect}`);
+}
+
+async function setUserEffect(mail: string, resourceArg: string | undefined, actionArg: string | undefined, effect: 'allow' | 'deny') {
+  const user = await requireUser(mail);
+  const { resource, action } = requireResourceAction(resourceArg, actionArg);
+  const permission = await findPermissionRow(resource, action);
+  if (!permission) fail(`${resource}:${action} was not found in the permissions table (seed may not have run yet)`);
+  await db.insert(schema.userPermissions)
+    .values({ userId: user.id, permissionId: permission!.id, effect })
+    .onConflictDoUpdate({
+      target: [schema.userPermissions.userId, schema.userPermissions.permissionId],
+      set: { effect },
+    });
+  console.log(`${user.email}: ${resource}:${action} -> ${effect} (direct)`);
 }
 
 await ready();
@@ -203,6 +226,31 @@ switch (command) {
     else {
       console.log(`${user.email}:`);
       for (const { resource, action } of effective) console.log(`  ${resource}:${action}`);
+    }
+    break;
+  }
+  case 'user-permission:grant': await setUserEffect(arg1, arg2, arg3, 'allow'); break;
+  case 'user-permission:deny': await setUserEffect(arg1, arg2, arg3, 'deny'); break;
+  case 'user-permission:clear': {
+    const user = await requireUser(arg1);
+    const { resource, action } = requireResourceAction(arg2, arg3);
+    const permission = await findPermissionRow(resource, action);
+    if (!permission) fail(`${resource}:${action} was not found in the permissions table (seed may not have run yet)`);
+    const deleted = await db.delete(schema.userPermissions)
+      .where(and(eq(schema.userPermissions.userId, user.id), eq(schema.userPermissions.permissionId, permission!.id)))
+      .returning();
+    console.log(deleted.length > 0
+      ? `${user.email}: ${resource}:${action} -> cleared (falls back to roles)`
+      : `${user.email} had no direct setting for ${resource}:${action}`);
+    break;
+  }
+  case 'user-permission:show': {
+    const user = await requireUser(arg1);
+    const direct = await getUserDirectPermissions(user.id);
+    if (direct.length === 0) console.log(`${user.email}: no direct permissions (falls back entirely to roles)`);
+    else {
+      console.log(`${user.email} (direct, unmerged with roles):`);
+      for (const { resource, action, effect } of direct) console.log(`  ${resource}:${action} -> ${effect}`);
     }
     break;
   }

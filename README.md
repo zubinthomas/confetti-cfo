@@ -60,8 +60,10 @@ npm run dev
 npm run dev
 ```
 
-Open http://localhost:5173 and log in - **auth is currently stubbed for
-prototyping, so any email/password works** (see [Managing users](#managing-users)).
+Open http://localhost:5173 and log in with a user created via the CLI (see
+[Managing users](#managing-users)) - there is no open registration; accounts
+are created via the CLI or by accepting an invite from someone who already
+has an account.
 
 ### PGlite is single-process
 
@@ -72,9 +74,11 @@ of silent corruption.
 
 ## Managing users
 
-Users live in the `users` table and are managed entirely from the CLI (there
-is no registration UI). Run these from `server/`, **with the dev server
-stopped** (see above):
+Accounts are created two ways: from the CLI, or by a user with the `Invite`
+permission sending an invite link from the dashboard (Invites page), where
+they choose which of their own permissions to grant the invitee. There is no
+open registration UI. The CLI commands below run from `server/`, **with the
+dev server stopped** (see above):
 
 ```sh
 npm run user:create -- alice@example.com "Alice Smith"   # prompts for a password
@@ -91,10 +95,10 @@ Notes:
   history, so prefer the prompt.
 - Passwords must be at least 8 characters; emails are validated and stored
   lowercased.
-- **Auth is currently stubbed**, so these users don't gate anything yet - the
-  login screen accepts any credentials. The table is groundwork: once real
-  auth is enabled (`server/middleware/auth.ts`, `server/routes/auth.ts`),
-  these accounts become the ones that can sign in.
+- A fresh user has no permissions until one is granted, either directly
+  (`npm run user-permission:grant`) or via a role (`npm run role:assign`) -
+  see `npm run role:list` / `npm run permission:list` for what exists. The
+  very first user ever created is auto-assigned the built-in `Admin` role.
 
 ## Checks and scripts
 

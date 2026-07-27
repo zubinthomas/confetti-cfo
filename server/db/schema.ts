@@ -171,6 +171,49 @@ export const userRoles = pgTable('user_roles', {
   uniqueIndex('user_roles_user_role').on(t.userId, t.roleId),
 ]);
 
+// Direct per-user permission grants/denies - same shape as role_permissions,
+// but always takes precedence over any role (see hasPermission in
+// server/db/permissions.ts). This is what an accepted invite's chosen
+// permissions become; also manageable directly via the user-permission:*
+// CLI commands (server/db/roles.ts) for existing users.
+export const userPermissions = pgTable('user_permissions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  permissionId: integer('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  effect: permissionEffectEnum('effect').notNull(),
+}, (t) => [
+  uniqueIndex('user_permissions_user_permission').on(t.userId, t.permissionId),
+]);
+
+// ── Invites (accounts are created via the CLI or by accepting an invite -
+// there is no open self-registration path) ──────────────────────────────────
+export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'revoked']);
+
+export const invites = pgTable('invites', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull(),
+  token: text('token').notNull(),
+  status: inviteStatusEnum('status').notNull().default('pending'),
+  invitedByUserId: integer('invited_by_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: text('created_at').notNull(),   // ISO-8601
+  expiresAt: text('expires_at').notNull(),   // ISO-8601
+  acceptedAt: text('accepted_at'),
+  acceptedUserId: integer('accepted_user_id').references(() => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  uniqueIndex('invites_token').on(t.token),
+]);
+
+// The permissions an invite will grant on acceptance - allow-only (a fresh
+// account starts with exactly this set, nothing to override yet), clamped at
+// create/edit time to permissions the inviter themselves currently holds.
+export const invitePermissions = pgTable('invite_permissions', {
+  id: serial('id').primaryKey(),
+  inviteId: integer('invite_id').notNull().references(() => invites.id, { onDelete: 'cascade' }),
+  permissionId: integer('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+}, (t) => [
+  uniqueIndex('invite_permissions_invite_permission').on(t.inviteId, t.permissionId),
+]);
+
 // ── Settings (mirrors server/.env; read-only via the API for now - see
 // server/routes/settings.ts. Doesn't drive runtime config yet, process.env
 // still does; this is a display/audit copy populated by db/seed-settings.ts) ─

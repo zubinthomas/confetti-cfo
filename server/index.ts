@@ -12,6 +12,8 @@ import consignmentRecordsRoutes from './routes/consignmentRecords.ts';
 import importRoutes from './routes/import.ts';
 import sheetsRoutes from './routes/sheets.ts';
 import settingsRoutes from './routes/settings.ts';
+import invitesRoutes from './routes/invites.ts';
+import rolesRoutes from './routes/roles.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { config } from 'dotenv';
 
@@ -39,6 +41,8 @@ app.use('/api/consignment-records', consignmentRecordsRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/sheets', sheetsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/invites', invitesRoutes);
+app.use('/api/roles', rolesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));

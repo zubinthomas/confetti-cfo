@@ -26,7 +26,11 @@
     "permission:list": "node db/roles.ts permission:list",
     "permission:grant": "node db/roles.ts permission:grant",
     "permission:deny": "node db/roles.ts permission:deny",
-    "permission:clear": "node db/roles.ts permission:clear"
+    "permission:clear": "node db/roles.ts permission:clear",
+    "user-permission:grant": "node db/roles.ts user-permission:grant",
+    "user-permission:deny": "node db/roles.ts user-permission:deny",
+    "user-permission:clear": "node db/roles.ts user-permission:clear",
+    "user-permission:show": "node db/roles.ts user-permission:show"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

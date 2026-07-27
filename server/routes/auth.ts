@@ -7,10 +7,8 @@ import { getEffectivePermissions } from '../db/permissions.ts';
 
 const router = Router();
 
-// Registration is disabled - users are created via the CLI (server/db/users.ts)
-router.post('/register', (_req, res) => res.status(404).json({ message: 'Not found' }));
-router.post('/verify-otp', (_req, res) => res.status(404).json({ message: 'Not found' }));
-router.post('/resend-otp', (_req, res) => res.status(404).json({ message: 'Not found' }));
+// There is no open registration - accounts are created via the CLI
+// (server/db/users.ts) or by accepting an invite (server/routes/invites.ts).
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body ?? {};

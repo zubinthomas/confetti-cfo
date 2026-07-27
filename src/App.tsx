@@ -15,8 +15,8 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import HR from '@/pages/HR';
 import Compliance from '@/pages/Compliance';
+import AcceptInvite from '@/pages/AcceptInvite';
 import { useReferenceData } from '@/hooks/useReferenceData';
-import PageNotFound from '@/lib/PageNotFound';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
 
@@ -60,12 +60,12 @@ const ReferenceDataGate = () => {
 // Routes reachable while logged out - the auth_required redirect below must
 // never fire on these, or visiting /login while logged out would redirect to
 // /login, re-run the same failed auth check, and redirect again forever.
-const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password'];
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const location = useLocation();
-  const isPublicPath = PUBLIC_PATHS.includes(location.pathname);
+  const isPublicPath = PUBLIC_PATHS.includes(location.pathname) || location.pathname.startsWith('/invite/');
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -86,8 +86,8 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      {/* registration is disabled - users are created via the CLI (see README) */}
-      <Route path="/register" element={<PageNotFound />} />
+      {/* No open registration - accounts are CLI-created or invite-only (see README) */}
+      <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
