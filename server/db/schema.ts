@@ -138,7 +138,7 @@ export const permissionEffectEnum = pgEnum('permission_effect', ['allow', 'deny'
 export const roles = pgTable('roles', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
-  rank: integer('rank').notNull(), // higher rank wins conflicts; must be unique
+  rank: integer('rank').notNull(), // lower rank wins conflicts (0 = highest priority); must be unique, >= 0
   createdAt: text('created_at').notNull(), // ISO-8601
 }, (t) => [
   uniqueIndex('roles_name').on(t.name),

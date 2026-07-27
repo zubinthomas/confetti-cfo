@@ -45,6 +45,7 @@ function RoleFormModal({
     const rankNum = Number(rank);
     if (!role && !name.trim()) { setError("Name is required"); return; }
     if (!Number.isInteger(rankNum)) { setError("Rank must be a whole number"); return; }
+    if (rankNum < 0) { setError("Rank must be 0 or greater - 0 is the highest priority"); return; }
     setSaving(true);
     try {
       if (role) {
@@ -90,14 +91,14 @@ function RoleFormModal({
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Rank</label>
               <input
-                type="number" value={rank} onChange={(e) => setRank(e.target.value)}
+                type="number" min="0" value={rank} onChange={(e) => setRank(e.target.value)}
                 placeholder="0"
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
               />
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground -mt-2">
-            Higher rank wins when a user holds multiple roles that disagree on the same permission.
+            Lower rank wins when a user holds multiple roles that disagree on the same permission - 0 is the highest priority.
           </p>
 
           {role && (

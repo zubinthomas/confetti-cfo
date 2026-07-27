@@ -26,8 +26,8 @@ import {
 
 const USAGE = `usage: node db/roles.ts <command>   (stop the dev server first)
 
-  role:create <name> --rank <n>              add a role at the given rank (higher wins conflicts)
-  role:list                                  show all roles, highest rank first
+  role:create <name> --rank <n>              add a role at the given rank (lower wins conflicts; 0 = highest priority)
+  role:list                                  show all roles, highest priority (lowest rank) first
   role:delete <name>                         remove a role
   role:set-rank <name> <rank>                change a role's rank
 
@@ -138,6 +138,7 @@ switch (command) {
     if (!rankArg) fail('--rank <n> is required');
     const rank = Number(rankArg);
     if (!Number.isInteger(rank)) fail('--rank must be an integer');
+    if (rank < 0) fail('--rank must be 0 or greater - 0 is the highest priority');
     const [existing] = await db.select().from(schema.roles).where(eq(schema.roles.rank, rank));
     if (existing) fail(`rank ${rank} is already used by role "${existing.name}" - ranks must be unique`);
     const [r] = await db.insert(schema.roles).values({
@@ -149,7 +150,7 @@ switch (command) {
   case 'role:list': {
     const rows = await db.select().from(schema.roles).orderBy(schema.roles.rank);
     if (rows.length === 0) console.log('no roles');
-    else for (const r of rows.reverse()) console.log(`#${r.id}\t${r.name}\trank ${r.rank}`);
+    else for (const r of rows) console.log(`#${r.id}\t${r.name}\trank ${r.rank}`);
     break;
   }
   case 'role:delete': {
@@ -163,6 +164,7 @@ switch (command) {
     if (!arg2) { console.error(USAGE); process.exit(1); }
     const rank = Number(arg2);
     if (!Number.isInteger(rank)) fail('<rank> must be an integer');
+    if (rank < 0) fail('<rank> must be 0 or greater - 0 is the highest priority');
     const [existing] = await db.select().from(schema.roles).where(eq(schema.roles.rank, rank));
     if (existing && existing.id !== role.id) fail(`rank ${rank} is already used by role "${existing.name}" - ranks must be unique`);
     await db.update(schema.roles).set({ rank }).where(eq(schema.roles.id, role.id));

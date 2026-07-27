@@ -3,7 +3,7 @@
 // upserted into the `permissions` table on every boot (see seedPermissionsCatalog,
 // called from client.ts's ready()) purely so role_permissions has a real FK
 // target - the catalog itself is never edited through the DB.
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 
 // Reference (server/routes/reference.ts) is deliberately excluded: it's
@@ -40,8 +40,8 @@ export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
 
 const ADMIN_ROLE = 'Admin';
 const VIEWER_ROLE = 'Viewer';
-const ADMIN_RANK = 100;
-const VIEWER_RANK = 0;
+const ADMIN_RANK = 0;
+const VIEWER_RANK = 100;
 
 async function upsertRole(name: string, rank: number) {
   const now = new Date().toISOString();
@@ -105,8 +105,9 @@ async function directEffect(userId: number, resource: Resource, action: Action):
 /** Resolves whether a user has (resource, action). Two tiers: a direct
  *  per-user grant/deny (user_permissions) always wins if present - it's the
  *  most specific statement about this exact user. Otherwise, among the
- *  user's assigned roles, the highest-ranked role with an explicit opinion
- *  wins. No opinion anywhere defaults to deny (fail closed). */
+ *  user's assigned roles, the lowest-ranked role (0 = highest priority) with
+ *  an explicit opinion wins. No opinion anywhere defaults to deny (fail
+ *  closed). */
 export async function hasPermission(userId: number, resource: Resource, action: Action): Promise<boolean> {
   await ready();
   const direct = await directEffect(userId, resource, action);
@@ -123,7 +124,7 @@ export async function hasPermission(userId: number, resource: Resource, action: 
       eq(schema.permissions.resource, resource),
       eq(schema.permissions.action, action),
     ))
-    .orderBy(desc(schema.roles.rank))
+    .orderBy(asc(schema.roles.rank))
     .limit(1);
   return row?.effect === 'allow';
 }
@@ -150,7 +151,7 @@ export async function getEffectivePermissions(userId: number): Promise<{ resourc
   for (const row of roleRows) {
     const key = `${row.resource}:${row.action}`;
     const existing = byKey.get(key);
-    if (!existing || row.rank > existing.rank) byKey.set(key, row as never);
+    if (!existing || row.rank < existing.rank) byKey.set(key, row as never);
   }
   const effectByKey = new Map<string, 'allow' | 'deny'>();
   for (const [key, v] of byKey) effectByKey.set(key, v.effect);
@@ -205,7 +206,7 @@ export async function assertGrantable(userId: number, wanted: Perm[]) {
  *  references a role afterward). */
 export async function listRolesWithPermissions(): Promise<{ id: number; name: string; rank: number; permissions: { resource: Resource; action: Action }[] }[]> {
   await ready();
-  const roleRows = await db.select().from(schema.roles).orderBy(desc(schema.roles.rank));
+  const roleRows = await db.select().from(schema.roles).orderBy(asc(schema.roles.rank));
   const grantRows = await db
     .select({
       roleId: schema.rolePermissions.roleId,

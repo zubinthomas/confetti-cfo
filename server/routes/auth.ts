@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { desc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { db, ready, schema } from '../db/client.ts';
 import { authMiddleware, signToken, type AuthedRequest } from '../middleware/auth.ts';
@@ -39,7 +39,7 @@ router.get('/me', authMiddleware, async (req: AuthedRequest, res) => {
     .from(schema.userRoles)
     .innerJoin(schema.roles, eq(schema.roles.id, schema.userRoles.roleId))
     .where(eq(schema.userRoles.userId, user.id))
-    .orderBy(desc(schema.roles.rank));
+    .orderBy(asc(schema.roles.rank));
   const effective = await getEffectivePermissions(user.id);
   res.json({
     id: user.id,

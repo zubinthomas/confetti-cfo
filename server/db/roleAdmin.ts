@@ -26,6 +26,14 @@ async function requireRoleRow(id: number) {
   return r;
 }
 
+// Lower rank wins conflicts (0 = highest priority) - see hasPermission in
+// permissions.ts - so 0 is the ceiling of authority and the floor of the
+// valid range; negative ranks would have no meaning.
+function requireValidRank(rank: number) {
+  if (!Number.isInteger(rank)) throw new RoleAdminError('Rank must be an integer');
+  if (rank < 0) throw new RoleAdminError('Rank must be 0 or greater - 0 is the highest priority');
+}
+
 export async function listRoles() {
   await ready();
   const [roles, memberRows] = await Promise.all([
@@ -41,7 +49,7 @@ export async function createRole(name: string, rank: number) {
   await ready();
   const trimmed = name.trim();
   if (!trimmed) throw new RoleAdminError('Name is required');
-  if (!Number.isInteger(rank)) throw new RoleAdminError('Rank must be an integer');
+  requireValidRank(rank);
 
   const [existingName] = await db.select().from(schema.roles).where(eq(schema.roles.name, trimmed));
   if (existingName) throw new RoleAdminError(`A role named "${trimmed}" already exists`);
@@ -54,7 +62,7 @@ export async function createRole(name: string, rank: number) {
 
 export async function setRoleRank(roleId: number, rank: number) {
   await ready();
-  if (!Number.isInteger(rank)) throw new RoleAdminError('Rank must be an integer');
+  requireValidRank(rank);
   const role = await requireRoleRow(roleId);
   const [existingRank] = await db.select().from(schema.roles).where(eq(schema.roles.rank, rank));
   if (existingRank && existingRank.id !== role.id) {
