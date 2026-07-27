@@ -25,7 +25,6 @@ import OpsPage from '@/components/dashboard/OpsPage';
 import SettingsPage from '@/components/dashboard/SettingsPage';
 import UserSettingsPage from '@/components/dashboard/UserSettingsPage';
 import UsersPage from '@/components/dashboard/UsersPage';
-import RolesPage from '@/components/dashboard/RolesPage';
 import CafePage from '@/components/fnb/CafePage';
 import RestaurantPage from '@/components/fnb/RestaurantPage';
 import BarPage from '@/components/fnb/BarPage';
@@ -97,12 +96,12 @@ export default function DashboardApp() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
-        <Route element={<RequirePermission mode="any" requires={[{ resource: 'User', action: 'read' }, { resource: 'Invite', action: 'read' }]} />}>
+        <Route element={<RequirePermission mode="any" requires={[
+          { resource: 'User', action: 'read' },
+          { resource: 'Invite', action: 'read' },
+          { resource: 'Role', action: 'read' },
+        ]} />}>
           <Route path="settings/users" element={<UsersPage />} />
-        </Route>
-
-        <Route element={<RequirePermission requires={[{ resource: 'Role', action: 'read' }]} />}>
-          <Route path="settings/roles" element={<RolesPage />} />
         </Route>
 
         {/* No backend resource is read on this page - open to any authenticated user */}

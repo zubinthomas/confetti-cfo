@@ -15,8 +15,7 @@ const EXTRA_TITLES: Record<string, string> = {
   "/data/import": "Import Workbooks",
   "/settings": "General Settings",
   "/settings/user": "User Settings",
-  "/settings/users": "Users",
-  "/settings/roles": "Roles",
+  "/settings/users": "Users and Permissions",
 };
 
 const NAV_SECTIONS = [

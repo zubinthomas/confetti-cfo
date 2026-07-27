@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import DashCard from "./DashCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PermissionMatrix, { permKey as key } from "@/components/PermissionMatrix";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  listRoles, createRole, setRoleRank, replaceRolePermissions, deleteRole,
+  createRole, setRoleRank, replaceRolePermissions, deleteRole,
   type RoleWithPermissions,
 } from "@/api/rolesApi";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 function RoleFormModal({
   role, heldPerms, onClose, onSaved,
@@ -137,21 +137,23 @@ function RoleFormModal({
   );
 }
 
-export default function RolesPage() {
-  const { user, can } = useAuth();
+export default function RolesTab({
+  roles, heldPerms, formRole, setFormRole, error, refresh,
+}: {
+  roles: RoleWithPermissions[] | null;
+  heldPerms: Set<string>;
+  formRole: RoleWithPermissions | null | undefined; // undefined = closed
+  setFormRole: (v: RoleWithPermissions | null | undefined) => void;
+  error: string;
+  refresh: () => void;
+}) {
+  const { can } = useAuth();
   const canWrite = can("Role", "write");
   const canDelete = can("Role", "delete");
-  const heldPerms = useMemo(() => new Set(user?.permissions ?? []), [user]);
 
-  const [roles, setRoles] = useState<RoleWithPermissions[] | null>(null);
-  const [error, setError] = useState("");
-  const [formRole, setFormRole] = useState<RoleWithPermissions | null | undefined>(undefined); // undefined = closed
   const [deleteTarget, setDeleteTarget] = useState<RoleWithPermissions | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
-
-  const refresh = () => { listRoles().then(setRoles).catch((err: Error) => setError(err.message)); };
-  useEffect(() => { refresh(); }, []);
 
   const onDelete = async () => {
     if (!deleteTarget) return;
@@ -169,19 +171,7 @@ export default function RolesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Roles</p>
-        {canWrite && (
-          <button
-            onClick={() => setFormRole(null)}
-            className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition"
-          >
-            <Plus className="w-4 h-4" /> New role
-          </button>
-        )}
-      </div>
-
+    <>
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <DashCard title="Roles">
@@ -264,6 +254,6 @@ export default function RolesPage() {
         loading={deleting}
         onConfirm={onDelete}
       />
-    </div>
+    </>
   );
 }
