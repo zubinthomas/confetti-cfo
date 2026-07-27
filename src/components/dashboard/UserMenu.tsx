@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { UserCog, Settings, FileSpreadsheet, UserPlus, Sun, Moon, Monitor, LogOut } from "lucide-react";
+import { UserCog, Settings, FileSpreadsheet, UserPlus, Users, Sun, Moon, Monitor, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -51,6 +51,11 @@ export default function UserMenu() {
         {can("Invite", "read") && (
           <DropdownMenuItem asChild>
             <Link to="/settings/invites"><UserPlus className="w-4 h-4" /> Invites</Link>
+          </DropdownMenuItem>
+        )}
+        {can("User", "read") && (
+          <DropdownMenuItem asChild>
+            <Link to="/settings/users"><Users className="w-4 h-4" /> Users</Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

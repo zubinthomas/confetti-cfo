@@ -1,9 +1,10 @@
-// User management CLI (the users table is dormant until auth is enabled).
-// Stop the dev server first - PGlite is single-process, and the lockfile in
-// client.ts will refuse to run otherwise.
+// User management CLI. Stop the dev server first - PGlite is single-process,
+// and the lockfile in client.ts will refuse to run otherwise.
 //   node db/users.ts create <email> [full name] [--password <pw>]
 //   node db/users.ts list
 //   node db/users.ts password <email> [--password <pw>]
+//   node db/users.ts activate <email>
+//   node db/users.ts deactivate <email>
 //   node db/users.ts delete <email>
 // Without --password, the password is asked for interactively (input hidden).
 import bcrypt from 'bcryptjs';
@@ -17,7 +18,9 @@ const USAGE = `usage: node db/users.ts <command>   (stop the dev server first)
   create <email> [full name] [--password <pw>]   add a user
   list                                           show all users
   password <email> [--password <pw>]             set a new password
-  delete <email>                                 remove a user
+  activate <email>                               re-enable login for a deactivated user
+  deactivate <email>                             disable login immediately (existing sessions too - see middleware/auth.ts)
+  delete <email>                                 remove a user permanently (prefer deactivate - see the Users page)
 
 Without --password you are prompted interactively (input hidden).
 Note: --password ends up in your shell history - prefer the prompt.`;
@@ -126,7 +129,7 @@ switch (command) {
       console.log('no users');
     } else {
       for (const u of rows) {
-        console.log(`#${u.id}\t${u.email}\t${u.fullName ?? '-'}\tcreated ${u.createdAt.slice(0, 10)}`);
+        console.log(`#${u.id}\t${u.email}\t${u.fullName ?? '-'}\t${u.active ? 'active' : 'inactive'}\tcreated ${u.createdAt.slice(0, 10)}`);
       }
     }
     break;
@@ -138,6 +141,22 @@ switch (command) {
     const passwordHash = await getPassword();
     await db.update(schema.users).set({ passwordHash }).where(eq(schema.users.id, u!.id));
     console.log(`password updated for ${mail}`);
+    break;
+  }
+  case 'activate': {
+    const mail = requireEmail();
+    const u = await findUser(mail);
+    if (!u) fail(`no user with email ${mail}`);
+    await db.update(schema.users).set({ active: true }).where(eq(schema.users.id, u!.id));
+    console.log(`${mail}: activated`);
+    break;
+  }
+  case 'deactivate': {
+    const mail = requireEmail();
+    const u = await findUser(mail);
+    if (!u) fail(`no user with email ${mail}`);
+    await db.update(schema.users).set({ active: false }).where(eq(schema.users.id, u!.id));
+    console.log(`${mail}: deactivated (existing sessions are rejected on their next request)`);
     break;
   }
   case 'delete': {

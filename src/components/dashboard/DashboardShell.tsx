@@ -16,6 +16,7 @@ const EXTRA_TITLES: Record<string, string> = {
   "/settings": "General Settings",
   "/settings/user": "User Settings",
   "/settings/invites": "Invites",
+  "/settings/users": "Users",
 };
 
 const NAV_SECTIONS = [

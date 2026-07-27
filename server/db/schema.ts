@@ -125,6 +125,7 @@ export const users = pgTable('users', {
   email: text('email').notNull(),
   passwordHash: text('password_hash').notNull(),
   fullName: text('full_name'),
+  active: boolean('active').notNull().default(true), // deactivated users are 401'd on every request - see middleware/auth.ts
   createdAt: text('created_at').notNull(),  // ISO-8601
 }, (t) => [
   uniqueIndex('users_email').on(t.email),

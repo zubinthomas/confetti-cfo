@@ -20,6 +20,12 @@ router.post('/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
+  // Checked after the password compare, not before, so a wrong-password
+  // attempt against a deactivated account still gets the generic message
+  // above - doesn't leak account status to someone without the password.
+  if (!user.active) {
+    return res.status(403).json({ message: 'This account has been deactivated.' });
+  }
   const access_token = signToken({ id: user.id, email: user.email });
   res.json({ access_token });
 });

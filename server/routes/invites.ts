@@ -9,11 +9,12 @@ import {
   listInvites, createInvite, updateInvitePermissions, revokeInvite,
   getInviteByToken, acceptInvite, InviteError, type Perm,
 } from '../db/invites.ts';
+import { PermissionGrantError } from '../db/permissions.ts';
 
 const router = Router();
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const status = (err: unknown) => (err instanceof InviteError ? 400 : 500);
+const status = (err: unknown) => (err instanceof InviteError || err instanceof PermissionGrantError ? 400 : 500);
 
 function parsePermissions(body: unknown): Perm[] {
   const perms = (body as { permissions?: unknown })?.permissions;

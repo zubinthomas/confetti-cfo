@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
+import { eq } from 'drizzle-orm';
 import type { Request, Response, NextFunction } from 'express';
+import { db, ready, schema } from '../db/client.ts';
 import { hasPermission } from '../db/permissions.ts';
 import type { Resource, Action } from '../db/permissions.ts';
 
@@ -18,18 +20,35 @@ interface JwtPayload {
   email: string;
 }
 
-/** Verifies the Bearer token and attaches req.user, or 401s. */
-export function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
+/** Verifies the Bearer token and attaches req.user, or 401s. Also live-checks
+ *  that the user still exists and is active - a deactivated user's existing
+ *  token (up to 7 days old, see signToken) is rejected on its very next
+ *  request rather than waiting for it to expire. Same generic message as an
+ *  invalid signature either way, so a deactivated user's client just looks
+ *  logged out, no account-status signal leaked. This adds one uncached DB
+ *  round trip per authenticated request; already precedented by
+ *  hasPermission doing the same on every permission check - same "PGlite is
+ *  in-process, small app" reasoning applies. */
+export async function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
   if (!token) return res.status(401).json({ message: 'Missing bearer token' });
+
+  let decoded: JwtPayload;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    req.user = { id: decoded.id, email: decoded.email };
-    next();
+    decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
   } catch {
-    res.status(401).json({ message: 'Invalid or expired token' });
+    return res.status(401).json({ message: 'Invalid or expired token' });
   }
+
+  await ready();
+  const [user] = await db.select({ active: schema.users.active }).from(schema.users).where(eq(schema.users.id, decoded.id));
+  if (!user || !user.active) {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+
+  req.user = { id: decoded.id, email: decoded.email };
+  next();
 }
 
 /** Requires the authenticated user to have (resource, action), else 403s.

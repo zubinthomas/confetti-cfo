@@ -8,14 +8,15 @@ import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { and, desc, eq } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
-import { getEffectivePermissions, type Resource, type Action } from './permissions.ts';
+import { assertGrantable, getEffectivePermissions, type Perm } from './permissions.ts';
+
+export type { Perm };
 
 const INVITE_EXPIRY_DAYS = 7;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class InviteError extends Error {}
 
-export type Perm = { resource: Resource; action: Action };
 type InviteRow = typeof schema.invites.$inferSelect;
 
 export function normalizeEmail(email: string): string {
@@ -26,16 +27,6 @@ export function normalizeEmail(email: string): string {
 
 function isExpired(invite: { expiresAt: string }): boolean {
   return new Date(invite.expiresAt).getTime() < Date.now();
-}
-
-/** Throws if any of `wanted` isn't in the requesting user's own current
- *  effective permissions - live-checked, never trusted from a stale invite. */
-async function assertGrantable(userId: number, wanted: Perm[]) {
-  const held = new Set((await getEffectivePermissions(userId)).map((p) => `${p.resource}:${p.action}`));
-  const missing = wanted.filter((p) => !held.has(`${p.resource}:${p.action}`));
-  if (missing.length > 0) {
-    throw new InviteError(`You don't hold these permissions yourself, so you can't grant them: ${missing.map((p) => `${p.resource}:${p.action}`).join(', ')}`);
-  }
 }
 
 async function invitePermissionRows(inviteId: number) {
@@ -116,9 +107,24 @@ export async function updateInvitePermissions(id: number, requestingUserId: numb
   const [invite] = await db.select().from(schema.invites).where(eq(schema.invites.id, id));
   if (!invite) throw new InviteError('Invite not found');
   if (invite.status !== 'pending') throw new InviteError(`This invite is already ${invite.status}`);
-  await assertGrantable(requestingUserId, permissions);
 
-  await setInvitePermissions(id, permissions);
+  // Entries already on the invite that the editor doesn't personally hold are
+  // "locked" - preserved untouched rather than passed to assertGrantable,
+  // which would otherwise reject an edit that never even changed them (e.g.
+  // a more-privileged inviter granted something, then a different, less-
+  // privileged editor opens the form - the frontend always resubmits locked
+  // entries as still-checked).
+  const editorHeld = new Set((await getEffectivePermissions(requestingUserId)).map((p) => `${p.resource}:${p.action}`));
+  const current = await invitePermissionRows(id);
+  const locked = current
+    .filter((p) => !editorHeld.has(`${p.resource}:${p.action}`))
+    .map(({ resource, action }) => ({ resource, action }) as Perm);
+  const lockedKeys = new Set(locked.map((p) => `${p.resource}:${p.action}`));
+  const candidate = permissions.filter((p) => !lockedKeys.has(`${p.resource}:${p.action}`));
+
+  await assertGrantable(requestingUserId, candidate);
+
+  await setInvitePermissions(id, [...locked, ...candidate]);
   return attachDetails(invite);
 }
 

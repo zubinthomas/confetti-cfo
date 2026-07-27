@@ -15,14 +15,20 @@ import { db, ready, schema } from './client.ts';
 export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord',
-  'Import', 'SheetSource', 'Integration', 'Settings', 'Invite',
+  'Import', 'SheetSource', 'Integration', 'Settings', 'Invite', 'User',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
 export const ACTIONS = ['read', 'write', 'delete'] as const;
 export type Action = typeof ACTIONS[number];
 
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'Import', 'SheetSource', 'Invite'];
+export type Perm = { resource: Resource; action: Action };
+
+/** A caller tried to grant a permission they don't hold themselves - see
+ *  assertGrantable below. */
+export class PermissionGrantError extends Error {}
+
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'Import', 'SheetSource', 'Invite', 'User'];
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Settings'];
 const READ_WRITE: Resource[] = ['Integration'];
 
@@ -174,6 +180,23 @@ export async function getUserDirectPermissions(userId: number): Promise<{ resour
     .innerJoin(schema.permissions, eq(schema.permissions.id, schema.userPermissions.permissionId))
     .where(eq(schema.userPermissions.userId, userId));
   return rows as { resource: Resource; action: Action; effect: 'allow' | 'deny' }[];
+}
+
+/** Throws if any of `wanted` isn't in the requesting user's own current
+ *  effective permissions - live-checked, never trusted from stale data.
+ *  Shared by the invite system (server/db/invites.ts) and user management
+ *  (server/db/userAccounts.ts). Callers *replacing* an existing grant set
+ *  (as opposed to creating a fresh one) must exclude already-granted entries
+ *  the requesting user doesn't hold ("locked" entries) from `wanted` before
+ *  calling this, then merge those locked entries back in untouched - passing
+ *  the full replacement set here would wrongly reject an edit that doesn't
+ *  even touch the locked portion. */
+export async function assertGrantable(userId: number, wanted: Perm[]) {
+  const held = new Set((await getEffectivePermissions(userId)).map((p) => `${p.resource}:${p.action}`));
+  const missing = wanted.filter((p) => !held.has(`${p.resource}:${p.action}`));
+  if (missing.length > 0) {
+    throw new PermissionGrantError(`You don't hold these permissions yourself, so you can't grant them: ${missing.map((p) => `${p.resource}:${p.action}`).join(', ')}`);
+  }
 }
 
 /** Every role with its allow-listed permissions - used by GET /api/roles,
