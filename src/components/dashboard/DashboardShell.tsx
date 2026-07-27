@@ -15,7 +15,6 @@ const EXTRA_TITLES: Record<string, string> = {
   "/data/import": "Import Workbooks",
   "/settings": "General Settings",
   "/settings/user": "User Settings",
-  "/settings/invites": "Invites",
   "/settings/users": "Users",
 };
 

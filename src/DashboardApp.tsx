@@ -24,7 +24,6 @@ import ConsignmentPage from '@/components/dashboard/ConsignmentPage';
 import OpsPage from '@/components/dashboard/OpsPage';
 import SettingsPage from '@/components/dashboard/SettingsPage';
 import UserSettingsPage from '@/components/dashboard/UserSettingsPage';
-import InvitesPage from '@/components/dashboard/InvitesPage';
 import UsersPage from '@/components/dashboard/UsersPage';
 import CafePage from '@/components/fnb/CafePage';
 import RestaurantPage from '@/components/fnb/RestaurantPage';
@@ -97,11 +96,7 @@ export default function DashboardApp() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
-        <Route element={<RequirePermission requires={[{ resource: 'Invite', action: 'read' }]} />}>
-          <Route path="settings/invites" element={<InvitesPage />} />
-        </Route>
-
-        <Route element={<RequirePermission requires={[{ resource: 'User', action: 'read' }]} />}>
+        <Route element={<RequirePermission mode="any" requires={[{ resource: 'User', action: 'read' }, { resource: 'Invite', action: 'read' }]} />}>
           <Route path="settings/users" element={<UsersPage />} />
         </Route>
 

@@ -7,8 +7,8 @@ import {
   listInvites, createInvite, updateInvitePermissions, revokeInvite,
   type Invite, type Perm, type PermissionAction,
 } from "@/api/invitesApi";
-import { listRoles, type RoleWithPermissions } from "@/api/rolesApi";
-import { Loader2, Plus, X, Copy, Check } from "lucide-react";
+import type { RoleWithPermissions } from "@/api/rolesApi";
+import { Loader2, X, Copy, Check } from "lucide-react";
 
 const STATUS_STYLE: Record<Invite["status"], string> = {
   pending: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -151,25 +151,25 @@ function InviteLink({ token }: { token: string }) {
   );
 }
 
-export default function InvitesPage() {
-  const { user, can } = useAuth();
+export default function InvitedUsersTab({
+  roles, heldPerms, formInvite, setFormInvite,
+}: {
+  roles: RoleWithPermissions[];
+  heldPerms: Set<string>;
+  formInvite: Invite | null | undefined; // undefined = closed
+  setFormInvite: (v: Invite | null | undefined) => void;
+}) {
+  const { can } = useAuth();
   const canWrite = can("Invite", "write");
   const canDelete = can("Invite", "delete");
-  const heldPerms = useMemo(() => new Set(user?.permissions ?? []), [user]);
 
   const [invites, setInvites] = useState<Invite[] | null>(null);
-  const [roles, setRoles] = useState<RoleWithPermissions[]>([]);
   const [error, setError] = useState("");
-  const [formInvite, setFormInvite] = useState<Invite | null | undefined>(undefined); // undefined = closed
   const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
   const [revoking, setRevoking] = useState(false);
 
   const refresh = () => { listInvites().then(setInvites).catch((err: Error) => setError(err.message)); };
-  useEffect(() => {
-    refresh();
-    if (canWrite) listRoles().then(setRoles).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canWrite]);
+  useEffect(() => { refresh(); }, []);
 
   const onRevoke = async () => {
     if (!revokeTarget) return;
@@ -184,22 +184,10 @@ export default function InvitesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Invites</p>
-        {canWrite && (
-          <button
-            onClick={() => setFormInvite(null)}
-            className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition"
-          >
-            <Plus className="w-4 h-4" /> Invite someone
-          </button>
-        )}
-      </div>
-
+    <>
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <DashCard title="Invites">
+      <DashCard title="Invited users">
         {!invites ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : invites.length === 0 ? (
@@ -274,6 +262,6 @@ export default function InvitesPage() {
         loading={revoking}
         onConfirm={onRevoke}
       />
-    </div>
+    </>
   );
 }
