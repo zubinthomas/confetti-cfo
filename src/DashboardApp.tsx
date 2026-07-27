@@ -100,9 +100,12 @@ export default function DashboardApp() {
           <Route path="settings/users" element={<UsersPage />} />
         </Route>
 
-        {/* No backend resource is read on either page - open to any authenticated user */}
+        {/* No backend resource is read on this page - open to any authenticated user */}
         <Route path="settings/user" element={<UserSettingsPage />} />
-        <Route path="ops/:section" element={<OpsPage />} />
+
+        <Route element={<RequirePermission requires={[{ resource: 'Operations', action: 'read' }]} />}>
+          <Route path="ops/:section" element={<OpsPage />} />
+        </Route>
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

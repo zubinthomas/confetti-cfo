@@ -14,7 +14,7 @@ import { db, ready, schema } from './client.ts';
 // authenticated user instead, so it isn't part of this catalog.
 export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest',
-  'FinancialRecord', 'SalesRecord', 'ConsignmentRecord',
+  'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'Integration', 'Settings', 'Invite', 'User',
 ] as const;
 export type Resource = typeof RESOURCES[number];
@@ -29,7 +29,7 @@ export type Perm = { resource: Resource; action: Action };
 export class PermissionGrantError extends Error {}
 
 const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'Import', 'SheetSource', 'Invite', 'User'];
-const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Settings'];
+const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
 const READ_WRITE: Resource[] = ['Integration'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
