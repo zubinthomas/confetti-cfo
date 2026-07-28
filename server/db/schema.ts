@@ -433,3 +433,59 @@ export const inventoryTransactions = pgTable('inventory_transactions', {
   note: text('note'),
   recordedByUserId: integer('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
+
+// ── Reservations (Cafe/Restaurant table booking with real capacity/overlap
+// enforcement) ────────────────────────────────────────────────────────────
+// Locations and tables are both independently manageable (add/edit/remove
+// via server/db/reservations.ts, gated by the Reservation permission) - not
+// a fixed catalog. `type` on each is a free-text category label only, same
+// role as `division`/`category` elsewhere in this schema - no behavior is
+// keyed off it.
+export const reservationLocations = pgTable('reservation_locations', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  name: text('name').notNull(),
+  type: text('type'),
+}, (t) => [
+  uniqueIndex('reservation_locations_name').on(t.name),
+]);
+
+// Every table is a single bookable unit - capacity is its real seat count,
+// and (see reservations below) it holds at most one active reservation per
+// overlapping time window. This is what makes the chef's table need no
+// special-casing: it's just a table like any other.
+export const reservationTables = pgTable('reservation_tables', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  locationId: text('location_id').notNull().references(() => reservationLocations.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  type: text('type'),
+  capacity: integer('capacity').notNull(),
+}, (t) => [
+  uniqueIndex('reservation_tables_location_name').on(t.locationId, t.name),
+]);
+
+export const reservationStatusEnum = pgEnum('reservation_status', [
+  'pending', 'confirmed', 'seated', 'completed', 'cancelled', 'no_show',
+]);
+
+// A reservation occupies [date+time, date+time+durationMinutes) on its
+// table. Editing time/size after creation isn't supported - cancel and
+// rebook instead (see server/db/reservations.ts) - only status transitions
+// are, so there's no "re-check the conflict, excluding myself" path to
+// maintain.
+export const reservations = pgTable('reservations', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  tableId: text('table_id').notNull().references(() => reservationTables.id, { onDelete: 'restrict' }),
+  date: text('date').notNull(), // 'YYYY-MM-DD'
+  time: text('time').notNull(), // 'HH:MM', 24h
+  durationMinutes: integer('duration_minutes').notNull().default(90),
+  partySize: integer('party_size').notNull(),
+  guestName: text('guest_name').notNull(),
+  guestPhone: text('guest_phone'),
+  guestEmail: text('guest_email'),
+  status: reservationStatusEnum('status').notNull().default('pending'),
+  notes: text('notes'),
+  createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+});

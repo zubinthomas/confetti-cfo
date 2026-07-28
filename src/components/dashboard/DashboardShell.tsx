@@ -4,7 +4,7 @@ import PageSpinner from "./PageSpinner";
 import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
-  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes,
+  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   MenuIcon, X, Plus,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
@@ -127,6 +127,15 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             <Boxes className="w-4 h-4 shrink-0" /> Inventory
           </Link>
         )}
+        {can("Reservation", "read") && (
+          <Link
+            to="/reservations"
+            onClick={onNavigate}
+            className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <CalendarDays className="w-4 h-4 shrink-0" /> Reservations
+          </Link>
+        )}
       </div>
     </nav>
   );
@@ -220,6 +229,14 @@ export default function DashboardShell() {
                     className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <Boxes className="w-4 h-4 shrink-0" /> Inventory
+                  </Link>
+                )}
+                {can("Reservation", "read") && (
+                  <Link
+                    to="/reservations"
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <CalendarDays className="w-4 h-4 shrink-0" /> Reservations
                   </Link>
                 )}
               </div>
