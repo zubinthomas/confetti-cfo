@@ -48,3 +48,27 @@ export async function getSelfEmployeeView(userId: number) {
     .where(eq(schema.payrollRecords.employeeId, row.id));
   return { ...row, payrollRecords };
 }
+
+/** "Who's on my team" - other employees in the same division, name/role/
+ *  status only. No contact info, salary, or documents - this is visible to
+ *  coworkers, not just the employee themselves, so it's a much narrower cut
+ *  than getSelfEmployeeView. Terminated employees are excluded - a roster
+ *  reflects current staff. */
+export async function getDepartmentRoster(userId: number) {
+  await ready();
+  const [self] = await db.select({ id: schema.employees.id, division: schema.employees.division })
+    .from(schema.employees).where(eq(schema.employees.userId, userId));
+  if (!self || !self.division) return [];
+
+  const rows = await db.select({
+    id: schema.employees.id,
+    fullName: schema.employees.fullName,
+    role: schema.employees.role,
+    employmentType: schema.employees.employmentType,
+    status: schema.employees.status,
+  }).from(schema.employees).where(eq(schema.employees.division, self.division));
+
+  return rows
+    .filter((r) => r.id !== self.id && r.status !== 'Terminated')
+    .map(({ id: _id, ...rest }) => rest);
+}

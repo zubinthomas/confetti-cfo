@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import DashCard from "@/components/dashboard/DashCard";
 import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
 import { ArrowLeft, FileText, User as UserIcon, IdCard, Loader2 } from "lucide-react";
-import type { SelfEmployeeView } from "@/api/auth";
+import { auth, type SelfEmployeeView, type RosterEntry } from "@/api/auth";
 
 const toDocInfo = (emp: SelfEmployeeView): EmployeeDocInfo => ({
   fullName: emp.fullName,
@@ -40,6 +40,11 @@ export default function MyProfile() {
   const { user } = useAuth();
   const emp = user?.employee;
   const [generatingCard, setGeneratingCard] = useState(false);
+  const [roster, setRoster] = useState<RosterEntry[] | null>(null);
+
+  useEffect(() => {
+    if (emp) auth.roster().then(setRoster).catch(() => setRoster([]));
+  }, [emp]);
 
   const downloadIdCard = async () => {
     if (!emp) return;
@@ -108,6 +113,26 @@ export default function MyProfile() {
                 <Field label="Joining Date" value={emp.joiningDate} />
                 <Field label="Monthly Salary" value={emp.monthlySalary ? `₹${emp.monthlySalary.toLocaleString()}` : null} />
               </div>
+            </DashCard>
+
+            <DashCard title="My Team">
+              {roster === null ? (
+                <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+              ) : roster.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No one else in {emp.division || "your department"} yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {roster.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm border-b border-border pb-2 last:border-b-0">
+                      <span className="text-foreground font-medium">{r.fullName || "-"}</span>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span>{r.role || "-"}</span>
+                        {r.status && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted">{r.status}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </DashCard>
 
             <DashCard title="Payroll">

@@ -5,7 +5,7 @@ import { db, ready, schema } from '../db/client.ts';
 import { authMiddleware, signToken, type AuthedRequest } from '../middleware/auth.ts';
 import { getEffectivePermissions } from '../db/permissions.ts';
 import { getUserDivisionScope } from '../db/divisionScope.ts';
-import { getSelfEmployeeView } from '../db/employeeSelf.ts';
+import { getSelfEmployeeView, getDepartmentRoster } from '../db/employeeSelf.ts';
 
 const router = Router();
 
@@ -54,6 +54,14 @@ router.get('/me', authMiddleware, async (req: AuthedRequest, res) => {
     divisionScope,
     employee,
   });
+});
+
+// A separate, lazily-fetched endpoint rather than folded into /auth/me -
+// unlike the rest of that response, a department's headcount isn't small
+// and bounded, so there's no reason to carry it on every single page load
+// when only MyProfile.tsx ever needs it.
+router.get('/roster', authMiddleware, async (req: AuthedRequest, res) => {
+  res.json(await getDepartmentRoster(req.user!.id));
 });
 
 router.post('/logout', (_req, res) => res.json({ message: 'ok' }));

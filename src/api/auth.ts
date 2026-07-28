@@ -50,6 +50,16 @@ export interface User {
   employee: SelfEmployeeView | null; // set only if this account is linked for self-service
 }
 
+// "Who's on my team" - other (non-terminated) employees in the same
+// division. Name/role/status only, no contact info - see
+// server/db/employeeSelf.ts's getDepartmentRoster for why.
+export interface RosterEntry {
+  fullName: string | null;
+  role: string | null;
+  employmentType: string | null;
+  status: string | null;
+}
+
 export const auth = {
   login: async (email: string, password: string): Promise<void> => {
     const { access_token } = await post<{ access_token: string }>("/auth/login", { email, password });
@@ -57,6 +67,11 @@ export const auth = {
   },
 
   me: () => get<User>("/auth/me"),
+
+  // Fetched separately from me() - a department's headcount isn't small
+  // and bounded the way the rest of /auth/me is, so it's not worth
+  // carrying on every page load when only MyProfile.tsx needs it.
+  roster: () => get<RosterEntry[]>("/auth/roster"),
 
   logout: (redirectUrl?: string): void => {
     clearToken();
