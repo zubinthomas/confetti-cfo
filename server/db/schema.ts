@@ -300,6 +300,15 @@ export const employees = pgTable('employees', {
   contractUrl: text('contract_url'),
   policeVerificationUrl: text('police_verification_url'),
   healthRecordUrl: text('health_record_url'),
+  aadharUrl: text('aadhar_url'),
+  panUrl: text('pan_url'),
+  offerLetterUrl: text('offer_letter_url'),
+  // Unlike the single-file slots above, an employee can have any number of
+  // these - a child table would be the normal-form choice, but the generic
+  // entity CRUD (server/db.ts) only ever reads/writes whole rows, so a JSON
+  // array column is what lets this reuse that layer instead of needing a
+  // dedicated route.
+  internalDocuments: jsonb('internal_documents').$type<{ label: string; url: string; uploadedAt: string }[]>(),
 });
 
 export const licences = pgTable('licences', {
