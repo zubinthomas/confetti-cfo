@@ -4,11 +4,12 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import PermissionMatrix, { permKey as key } from "@/components/PermissionMatrix";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  listUsers, getUser, setUserActive, replaceUserRoles, replaceUserPermissions,
+  listUsers, getUser, setUserActive, replaceUserRoles, replaceUserPermissions, replaceUserDivisionScope,
   type UserListItem, type UserDetail,
 } from "@/api/usersApi";
 import type { RoleWithPermissions } from "@/api/rolesApi";
 import type { PermissionAction } from "@/api/invitesApi";
+import { DIVISIONS } from "@/lib/hrDivisions";
 import { Loader2, X } from "lucide-react";
 
 const roleFullyHeld = (role: RoleWithPermissions, heldPerms: Set<string>) =>
@@ -27,6 +28,7 @@ function EditUserModal({
   const [checkedPerms, setCheckedPerms] = useState<Set<string>>(
     () => new Set(target.directPermissions.map((p) => key(p.resource, p.action))),
   );
+  const [divisionScope, setDivisionScope] = useState<Set<string>>(() => new Set(target.divisionScope));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -70,6 +72,12 @@ function EditUserModal({
     return next;
   });
 
+  const toggleDivision = (d: string) => setDivisionScope((prev) => {
+    const next = new Set(prev);
+    if (next.has(d)) next.delete(d); else next.add(d);
+    return next;
+  });
+
   const save = async () => {
     setError("");
     setSaving(true);
@@ -81,6 +89,7 @@ function EditUserModal({
       await Promise.all([
         replaceUserRoles(target.id, [...roleIds]),
         replaceUserPermissions(target.id, permissions),
+        replaceUserDivisionScope(target.id, [...divisionScope]),
       ]);
       onSaved();
     } catch (err) {
@@ -131,6 +140,29 @@ function EditUserModal({
             <PermissionMatrix heldPerms={heldPerms} lockedPerms={lockedPerms} checked={checkedPerms} onToggle={togglePerm} />
             <p className="text-[11px] text-muted-foreground mt-2">
               Only roles/permissions you hold yourself can be adjusted here.
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Division scope</p>
+            <div className="flex flex-wrap gap-2">
+              {DIVISIONS.map((d) => {
+                const checked = divisionScope.has(d);
+                return (
+                  <label
+                    key={d}
+                    className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer select-none ${
+                      checked ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    <input type="checkbox" checked={checked} onChange={() => toggleDivision(d)} className="accent-primary" />
+                    {d}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Restricts this user's Employee/Licence/Recruitment/Leave access to the checked divisions only.
+              Leave everything unchecked for unrestricted access (the default).
             </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

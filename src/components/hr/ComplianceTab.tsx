@@ -5,6 +5,8 @@ import { Plus, X, Loader2, Upload, FileText, AlertTriangle, Clock, XCircle, Shie
 import DashCard from "@/components/dashboard/DashCard";
 import FormField from "./FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { DIVISIONS } from "@/lib/hrDivisions";
+import { useAuth } from "@/lib/AuthContext";
 
 // Days until expiry
 const daysUntil = (dateStr: string | null | undefined) => {
@@ -28,8 +30,6 @@ const LOCATIONS = [
   "Birbhum (Other)",
   "All Locations",
 ];
-
-const DIVISIONS = ["Ceramics", "Textiles", "Siena", "Admin", "All"];
 
 const LICENCE_TYPES = [
   "Trade Licence", "GST Registration", "FSSAI", "Excise / Bar Licence",
@@ -75,6 +75,8 @@ const CHECKLIST = [
 ];
 
 export default function ComplianceTab() {
+  const { user } = useAuth();
+  const divisionOptions = user?.divisionScope?.length ? [...user.divisionScope, "All"] : [...DIVISIONS, "All"];
   const [licences, setLicences] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -86,6 +88,7 @@ export default function ComplianceTab() {
   const [seeding, setSeeding] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => { load(); }, []);
 
@@ -96,41 +99,69 @@ export default function ComplianceTab() {
     setLoading(false);
   };
 
+  // Spans every division (including group-wide "All" entries) by design -
+  // only meaningful for an unrestricted editor; a division-scoped manager
+  // would just see most of these rejected, so this stays as-is rather than
+  // trying to filter the checklist itself down to their scope.
   const seedChecklist = async () => {
+    setError("");
     setSeeding(true);
-    for (const item of CHECKLIST) {
-      await Licence.create({ ...item, status: "Not Applied", renewal_reminder_days: 30 });
+    try {
+      for (const item of CHECKLIST) {
+        await Licence.create({ ...item, status: "Not Applied", renewal_reminder_days: 30 });
+      }
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to seed checklist");
+    } finally {
+      setSeeding(false);
     }
-    setSeeding(false);
-    load();
   };
 
   const save = async () => {
+    setError("");
     setSaving(true);
-    const payload = { ...form, annual_fee: Number(form.annual_fee) || 0, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
-    if (form.id) await Licence.update(form.id, payload);
-    else await Licence.create(payload);
-    setSaving(false);
-    setShowForm(false);
-    setForm(EMPTY);
-    load();
+    try {
+      const payload = { ...form, annual_fee: Number(form.annual_fee) || 0, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
+      if (form.id) await Licence.update(form.id, payload);
+      else await Licence.create(payload);
+      setShowForm(false);
+      setForm(EMPTY);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save licence");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
+    setError("");
     setDeleting(true);
-    await Licence.delete(pendingDelete.id);
-    setDeleting(false);
-    setPendingDelete(null);
-    load();
+    try {
+      await Licence.delete(pendingDelete.id);
+      setPendingDelete(null);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete licence");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const uploadDoc = async (id: string, file: File) => {
+    setError("");
     setUploading(true);
-    const { file_url } = await uploadFile(file);
-    await Licence.update(id, { document_url: file_url });
-    setUploading(false);
-    load();
+    try {
+      const { file_url } = await uploadFile(file);
+      await Licence.update(id, { document_url: file_url });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload document");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
@@ -200,6 +231,8 @@ export default function ComplianceTab() {
           </div>
         </div>
       )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <DashCard title="Licence & Compliance Register">
         <div className="flex flex-wrap items-center gap-2 mb-4 justify-between">
@@ -322,7 +355,7 @@ export default function ComplianceTab() {
               <FormField label="Issuing Authority" name="authority" value={form.authority ?? ""} onChange={updateField} />
               <FormField label="Licence / Certificate Number" name="licence_number" value={form.licence_number ?? ""} onChange={updateField} />
               <FormField label="Location *" name="location" options={LOCATIONS} value={form.location ?? ""} onChange={updateField} />
-              <FormField label="Division *" name="division" options={DIVISIONS} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Division *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Not Applied", "Applied", "Active", "Renewal Pending", "Expired", "Not Applicable"]} value={form.status ?? ""} onChange={updateField} />
               <FormField label="Issue Date" name="issue_date" type="date" value={form.issue_date ?? ""} onChange={updateField} />
               <FormField label="Expiry Date" name="expiry_date" type="date" value={form.expiry_date ?? ""} onChange={updateField} />

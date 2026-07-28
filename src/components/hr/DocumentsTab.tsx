@@ -3,6 +3,8 @@ import { Employee } from "@/api/entities";
 import { uploadFile } from "@/api/integrations";
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Clock, XCircle, X } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
+import { DIVISIONS } from "@/lib/hrDivisions";
+import { useAuth } from "@/lib/AuthContext";
 
 interface InternalDoc { label: string; url: string; uploadedAt: string }
 
@@ -70,6 +72,8 @@ function InternalDocsCell({ empId, docs, uploading, onUpload, onRemove }: {
 }
 
 export default function DocumentsTab() {
+  const { user } = useAuth();
+  const divisionOptions = user?.divisionScope?.length ? user.divisionScope : DIVISIONS;
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<Record<string, any>>({});
@@ -160,7 +164,7 @@ export default function DocumentsTab() {
 
       <DashCard title="Employee Documents">
         <div className="flex gap-2 flex-wrap mb-4">
-          {["All", "Ceramics", "Textiles", "Siena", "Admin"].map(d => (
+          {["All", ...divisionOptions].map(d => (
             <button key={d} onClick={() => setFilterDiv(d)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition ${filterDiv === d ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
               {d}

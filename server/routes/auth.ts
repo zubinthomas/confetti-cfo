@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { db, ready, schema } from '../db/client.ts';
 import { authMiddleware, signToken, type AuthedRequest } from '../middleware/auth.ts';
 import { getEffectivePermissions } from '../db/permissions.ts';
+import { getUserDivisionScope } from '../db/divisionScope.ts';
 
 const router = Router();
 
@@ -41,12 +42,14 @@ router.get('/me', authMiddleware, async (req: AuthedRequest, res) => {
     .where(eq(schema.userRoles.userId, user.id))
     .orderBy(asc(schema.roles.rank));
   const effective = await getEffectivePermissions(user.id);
+  const divisionScope = await getUserDivisionScope(user.id);
   res.json({
     id: user.id,
     email: user.email,
     full_name: user.fullName,
     roles,
     permissions: effective.map((p) => `${p.resource}:${p.action}`),
+    divisionScope,
   });
 });
 

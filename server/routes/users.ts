@@ -6,14 +6,17 @@ import { authMiddleware, requirePermission, type AuthedRequest } from '../middle
 import { hasPermission, PermissionGrantError, type Perm } from '../db/permissions.ts';
 import {
   listUsers, getUserDetail, setUserActive, replaceUserRoles, replaceUserPermissions,
-  UserAccountError,
+  replaceUserDivisionScope, UserAccountError,
 } from '../db/userAccounts.ts';
+import { DivisionScopeError } from '../db/divisionScope.ts';
 
 const router = Router();
 router.use(authMiddleware);
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const status = (err: unknown) => (err instanceof UserAccountError || err instanceof PermissionGrantError ? 400 : 500);
+const status = (err: unknown) => (
+  err instanceof UserAccountError || err instanceof PermissionGrantError || err instanceof DivisionScopeError ? 400 : 500
+);
 
 function parsePermissions(body: unknown): Perm[] {
   const perms = (body as { permissions?: unknown })?.permissions;
@@ -72,6 +75,19 @@ router.patch('/:id/roles', requirePermission('User', 'write'), async (req: Authe
 router.patch('/:id/permissions', requirePermission('User', 'write'), async (req: AuthedRequest, res) => {
   try {
     const user = await replaceUserPermissions(Number(req.params.id), req.user!.id, parsePermissions(req.body));
+    res.json(user);
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/:id/division-scope', requirePermission('User', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { divisions } = req.body ?? {};
+    if (!Array.isArray(divisions) || !divisions.every((d) => typeof d === 'string')) {
+      return res.status(400).json({ message: 'divisions must be an array of strings' });
+    }
+    const user = await replaceUserDivisionScope(Number(req.params.id), req.user!.id, divisions);
     res.json(user);
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });

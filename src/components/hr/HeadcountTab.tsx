@@ -5,21 +5,29 @@ import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "./FormField";
 import { useAuth } from "@/lib/AuthContext";
+import { DIVISIONS } from "@/lib/hrDivisions";
 
 const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Siena: "#f59e0b", Admin: "#8b5cf6" };
 
-const EMPTY = { full_name: "", employee_id: "", division: "Ceramics", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "" };
+const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "" };
 
 export default function HeadcountTab() {
-  const { can } = useAuth();
+  const { user, can } = useAuth();
   const canWrite = can("Employee", "write");
   const canDelete = can("Employee", "delete");
+  // A scoped manager's dropdown only offers their own division(s); an
+  // unscoped user (the default) sees the full list, matching today's
+  // behavior. The server enforces this either way - this is just so a
+  // scoped manager doesn't hit an avoidable 403 for the common case.
+  const divisionOptions = user?.divisionScope?.length ? user.divisionScope : DIVISIONS;
+  const emptyForm = () => ({ ...EMPTY, division: divisionOptions[0] ?? "" });
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<Record<string, any>>(EMPTY);
+  const [form, setForm] = useState<Record<string, any>>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => { load(); }, []);
 
@@ -31,22 +39,33 @@ export default function HeadcountTab() {
   };
 
   const save = async () => {
+    setError("");
     setSaving(true);
-    const payload = { ...form, monthly_salary: Number(form.monthly_salary) || 0 };
-    if (form.id) await Employee.update(form.id, payload);
-    else await Employee.create(payload);
-    setSaving(false);
-    setShowForm(false);
-    setForm(EMPTY);
-    load();
+    try {
+      const payload = { ...form, monthly_salary: Number(form.monthly_salary) || 0 };
+      if (form.id) await Employee.update(form.id, payload);
+      else await Employee.create(payload);
+      setShowForm(false);
+      setForm(emptyForm());
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save employee");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const remove = async (id: string) => {
-    await Employee.delete(id);
-    load();
+    setError("");
+    try {
+      await Employee.delete(id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete employee");
+    }
   };
 
-  const divStats = ["Ceramics", "Textiles", "Siena", "Admin"].map(d => ({
+  const divStats = DIVISIONS.map(d => ({
     name: d,
     count: employees.filter(e => e.division === d).length,
     payroll: employees.filter(e => e.division === d).reduce((s, e) => s + (e.monthly_salary || 0), 0),
@@ -80,10 +99,12 @@ export default function HeadcountTab() {
         ))}
       </div>
 
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
       <DashCard title="Employee Directory">
         {canWrite && (
           <div className="flex justify-end mb-3">
-            <button onClick={() => { setForm(EMPTY); setShowForm(true); }}
+            <button onClick={() => { setForm(emptyForm()); setShowForm(true); }}
               className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition">
               <Plus className="w-4 h-4" /> Add Employee
             </button>
@@ -145,7 +166,7 @@ export default function HeadcountTab() {
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Full Name *" name="full_name" value={form.full_name ?? ""} onChange={updateField} />
               <FormField label="Employee ID" name="employee_id" value={form.employee_id ?? ""} onChange={updateField} />
-              <FormField label="Division *" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Division *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Role / Designation *" name="role" value={form.role ?? ""} onChange={updateField} />
               <FormField label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} value={form.employment_type ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Active", "On Leave", "Terminated", "Probation"]} value={form.status ?? ""} onChange={updateField} />

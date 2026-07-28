@@ -18,6 +18,7 @@ export interface UserListItem {
   active: boolean;
   createdAt: string;
   roles: Role[];
+  divisionScope: string[]; // empty = unrestricted; see src/lib/hrDivisions.ts
 }
 
 export interface UserDetail extends UserListItem {
@@ -36,3 +37,6 @@ export const replaceUserRoles = (id: number, roleIds: number[]) =>
 
 export const replaceUserPermissions = (id: number, permissions: Perm[]) =>
   patch<UserDetail>(`/users/${id}/permissions`, { permissions });
+
+export const replaceUserDivisionScope = (id: number, divisions: string[]) =>
+  patch<UserDetail>(`/users/${id}/division-scope`, { divisions });

@@ -172,6 +172,19 @@ export const userRoles = pgTable('user_roles', {
   uniqueIndex('user_roles_user_role').on(t.userId, t.roleId),
 ]);
 
+// Row-level narrowing on top of the Employee/Licence/Recruitment/
+// LeaveRequest permissions above - orthogonal to roles/permissions, not a
+// replacement. No rows for a user = unrestricted (today's behavior); one or
+// more rows = restricted to exactly those divisions. See
+// server/db/divisionScope.ts.
+export const userDivisionScopes = pgTable('user_division_scopes', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  division: text('division').notNull(),
+}, (t) => [
+  uniqueIndex('user_division_scopes_user_division').on(t.userId, t.division),
+]);
+
 // Direct per-user permission grants/denies - same shape as role_permissions,
 // but always takes precedence over any role (see hasPermission in
 // server/db/permissions.ts). This is what an accepted invite's chosen

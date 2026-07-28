@@ -17,6 +17,7 @@ import {
   assertGrantable, getEffectivePermissions, getUserDirectPermissions, listRolesWithPermissions,
   type Perm,
 } from './permissions.ts';
+import { getAllDivisionScopes, getUserDivisionScope, replaceUserDivisionScope as replaceDivisionScope } from './divisionScope.ts';
 
 export class UserAccountError extends Error {}
 
@@ -56,10 +57,12 @@ export async function listUsers() {
     })
     .from(schema.userRoles)
     .innerJoin(schema.roles, eq(schema.roles.id, schema.userRoles.roleId));
+  const scopesByUser = await getAllDivisionScopes();
 
   return users.map((u) => ({
     ...u,
     roles: roleRows.filter((r) => r.userId === u.id).map(({ id, name, rank }) => ({ id, name, rank })),
+    divisionScope: scopesByUser.get(u.id) ?? [],
   }));
 }
 
@@ -71,7 +74,8 @@ export async function getUserDetail(id: number) {
   const directPermissions: Perm[] = (await getUserDirectPermissions(id))
     .filter((p) => p.effect === 'allow')
     .map(({ resource, action }) => ({ resource, action }));
-  return { ...u, roles, directPermissions };
+  const divisionScope = await getUserDivisionScope(id);
+  return { ...u, roles, directPermissions, divisionScope };
 }
 
 export async function setUserActive(targetId: number, editorId: number, active: boolean) {
@@ -79,6 +83,15 @@ export async function setUserActive(targetId: number, editorId: number, active: 
   if (targetId === editorId) throw new UserAccountError("You can't change your own active status.");
   await requireUserRow(targetId);
   await db.update(schema.users).set({ active }).where(eq(schema.users.id, targetId));
+  return getUserDetail(targetId);
+}
+
+// Self-edit is blocked inside replaceDivisionScope (divisionScope.ts) - not
+// re-checked here, matching how assertGrantable lives in permissions.ts
+// rather than being duplicated per caller.
+export async function replaceUserDivisionScope(targetId: number, editorId: number, divisions: string[]) {
+  await requireUserRow(targetId);
+  await replaceDivisionScope(targetId, editorId, divisions);
   return getUserDetail(targetId);
 }
 

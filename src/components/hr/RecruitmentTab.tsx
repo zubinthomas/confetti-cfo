@@ -5,20 +5,26 @@ import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "./FormField";
+import { DIVISIONS } from "@/lib/hrDivisions";
+import { useAuth } from "@/lib/AuthContext";
 
-const EMPTY = { role_title: "", division: "Ceramics", openings: 1, applicant_name: "", applicant_email: "", applicant_phone: "", stage: "Applied", expected_salary: "", notes: "" };
+const EMPTY = { role_title: "", division: "", openings: 1, applicant_name: "", applicant_email: "", applicant_phone: "", stage: "Applied", expected_salary: "", notes: "" };
 
 const stageStatus: Record<string, "green" | "amber" | "red"> = { Applied: "amber", Screening: "amber", Interview: "amber", Offer: "green", Hired: "green", Rejected: "red" };
 
 const STAGES = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
 
 export default function RecruitmentTab() {
+  const { user } = useAuth();
+  const divisionOptions = user?.divisionScope?.length ? user.divisionScope : DIVISIONS;
+  const emptyForm = () => ({ ...EMPTY, division: divisionOptions[0] ?? "" });
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<Record<string, any>>(EMPTY);
+  const [form, setForm] = useState<Record<string, any>>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [filterStage, setFilterStage] = useState("All");
+  const [error, setError] = useState("");
 
   useEffect(() => { load(); }, []);
 
@@ -30,17 +36,31 @@ export default function RecruitmentTab() {
   };
 
   const save = async () => {
+    setError("");
     setSaving(true);
-    const payload = { ...form, openings: Number(form.openings) || 1, expected_salary: Number(form.expected_salary) || 0 };
-    if (form.id) await Recruitment.update(form.id, payload);
-    else await Recruitment.create(payload);
-    setSaving(false);
-    setShowForm(false);
-    setForm(EMPTY);
-    load();
+    try {
+      const payload = { ...form, openings: Number(form.openings) || 1, expected_salary: Number(form.expected_salary) || 0 };
+      if (form.id) await Recruitment.update(form.id, payload);
+      else await Recruitment.create(payload);
+      setShowForm(false);
+      setForm(emptyForm());
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save applicant");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const remove = async (id: string) => { await Recruitment.delete(id); load(); };
+  const remove = async (id: string) => {
+    setError("");
+    try {
+      await Recruitment.delete(id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete applicant");
+    }
+  };
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
@@ -66,6 +86,8 @@ export default function RecruitmentTab() {
         ))}
       </div>
 
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
       <DashCard title="Recruitment Pipeline">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex gap-2 flex-wrap">
@@ -76,7 +98,7 @@ export default function RecruitmentTab() {
               </button>
             ))}
           </div>
-          <button onClick={() => { setForm(EMPTY); setShowForm(true); }}
+          <button onClick={() => { setForm(emptyForm()); setShowForm(true); }}
             className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition">
             <Plus className="w-4 h-4" /> Add Applicant
           </button>
@@ -133,7 +155,7 @@ export default function RecruitmentTab() {
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Role Title *" name="role_title" value={form.role_title ?? ""} onChange={updateField} />
-              <FormField label="Division *" name="division" options={["Ceramics", "Textiles", "Siena", "Admin"]} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Division *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="No. of Openings" name="openings" type="number" value={form.openings ?? ""} onChange={updateField} />
               <FormField label="Stage" name="stage" options={STAGES} value={form.stage ?? ""} onChange={updateField} />
               <FormField label="Applicant Name" name="applicant_name" value={form.applicant_name ?? ""} onChange={updateField} />

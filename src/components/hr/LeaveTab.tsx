@@ -18,6 +18,7 @@ export default function LeaveTab() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Record<string, any>>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => { load(); }, []);
 
@@ -33,24 +34,40 @@ export default function LeaveTab() {
   };
 
   const save = async () => {
+    setError("");
     setSaving(true);
-    const payload = { ...form, days: Number(form.days) || 0 };
-    if (form.id) await LeaveRequest.update(form.id, payload);
-    else await LeaveRequest.create(payload);
-    setSaving(false);
-    setShowForm(false);
-    setForm(EMPTY);
-    load();
+    try {
+      const payload = { ...form, days: Number(form.days) || 0 };
+      if (form.id) await LeaveRequest.update(form.id, payload);
+      else await LeaveRequest.create(payload);
+      setShowForm(false);
+      setForm(EMPTY);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save leave request");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateStatus = async (id: string, status: string) => {
-    await LeaveRequest.update(id, { status });
-    load();
+    setError("");
+    try {
+      await LeaveRequest.update(id, { status });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update status");
+    }
   };
 
   const remove = async (id: string) => {
-    await LeaveRequest.delete(id);
-    load();
+    setError("");
+    try {
+      await LeaveRequest.delete(id);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete leave request");
+    }
   };
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
@@ -75,6 +92,8 @@ export default function LeaveTab() {
         <KpiCard label="Approved Leaves" value={approved} status="green" />
         <KpiCard label="Total Days Approved" value={totalDays} sub="This month" />
       </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <DashCard title="Leave Requests">
         <div className="flex justify-end mb-3">

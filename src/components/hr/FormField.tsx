@@ -6,7 +6,7 @@ export interface FormFieldProps {
   value: string | number;
   onChange: (name: string, value: string) => void;
   type?: string;
-  options?: string[] | null;
+  options?: readonly string[] | null;
   /** Disabled/placeholder first option shown when a select has no value yet. */
   placeholder?: string;
   disabled?: boolean;

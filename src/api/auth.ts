@@ -13,6 +13,7 @@ export interface User {
   full_name: string;
   roles: Role[];
   permissions: string[]; // "Resource:action", e.g. "Employee:write"
+  divisionScope: string[]; // empty = unrestricted; see src/lib/hrDivisions.ts
 }
 
 export const auth = {

@@ -2,7 +2,7 @@
 // the old JSON-file store: rows go in/out with snake_case field names and a
 // string id + ISO-8601 created_date.
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq, getTableColumns } from 'drizzle-orm';
+import { asc, desc, eq, getTableColumns, inArray } from 'drizzle-orm';
 import type { PgTableWithColumns } from 'drizzle-orm/pg-core';
 import { db, ready, schema } from './db/client.ts';
 
@@ -50,10 +50,18 @@ function toApiShape(table: AnyPgTable, row: Record<string, unknown>) {
   return out;
 }
 
-export async function listEntities(entity: string, sort?: string) {
+/** `divisionScope`, when non-empty, restricts results to rows whose
+ *  `division` column is in the list - a no-op if the table has no
+ *  `division` column, so this stays safe to pass for any entity. See
+ *  server/db/divisionScope.ts for where the scope itself comes from. */
+export async function listEntities(entity: string, sort?: string, divisionScope?: string[]) {
   const table = assertEntity(entity);
   await ready();
   let query = db.select().from(table).$dynamic();
+  const divisionCol = getTableColumns(table).division as unknown;
+  if (divisionScope && divisionScope.length > 0 && divisionCol) {
+    query = query.where(inArray(divisionCol as never, divisionScope));
+  }
   if (sort) {
     const isDesc = sort.startsWith('-');
     const apiField = isDesc ? sort.slice(1) : sort;
@@ -65,6 +73,15 @@ export async function listEntities(entity: string, sort?: string) {
   }
   const rows = await query;
   return rows.map((r) => toApiShape(table, r as Record<string, unknown>));
+}
+
+/** Single-row fetch by id, in API (snake_case) shape - used to check a
+ *  row's current division before allowing a scoped update/delete. */
+export async function getEntityRow(entity: string, id: string) {
+  const table = assertEntity(entity);
+  await ready();
+  const [row] = await db.select().from(table).where(eq(table.id, id));
+  return row ? toApiShape(table, row as Record<string, unknown>) : null;
 }
 
 export async function createEntity(entity: string, data: Record<string, unknown>) {
