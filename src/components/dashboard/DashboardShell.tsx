@@ -4,10 +4,11 @@ import PageSpinner from "./PageSpinner";
 import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
-  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck,
+  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes,
   MenuIcon, X, Plus,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
+import { useAuth } from "@/lib/AuthContext";
 
 // Routes not shown in NAV_SECTIONS (relocated into the header/user menu) but
 // that still need a header title/subtitle.
@@ -70,6 +71,7 @@ const NAV_SECTIONS = [
 ];
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+  const { can } = useAuth();
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
       {NAV_SECTIONS.map((section, i) => (
@@ -116,6 +118,15 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         >
           <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
         </Link>
+        {can("Inventory", "read") && (
+          <Link
+            to="/inventory"
+            onClick={onNavigate}
+            className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Boxes className="w-4 h-4 shrink-0" /> Inventory
+          </Link>
+        )}
       </div>
     </nav>
   );
@@ -134,6 +145,7 @@ function pageTitle(pathname: string) {
 export default function DashboardShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
+  const { can } = useAuth();
   const title = pageTitle(pathname);
 
   return (
@@ -202,6 +214,14 @@ export default function DashboardShell() {
                 >
                   <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
                 </Link>
+                {can("Inventory", "read") && (
+                  <Link
+                    to="/inventory"
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Boxes className="w-4 h-4 shrink-0" /> Inventory
+                  </Link>
+                )}
               </div>
               <UserMenu />
             </div>

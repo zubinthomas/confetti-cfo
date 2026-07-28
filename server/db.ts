@@ -15,6 +15,11 @@ const TABLES: Record<string, AnyPgTable> = {
   Recruitment: schema.recruitments,
   LeaveRequest: schema.leaveRequests,
   PayrollRecord: schema.payrollRecords,
+  // The item catalog only - inventory_transactions is append-only and
+  // needs an atomic side effect (adjusting the item's cached balance), so
+  // it's served by server/routes/inventory.ts instead, not this generic
+  // layer. Both share the Inventory permission resource.
+  Inventory: schema.inventoryItems,
 };
 
 function assertEntity(entity: string): AnyPgTable {

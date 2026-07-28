@@ -398,3 +398,38 @@ export const leaveRequests = pgTable('leave_requests', {
   reason: text('reason'),
   status: text('status'),
 });
+
+// ── Inventory (department-scoped stock catalog + append-only ledger) ────────
+// The catalog - a plain generic entity (server/db.ts's TABLES map), so
+// list/create/edit/delete and division scoping all come for free, same as
+// employees/payrollRecords. quantityOnHand is a cached running balance,
+// kept in sync by inventoryLedger.ts whenever a transaction is recorded -
+// it is not the source of truth, inventory_transactions is.
+export const inventoryItems = pgTable('inventory_items', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  name: text('name'),
+  sku: text('sku'),
+  division: text('division'),
+  category: text('category'),
+  unit: text('unit'),
+  quantityOnHand: doublePrecision('quantity_on_hand').notNull().default(0),
+  reorderThreshold: doublePrecision('reorder_threshold'),
+  unitCost: doublePrecision('unit_cost'),
+  notes: text('notes'),
+});
+
+export const inventoryTransactionTypeEnum = pgEnum('inventory_transaction_type', ['in', 'out']);
+
+// Append-only - no update/delete surface. A mistake is corrected with an
+// offsetting transaction, not by editing history (see
+// server/db/inventoryLedger.ts).
+export const inventoryTransactions = pgTable('inventory_transactions', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  itemId: text('item_id').notNull().references(() => inventoryItems.id, { onDelete: 'cascade' }),
+  type: inventoryTransactionTypeEnum('type').notNull(),
+  quantity: doublePrecision('quantity').notNull(),
+  note: text('note'),
+  recordedByUserId: integer('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+});

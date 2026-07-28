@@ -17,6 +17,7 @@ import HR from '@/pages/HR';
 import Compliance from '@/pages/Compliance';
 import AcceptInvite from '@/pages/AcceptInvite';
 import MyProfile from '@/pages/MyProfile';
+import InventoryPage from '@/pages/Inventory';
 import { useReferenceData } from '@/hooks/useReferenceData';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
@@ -103,6 +104,9 @@ const AuthenticatedApp = () => {
         </Route>
         <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
           <Route path="/compliance" element={<Compliance />} />
+        </Route>
+        <Route element={<RequirePermission requires={[{ resource: 'Inventory', action: 'read' }]} />}>
+          <Route path="/inventory" element={<InventoryPage />} />
         </Route>
         {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
             Renders its own "not linked" message for anyone who navigates here

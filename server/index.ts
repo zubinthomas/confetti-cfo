@@ -15,6 +15,7 @@ import settingsRoutes from './routes/settings.ts';
 import invitesRoutes from './routes/invites.ts';
 import rolesRoutes from './routes/roles.ts';
 import usersRoutes from './routes/users.ts';
+import inventoryRoutes from './routes/inventory.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { config } from 'dotenv';
 
@@ -45,6 +46,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/invites', invitesRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
