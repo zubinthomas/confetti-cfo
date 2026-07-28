@@ -63,7 +63,7 @@ export function requirePermission(resource: Resource, action: Action) {
   };
 }
 
-const ENTITY_RESOURCES = new Set<Resource>(['Employee', 'Licence', 'Recruitment', 'LeaveRequest']);
+const ENTITY_RESOURCES = new Set<Resource>(['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord']);
 
 /** Same as requirePermission, but the resource is entities.ts's :entity route
  *  param instead of a fixed value - validated (400) before the permission

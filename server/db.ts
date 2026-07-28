@@ -14,6 +14,7 @@ const TABLES: Record<string, AnyPgTable> = {
   Licence: schema.licences,
   Recruitment: schema.recruitments,
   LeaveRequest: schema.leaveRequests,
+  PayrollRecord: schema.payrollRecords,
 };
 
 function assertEntity(entity: string): AnyPgTable {

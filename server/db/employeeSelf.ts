@@ -35,10 +35,16 @@ const SELF_VIEW_COLUMNS = {
   aadharUrl: schema.employees.aadharUrl,
   panUrl: schema.employees.panUrl,
   offerLetterUrl: schema.employees.offerLetterUrl,
+  photoUrl: schema.employees.photoUrl,
 };
 
 export async function getSelfEmployeeView(userId: number) {
   await ready();
   const [row] = await db.select(SELF_VIEW_COLUMNS).from(schema.employees).where(eq(schema.employees.userId, userId));
-  return row ?? null;
+  if (!row) return null;
+  const payrollRecords = await db
+    .select({ month: schema.payrollRecords.month, grossSalary: schema.payrollRecords.grossSalary })
+    .from(schema.payrollRecords)
+    .where(eq(schema.payrollRecords.employeeId, row.id));
+  return { ...row, payrollRecords };
 }

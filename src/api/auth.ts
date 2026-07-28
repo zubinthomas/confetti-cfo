@@ -36,6 +36,8 @@ export interface SelfEmployeeView {
   aadharUrl: string | null;
   panUrl: string | null;
   offerLetterUrl: string | null;
+  photoUrl: string | null;
+  payrollRecords: { month: string; grossSalary: number | null }[];
 }
 
 export interface User {

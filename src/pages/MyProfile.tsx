@@ -1,8 +1,18 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import DashCard from "@/components/dashboard/DashCard";
-import { ArrowLeft, FileText, User as UserIcon } from "lucide-react";
+import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
+import { ArrowLeft, FileText, User as UserIcon, IdCard, Loader2 } from "lucide-react";
+import type { SelfEmployeeView } from "@/api/auth";
+
+const toDocInfo = (emp: SelfEmployeeView): EmployeeDocInfo => ({
+  fullName: emp.fullName,
+  employeeId: emp.employeeId,
+  division: emp.division,
+  role: emp.role,
+  photoUrl: emp.photoUrl,
+});
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   if (!value) return null;
@@ -29,6 +39,17 @@ function DocLink({ label, url }: { label: string; url: string | null }) {
 export default function MyProfile() {
   const { user } = useAuth();
   const emp = user?.employee;
+  const [generatingCard, setGeneratingCard] = useState(false);
+
+  const downloadIdCard = async () => {
+    if (!emp) return;
+    setGeneratingCard(true);
+    try {
+      await generateIdCard(toDocInfo(emp));
+    } finally {
+      setGeneratingCard(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -52,16 +73,28 @@ export default function MyProfile() {
         ) : (
           <>
             <DashCard>
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center shrink-0">
-                  <UserIcon className="w-7 h-7 text-muted-foreground" />
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-4">
+                  {emp.photoUrl ? (
+                    <img src={emp.photoUrl} alt="" className="w-14 h-14 rounded-2xl object-cover border border-border shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center shrink-0">
+                      <UserIcon className="w-7 h-7 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-lg font-semibold font-heading text-foreground">{emp.fullName || "-"}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {[emp.role, emp.division].filter(Boolean).join(" · ") || "-"}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-semibold font-heading text-foreground">{emp.fullName || "-"}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {[emp.role, emp.division].filter(Boolean).join(" · ") || "-"}
-                  </p>
-                </div>
+                <button
+                  onClick={downloadIdCard} disabled={generatingCard}
+                  className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  {generatingCard ? <Loader2 className="w-4 h-4 animate-spin" /> : <IdCard className="w-4 h-4" />} Download ID Card
+                </button>
               </div>
             </DashCard>
 
@@ -75,6 +108,29 @@ export default function MyProfile() {
                 <Field label="Joining Date" value={emp.joiningDate} />
                 <Field label="Monthly Salary" value={emp.monthlySalary ? `₹${emp.monthlySalary.toLocaleString()}` : null} />
               </div>
+            </DashCard>
+
+            <DashCard title="Payroll">
+              {emp.payrollRecords.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No payroll recorded yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {[...emp.payrollRecords].sort((a, b) => b.month.localeCompare(a.month)).map((r) => (
+                    <div key={r.month} className="flex items-center justify-between text-sm border-b border-border pb-2 last:border-b-0">
+                      <span className="text-foreground">{monthLabel(r.month)}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-muted-foreground">{r.grossSalary != null ? `₹${r.grossSalary.toLocaleString()}` : "-"}</span>
+                        <button
+                          onClick={() => generateSalarySlip(toDocInfo(emp), r)}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Download Slip
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </DashCard>
 
             <DashCard title="Personal & Contact">
