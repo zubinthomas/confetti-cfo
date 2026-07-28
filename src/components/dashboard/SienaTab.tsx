@@ -31,7 +31,7 @@ const QUARTER_LABELS = ["Q1 (Apr-Jun)", "Q2 (Jul-Sep)", "Q3 (Oct-Dec)", "Q4 (Jan
 // Sienna's internal COGS target - a fixed policy ceiling, not a data value.
 const COGS_TARGET_PCT = 35;
 
-export default function SienaTab() {
+export default function SiennaTab() {
   const [view, setView] = useState("revenue");
   const fys = useOverviewFiscalYears();
   const [selectedFy, setSelectedFy] = useState<string | null>(null);
@@ -149,7 +149,7 @@ export default function SienaTab() {
       <div>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Siena F&B - Monthly P&L · {FAB.label}
+            Sienna F&B - Monthly P&L · {FAB.label}
           </p>
           <div className="flex gap-1.5">
             {fys.map((y) => (

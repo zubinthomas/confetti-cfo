@@ -64,7 +64,7 @@ export function buildCFOContext(inputs: CFOContextInputs): string {
 GROUP (FY 2025-26): total revenue ${R(groupIn)}, total expenses ${R(groupOut)}, net ${R(groupIn - groupOut)}.
 
 DIVISIONS (FY 2025-26):
-- F&B (Siena restaurant/cafe/bar): revenue ${R(fbRev)}, net profit ${R(fbPL)} (${marginPct(fbPL, fbRev)}% margin). Streams: product sales ${R(sum(fab.productSales))}, retail & bar ${R(sum(fab.retailBarSales))}, events/catering ${R(sum(fab.eventCatering))}. Prior year (FY 24-25): revenue ${R(prevYear.fb.sales)}, net ${R(prevYear.fb.pl)}.
+- F&B (Sienna restaurant/cafe/bar): revenue ${R(fbRev)}, net profit ${R(fbPL)} (${marginPct(fbPL, fbRev)}% margin). Streams: product sales ${R(sum(fab.productSales))}, retail & bar ${R(sum(fab.retailBarSales))}, events/catering ${R(sum(fab.eventCatering))}. Prior year (FY 24-25): revenue ${R(prevYear.fb.sales)}, net ${R(prevYear.fb.pl)}.
 - Store (Sienna retail): revenue ${R(stRev)}, net P&L ${R(stPL)} (${marginPct(stPL, stRev)}% margin). Channels: HP Store ${R(siennaStoreFy2526Totals["HP Store"])}, Corporate ${R(siennaStoreFy2526Totals["Corporate"])}, Factory Outlet ${R(siennaStoreFy2526Totals["Factory Outlet"])}, Online ${R(siennaStoreFy2526Totals["Online"])}. Top categories: ${topCats}. Consignment partner sales ${R(consignment?.total)} (~${R(consignment?.commission)} commission).
 - ${deptLine("Pottery", craft.pottery)}
 - ${deptLine("Batik", craft.batik)}

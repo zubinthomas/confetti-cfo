@@ -16,7 +16,7 @@ import PageNotFound from '@/lib/PageNotFound';
 import RequirePermission from '@/components/RequirePermission';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import OverviewTab from '@/components/dashboard/OverviewTab';
-import SienaTab from '@/components/dashboard/SienaTab';
+import SiennaTab from '@/components/dashboard/SiennaTab';
 import StoreTab from '@/components/dashboard/StoreTab';
 import CashFlowTab from '@/components/dashboard/CashFlowTab';
 import CraftDeptPage from '@/components/dashboard/CraftDeptPage';
@@ -57,7 +57,7 @@ export default function DashboardApp() {
       <Route element={<DashboardShell />}>
         <Route element={<RequirePermission requires={[{ resource: 'FinancialRecord', action: 'read' }]} />}>
           <Route index element={<OverviewTab />} />
-          <Route path="fnb" element={<SienaTab />} />
+          <Route path="fnb" element={<SiennaTab />} />
           <Route path="fnb/cafe" element={<CafePage />} />
           <Route path="fnb/restaurant" element={<RestaurantPage />} />
           <Route path="fnb/bar" element={<BarPage />} />

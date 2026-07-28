@@ -25,7 +25,7 @@ const statusStyle: Record<string, string> = {
 
 const LOCATIONS = [
   "Kolkata (Head Office)",
-  "Kolkata (Siena)",
+  "Kolkata (Sienna)",
   "Birbhum (Ceramics Factory)",
   "Birbhum (Other)",
   "All Locations",
@@ -51,16 +51,16 @@ const EMPTY = {
 // Pre-populated checklist of commonly required licences for Confetti Exports
 const CHECKLIST = [
   { licence_name: "Trade Licence - Kolkata HO", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Head Office)", division: "Admin" },
-  { licence_name: "Trade Licence - Siena Restaurant & Bar", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Trade Licence - Sienna Restaurant & Bar", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Sienna)", division: "Sienna" },
   { licence_name: "Trade Licence - Birbhum Factory", licence_type: "Trade Licence", authority: "Birbhum Zila Parishad / Municipality", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "GST Registration (Group)", licence_type: "GST Registration", authority: "GSTN / GST Department", location: "All Locations", division: "All" },
-  { licence_name: "FSSAI - Siena Food Business", licence_type: "FSSAI", authority: "FSSAI (Food Safety & Standards Authority)", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Excise / Bar Licence - Siena", licence_type: "Excise / Bar Licence", authority: "West Bengal Excise Dept.", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Fire NOC - Siena", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "FSSAI - Sienna Food Business", licence_type: "FSSAI", authority: "FSSAI (Food Safety & Standards Authority)", location: "Kolkata (Sienna)", division: "Sienna" },
+  { licence_name: "Excise / Bar Licence - Sienna", licence_type: "Excise / Bar Licence", authority: "West Bengal Excise Dept.", location: "Kolkata (Sienna)", division: "Sienna" },
+  { licence_name: "Fire NOC - Sienna", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Kolkata (Sienna)", division: "Sienna" },
   { licence_name: "Fire NOC - Birbhum Factory", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "Factory Licence - Ceramics", licence_type: "Factory Licence", authority: "WB Directorate of Factories", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "Shops & Establishments - Kolkata HO", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Head Office)", division: "Admin" },
-  { licence_name: "Shops & Establishments - Siena", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "Shops & Establishments - Sienna", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Sienna)", division: "Sienna" },
   { licence_name: "ESI Registration", licence_type: "ESI Registration", authority: "ESIC", location: "All Locations", division: "All" },
   { licence_name: "PF / EPF Registration", licence_type: "PF Registration", authority: "EPFO", location: "All Locations", division: "All" },
   { licence_name: "Professional Tax - WB", licence_type: "Professional Tax", authority: "WB PT Department", location: "All Locations", division: "All" },
@@ -69,8 +69,8 @@ const CHECKLIST = [
   { licence_name: "Labour Licence - Ceramics Factory", licence_type: "Labour Licence", authority: "WB Labour Dept.", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
   { licence_name: "Import Export Code (IEC)", licence_type: "Import Export Code", authority: "DGFT", location: "Kolkata (Head Office)", division: "Admin" },
   { licence_name: "MSME / Udyam Registration", licence_type: "MSME / Udyam", authority: "MSME Ministry", location: "All Locations", division: "All" },
-  { licence_name: "KMC Building Permission - Siena", licence_type: "KMC Permission", authority: "KMC Building Dept.", location: "Kolkata (Siena)", division: "Siena" },
-  { licence_name: "Signage Permission - Siena", licence_type: "Signage Permission", authority: "KMC Advertisement Dept.", location: "Kolkata (Siena)", division: "Siena" },
+  { licence_name: "KMC Building Permission - Sienna", licence_type: "KMC Permission", authority: "KMC Building Dept.", location: "Kolkata (Sienna)", division: "Sienna" },
+  { licence_name: "Signage Permission - Sienna", licence_type: "Signage Permission", authority: "KMC Advertisement Dept.", location: "Kolkata (Sienna)", division: "Sienna" },
   { licence_name: "Water / Sewage NOC - Birbhum", licence_type: "Water / Sewage Permit", authority: "PHED / Local Municipality", location: "Birbhum (Ceramics Factory)", division: "Ceramics" },
 ];
 

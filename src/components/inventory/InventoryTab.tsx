@@ -8,7 +8,7 @@ import FormField from "@/components/hr/FormField";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
 
-const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Siena: "#f59e0b", Admin: "#8b5cf6" };
+const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Sienna: "#f59e0b", Admin: "#8b5cf6" };
 
 const EMPTY = { name: "", sku: "", division: "", category: "", unit: "", quantity_on_hand: "0", reorder_threshold: "", unit_cost: "", notes: "" };
 
