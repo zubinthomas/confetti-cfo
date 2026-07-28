@@ -73,7 +73,9 @@ export async function getInviteByToken(token: string) {
   return invite ? attachDetails(invite) : null;
 }
 
-export async function createInvite(invitedByUserId: number, email: string, permissions: Perm[]) {
+export async function createInvite(
+  invitedByUserId: number, email: string, permissions: Perm[], employeeId?: string,
+) {
   await ready();
   const normalized = normalizeEmail(email);
   await assertGrantable(invitedByUserId, permissions);
@@ -87,6 +89,22 @@ export async function createInvite(invitedByUserId: number, email: string, permi
     throw new InviteError(`${normalized} already has a pending invite - revoke it or edit its permissions instead`);
   }
 
+  if (employeeId !== undefined) {
+    const [employee] = await db.select({ userId: schema.employees.userId })
+      .from(schema.employees).where(eq(schema.employees.id, employeeId));
+    if (!employee) throw new InviteError(`No employee with id ${employeeId}`);
+    if (employee.userId) throw new InviteError('This employee already has a self-service account linked.');
+
+    // Catches the case the check above can't: a second invite for the same
+    // employee created *before* the first is accepted (employee.userId is
+    // still null for both at create time - only acceptance sets it).
+    const [existingEmployeeInvite] = await db.select().from(schema.invites)
+      .where(and(eq(schema.invites.employeeId, employeeId), eq(schema.invites.status, 'pending')));
+    if (existingEmployeeInvite && !isExpired(existingEmployeeInvite)) {
+      throw new InviteError('This employee already has a pending self-service invite - revoke it first.');
+    }
+  }
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   const [invite] = await db.insert(schema.invites).values({
@@ -96,6 +114,7 @@ export async function createInvite(invitedByUserId: number, email: string, permi
     invitedByUserId,
     createdAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),
+    employeeId,
   }).returning();
 
   await setInvitePermissions(invite.id, permissions);
@@ -166,6 +185,9 @@ export async function acceptInvite(token: string, { fullName, password }: { full
     await tx.update(schema.invites).set({
       status: 'accepted', acceptedAt: now, acceptedUserId: user.id,
     }).where(eq(schema.invites.id, invite.id));
+    if (invite.employeeId) {
+      await tx.update(schema.employees).set({ userId: user.id }).where(eq(schema.employees.id, invite.employeeId));
+    }
     return user;
   });
 }

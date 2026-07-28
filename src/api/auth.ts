@@ -7,6 +7,37 @@ export interface Role {
   rank: number;
 }
 
+// Curated, read-only subset of the linked employees row - notes and
+// internal_documents are deliberately excluded server-side (see
+// server/db/employeeSelf.ts), not just hidden here.
+export interface SelfEmployeeView {
+  id: string;
+  fullName: string | null;
+  employeeId: string | null;
+  division: string | null;
+  role: string | null;
+  employmentType: string | null;
+  status: string | null;
+  joiningDate: string | null;
+  monthlySalary: number | null;
+  phone: string | null;
+  email: string | null;
+  aadharNumber: string | null;
+  panNumber: string | null;
+  bloodGroup: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  address: string | null;
+  policeVerificationStatus: string | null;
+  idProofUrl: string | null;
+  contractUrl: string | null;
+  policeVerificationUrl: string | null;
+  healthRecordUrl: string | null;
+  aadharUrl: string | null;
+  panUrl: string | null;
+  offerLetterUrl: string | null;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -14,6 +45,7 @@ export interface User {
   roles: Role[];
   permissions: string[]; // "Resource:action", e.g. "Employee:write"
   divisionScope: string[]; // empty = unrestricted; see src/lib/hrDivisions.ts
+  employee: SelfEmployeeView | null; // set only if this account is linked for self-service
 }
 
 export const auth = {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Employee } from "@/api/entities";
-import { Plus, X, Loader2 } from "lucide-react";
+import { createInvite } from "@/api/invitesApi";
+import { Plus, X, Loader2, Copy, Check } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "./FormField";
@@ -11,10 +12,91 @@ const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: 
 
 const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "" };
 
+// The employee only ever gets a curated, read-only view of their own record
+// (see server/db/employeeSelf.ts) - the invite itself carries no
+// permissions at all, so there's nothing to pick here beyond the email.
+function InviteSelfServiceModal({ employee, onClose, onSent }: { employee: any; onClose: () => void; onSent: () => void }) {
+  const [email, setEmail] = useState(employee.email || "");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const send = async () => {
+    setError("");
+    setSending(true);
+    try {
+      const invite = await createInvite(email, [], employee.id);
+      setToken(invite.token);
+      onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create invite");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const url = token ? `${window.location.origin}/invite/${token}` : "";
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-card rounded-2xl border border-border w-full max-w-md">
+        <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">Invite to self-service</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {!token ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {employee.full_name} will be able to log in and view their own profile, salary, and documents - nothing else.
+              </p>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Email</label>
+                <input
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-emerald-600">Invite created.</p>
+              <button
+                onClick={() => { navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+                className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+              >
+                {copied ? <><Check className="w-4 h-4" /> Copied</> : <><Copy className="w-4 h-4" /> Copy invite link</>}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="px-6 pb-6 flex justify-end gap-3">
+          {!token ? (
+            <>
+              <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+              <button
+                onClick={send} disabled={sending || !email}
+                className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {sending && <Loader2 className="w-4 h-4 animate-spin" />} Send invite
+              </button>
+            </>
+          ) : (
+            <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90">Done</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HeadcountTab() {
   const { user, can } = useAuth();
   const canWrite = can("Employee", "write");
   const canDelete = can("Employee", "delete");
+  const canInvite = can("Invite", "write");
   // A scoped manager's dropdown only offers their own division(s); an
   // unscoped user (the default) sees the full list, matching today's
   // behavior. The server enforces this either way - this is just so a
@@ -27,6 +109,7 @@ export default function HeadcountTab() {
   const [form, setForm] = useState<Record<string, any>>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [inviteTarget, setInviteTarget] = useState<any | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => { load(); }, []);
@@ -209,8 +292,30 @@ export default function HeadcountTab() {
               ) : null)}
               {selected.address && <div className="border-b border-border pb-2"><span className="text-muted-foreground block mb-1">Address</span><span className="text-foreground">{selected.address}</span></div>}
             </div>
+            {canInvite && (
+              <div className="px-6 pb-6">
+                {selected.user_id ? (
+                  <p className="text-xs text-muted-foreground">This employee already has a self-service login.</p>
+                ) : (
+                  <button
+                    onClick={() => setInviteTarget(selected)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Invite to self-service
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {inviteTarget && (
+        <InviteSelfServiceModal
+          employee={inviteTarget}
+          onClose={() => setInviteTarget(null)}
+          onSent={load}
+        />
       )}
     </div>
   );

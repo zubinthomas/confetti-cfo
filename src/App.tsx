@@ -16,6 +16,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import HR from '@/pages/HR';
 import Compliance from '@/pages/Compliance';
 import AcceptInvite from '@/pages/AcceptInvite';
+import MyProfile from '@/pages/MyProfile';
 import { useReferenceData } from '@/hooks/useReferenceData';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
@@ -103,6 +104,11 @@ const AuthenticatedApp = () => {
         <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
           <Route path="/compliance" element={<Compliance />} />
         </Route>
+        {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
+            Renders its own "not linked" message for anyone who navigates here
+            without an employee link. Kept outside ReferenceDataGate below since
+            it doesn't need the financial reference-data prerequisite. */}
+        <Route path="/me" element={<MyProfile />} />
         {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
         <Route path="/*" element={<ReferenceDataGate />} />
       </Route>

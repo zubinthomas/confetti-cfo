@@ -21,8 +21,8 @@ export interface Invite {
 
 export const listInvites = () => get<Invite[]>("/invites");
 
-export const createInvite = (email: string, permissions: Perm[]) =>
-  post<Invite>("/invites", { email, permissions });
+export const createInvite = (email: string, permissions: Perm[], employeeId?: string) =>
+  post<Invite>("/invites", { email, permissions, employeeId });
 
 export const updateInvitePermissions = (id: number, permissions: Perm[]) =>
   patch<Invite>(`/invites/${id}`, { permissions });

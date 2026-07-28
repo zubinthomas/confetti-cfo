@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { UserCog, Settings, FileSpreadsheet, Users, Sun, Moon, Monitor, LogOut } from "lucide-react";
+import { UserCog, Settings, FileSpreadsheet, Users, IdCard, Sun, Moon, Monitor, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -42,6 +42,11 @@ export default function UserMenu() {
         <DropdownMenuItem asChild>
           <Link to="/settings/user"><UserCog className="w-4 h-4" /> User settings</Link>
         </DropdownMenuItem>
+        {user.employee && (
+          <DropdownMenuItem asChild>
+            <Link to="/me"><IdCard className="w-4 h-4" /> My Profile</Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link to="/settings"><Settings className="w-4 h-4" /> General settings</Link>
         </DropdownMenuItem>

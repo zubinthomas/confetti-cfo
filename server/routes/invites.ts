@@ -33,9 +33,12 @@ router.get('/', authMiddleware, requirePermission('Invite', 'read'), async (_req
 
 router.post('/', authMiddleware, requirePermission('Invite', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { email } = req.body ?? {};
+    const { email, employeeId } = req.body ?? {};
     if (typeof email !== 'string' || !email) return res.status(400).json({ message: 'email is required' });
-    const invite = await createInvite(req.user!.id, email, parsePermissions(req.body));
+    if (employeeId !== undefined && typeof employeeId !== 'string') {
+      return res.status(400).json({ message: 'employeeId must be a string' });
+    }
+    const invite = await createInvite(req.user!.id, email, parsePermissions(req.body), employeeId);
     res.status(201).json(invite);
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });

@@ -213,6 +213,10 @@ export const invites = pgTable('invites', {
   expiresAt: text('expires_at').notNull(),   // ISO-8601
   acceptedAt: text('accepted_at'),
   acceptedUserId: integer('accepted_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Set when this invite is for linking a specific employee record to a new
+  // self-service login (see server/db/employeeSelf.ts) - null for ordinary
+  // staff invites.
+  employeeId: text('employee_id').references(() => employees.id, { onDelete: 'set null' }),
 }, (t) => [
   uniqueIndex('invites_token').on(t.token),
 ]);
@@ -322,7 +326,13 @@ export const employees = pgTable('employees', {
   // array column is what lets this reuse that layer instead of needing a
   // dedicated route.
   internalDocuments: jsonb('internal_documents').$type<{ label: string; url: string; uploadedAt: string }[]>(),
-});
+  // Links this HR record to a login account for employee self-service (see
+  // server/db/employeeSelf.ts) - most employees have none. Set when an
+  // invite created with this employeeId (server/db/invites.ts) is accepted.
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  uniqueIndex('employees_user_id').on(t.userId),
+]);
 
 export const licences = pgTable('licences', {
   id: text('id').primaryKey(),
