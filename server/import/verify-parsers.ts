@@ -9,6 +9,7 @@ import { loadWorkbook } from './xlsx.ts';
 import { parseCepl } from './parseCepl.ts';
 import { parseCafe } from './parseCafe.ts';
 import { parseSienna } from './parseSienna.ts';
+import { parseHr } from './parseHr.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -93,6 +94,38 @@ for (const [businessName, file, parser] of SOURCES) {
     const actCon = new Map<string, number>();
     for (const r of pw.consignmentRecords) actCon.set(`${r.periodStart}|${r.vendorName}`, r.amount);
     total += diffMaps('consignment', expCon, actCon);
+  }
+}
+
+// The HR Mastersheet has no extracted_data.json-style oracle (that file
+// only covers the financial dataset) - spot-check instead of a full diff:
+// expected row count, zero parse errors, and a couple of known values from
+// the first row.
+{
+  const HR_FILE = path.join(ROOT, 'data-sources', 'HR Mastersheet for IT.xlsx');
+  if (!fs.existsSync(HR_FILE)) {
+    console.log(`skipping HR (no ${HR_FILE})`);
+  } else {
+    const pw = parseHr(await loadWorkbook(HR_FILE));
+    const errors = pw.issues.filter((i) => i.level === 'error').length;
+    const warnings = pw.issues.filter((i) => i.level === 'warning').length;
+    console.log(`== HR - issues: ${errors} error(s), ${warnings} warning(s)`);
+    let bad = 0;
+    if (pw.employeeRecords.length !== 119) {
+      console.error(`  [HR] expected 119 employee rows, got ${pw.employeeRecords.length}`);
+      bad++;
+    }
+    if (errors > 0) {
+      console.error(`  [HR] expected 0 parse errors, got ${errors}`);
+      bad++;
+    }
+    const first = pw.employeeRecords.find((r) => r.fullName === 'Buddhadev Tapadar');
+    if (!first || first.division !== 'Accounts' || first.aadharNumber !== '933655854041') {
+      console.error(`  [HR] spot-check row (Buddhadev Tapadar) didn't match: ${JSON.stringify(first)}`);
+      bad++;
+    }
+    console.log(`  [HR] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
+    total += bad;
   }
 }
 

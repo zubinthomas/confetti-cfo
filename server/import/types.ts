@@ -72,13 +72,44 @@ export interface ParsedConsignmentRecord {
   commissionRate: number | null;
 }
 
+// One HR Mastersheet row, matched against existing `employees` rows by
+// Aadhaar (falling back to full name when Aadhaar is blank - see
+// server/import/mergeEmployees.ts). Only the fields the sheet actually
+// supplies are listed here; manual-only fields (salary, documents, notes,
+// ...) have no representation in the parsed shape at all, so there's
+// nothing for the merge step to accidentally overwrite.
+export interface ParsedEmployeeRecord {
+  fullName: string;
+  division: string;
+  role: string;
+  employmentType: string;
+  status: string;
+  joiningDate: string; // YYYY-MM-DD
+  phone: string | null;
+  email: string | null;
+  aadharNumber: string | null;
+  panNumber: string | null;
+  address: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelation: string | null;
+  gender: string | null;
+  dateOfBirth: string | null; // YYYY-MM-DD
+  reportingManager: string | null;
+  location: string | null;
+  potteryGrade: number | null;
+  bankAccountNumber: string | null;
+  ifscCode: string | null;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
   salesRecords: ParsedSalesRecord[];
   consignmentRecords: ParsedConsignmentRecord[];
+  employeeRecords: ParsedEmployeeRecord[];
   issues: Issue[];
 }
 

@@ -10,7 +10,13 @@ import FormField from "./FormField";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
 
-const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Sienna: "#f59e0b", Admin: "#8b5cf6" };
+const divisionColors: Record<string, string> = {
+  Accounts: "#f59e0b", Admin: "#8b5cf6", "Batik Unit": "#ec4899", Culinary: "#ef4444",
+  Driver: "#64748b", "F&B Services": "#f97316", Jewellery: "#eab308", Legal: "#6366f1",
+  Marketing: "#14b8a6", Partner: "#a855f7", Pottery: "#3b82f6", "Quality Control": "#06b6d4",
+  Retail: "#84cc16", Tailor: "#d946ef", Utility: "#10b981",
+};
+const DEFAULT_DIVISION_COLOR = "#888";
 
 const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "", photo_url: "" };
 
@@ -294,11 +300,11 @@ export default function HeadcountTab() {
         <KpiCard label="Contract Staff" value={employees.filter(e=>e.employment_type==="Contract").length} sub="Contractors" />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {divStats.map(d => (
           <DashCard key={d.name}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: divisionColors[d.name] }} />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: divisionColors[d.name] || DEFAULT_DIVISION_COLOR }} />
               <span className="text-sm font-medium text-foreground">{d.name}</span>
             </div>
             <p className="text-2xl font-bold text-foreground">{d.count}</p>
@@ -329,7 +335,7 @@ export default function HeadcountTab() {
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="text-left py-2 pr-4 font-medium">Name</th>
-                  <th className="text-left py-2 pr-4 font-medium">Division</th>
+                  <th className="text-left py-2 pr-4 font-medium">Department</th>
                   <th className="text-left py-2 pr-4 font-medium">Role</th>
                   <th className="text-left py-2 pr-4 font-medium">Type</th>
                   <th className="text-left py-2 pr-4 font-medium">Status</th>
@@ -344,7 +350,7 @@ export default function HeadcountTab() {
                       <button onClick={() => setSelected(emp)} className="font-medium text-foreground hover:text-primary text-left">{emp.full_name}</button>
                       <p className="text-xs text-muted-foreground">{emp.email}</p>
                     </td>
-                    <td className="py-2.5 pr-4"><span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: divisionColors[emp.division] + "20", color: divisionColors[emp.division] }}>{emp.division}</span></td>
+                    <td className="py-2.5 pr-4"><span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: (divisionColors[emp.division] || DEFAULT_DIVISION_COLOR) + "20", color: divisionColors[emp.division] || DEFAULT_DIVISION_COLOR }}>{emp.division}</span></td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{emp.role}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{emp.employment_type}</td>
                     <td className="py-2.5 pr-4"><span className={`text-xs font-medium ${statusColor[emp.status] || ""}`}>{emp.status}</span></td>
@@ -390,7 +396,7 @@ export default function HeadcountTab() {
               </div>
               <FormField label="Full Name *" name="full_name" value={form.full_name ?? ""} onChange={updateField} />
               <FormField label="Employee ID" name="employee_id" value={form.employee_id ?? ""} onChange={updateField} />
-              <FormField label="Division *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Department *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Role / Designation *" name="role" value={form.role ?? ""} onChange={updateField} />
               <FormField label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} value={form.employment_type ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Active", "On Leave", "Terminated", "Probation"]} value={form.status ?? ""} onChange={updateField} />
@@ -430,7 +436,7 @@ export default function HeadcountTab() {
               <button onClick={() => setSelected(null)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 space-y-3 text-sm">
-              {[["Division", selected.division], ["Role", selected.role], ["Type", selected.employment_type], ["Status", selected.status], ["Joining Date", selected.joining_date], ["Salary/mo", selected.monthly_salary ? `₹${selected.monthly_salary.toLocaleString()}` : "-"], ["Phone", selected.phone], ["Email", selected.email], ["Aadhar", selected.aadhar_number], ["PAN", selected.pan_number], ["Blood Group", selected.blood_group], ["Emergency Contact", selected.emergency_contact_name ? `${selected.emergency_contact_name} - ${selected.emergency_contact_phone}` : "-"]].map(([k, v]) => v ? (
+              {[["Department", selected.division], ["Role", selected.role], ["Reporting Manager", selected.reporting_manager], ["Location", selected.location], ["Pottery Grade", selected.pottery_grade], ["Type", selected.employment_type], ["Status", selected.status], ["Joining Date", selected.joining_date], ["Salary/mo", selected.monthly_salary ? `₹${selected.monthly_salary.toLocaleString()}` : "-"], ["Gender", selected.gender], ["Date of Birth", selected.date_of_birth], ["Phone", selected.phone], ["Email", selected.email], ["Aadhar", selected.aadhar_number], ["PAN", selected.pan_number], ["Blood Group", selected.blood_group], ["Bank Account", selected.bank_account_number], ["IFSC", selected.ifsc_code], ["Emergency Contact", selected.emergency_contact_name ? `${selected.emergency_contact_name}${selected.emergency_contact_relation ? ` (${selected.emergency_contact_relation})` : ""} - ${selected.emergency_contact_phone}` : "-"]].map(([k, v]) => v ? (
                 <div key={k} className="flex justify-between border-b border-border pb-2 last:border-b-0">
                   <span className="text-muted-foreground">{k}</span>
                   <span className="text-foreground font-medium text-right">{v}</span>

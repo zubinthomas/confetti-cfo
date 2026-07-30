@@ -21,6 +21,7 @@ const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   cepl: "CEPL P&L",
   cafe: "Cafe Weekly P&L",
   sienna: "Sienna Store Sales",
+  hr: "HR Mastersheet",
 };
 
 const STATUS_STYLE: Record<ImportBatch["status"], string> = {
@@ -492,8 +493,8 @@ export default function ImportPage() {
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              Accepts the CEPL P&L, Cafe Weekly P&L and Sienna Store Sales workbooks. Uploads are
-              validated and previewed first - nothing changes until you commit.
+              Accepts the CEPL P&L, Cafe Weekly P&L, Sienna Store Sales, and HR Mastersheet
+              workbooks. Uploads are validated and previewed first - nothing changes until you commit.
             </p>
           </div>
           {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
@@ -707,9 +708,10 @@ export default function ImportPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Imports upsert by natural key (department + period + line item, and so on): re-importing the
-        same workbook is a no-op, updated cells change exactly the affected values, and new
-        months/rows are appended. Every batch is kept here as provenance.
+        Imports upsert by natural key (department + period + line item for financial workbooks,
+        Aadhaar number for the HR Mastersheet, and so on): re-importing the same workbook is a
+        no-op, updated cells change exactly the affected values, and new rows are appended. Every
+        batch is kept here as provenance.
       </p>
     </div>
   );

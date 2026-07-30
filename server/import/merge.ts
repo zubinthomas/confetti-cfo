@@ -11,6 +11,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { classifyLineItem, type ParsedWorkbook, type RecordChange } from './types.ts';
+import { buildEmployeeMergePlan } from './mergeEmployees.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -24,6 +25,15 @@ const stat = (): TableStats => ({ creates: 0, updates: 0, unchanged: 0 });
 
 export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan> {
   await ready();
+  // HR Mastersheet rows don't belong to any business/unit/period/line-item -
+  // running the dimension-resolution below for them would create a
+  // meaningless "businesses" row on first import. employees is a flat
+  // table with its own id scheme (text/UUID, not merge.ts's integer
+  // alloc() counters), so it gets its own small matcher instead.
+  if (parsed.kind === 'hr') {
+    const plan = await buildEmployeeMergePlan(parsed.employeeRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
   const stats: Record<string, TableStats> = {
     businesses: stat(), businessUnits: stat(), periods: stat(), lineItems: stat(),
     categories: stat(), channels: stat(), vendors: stat(),

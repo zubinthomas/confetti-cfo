@@ -176,7 +176,7 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
     kind: 'cepl', businessName: BUSINESS,
     periods: [...periods.values()],
     financialRecords: records,
-    salesRecords: [], consignmentRecords: [],
+    salesRecords: [], consignmentRecords: [], employeeRecords: [],
     issues,
   };
 }

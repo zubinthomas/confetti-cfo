@@ -310,8 +310,19 @@ export const employees = pgTable('employees', {
   bloodGroup: text('blood_group'),
   emergencyContactName: text('emergency_contact_name'),
   emergencyContactPhone: text('emergency_contact_phone'),
+  emergencyContactRelation: text('emergency_contact_relation'),
   address: text('address'),
   notes: text('notes'),
+  // Populated by the HR Mastersheet import (server/import/parseHr.ts) -
+  // none of these have a manual-entry form field yet, so they're only
+  // ever set by import and shown read-only in the employee detail panel.
+  gender: text('gender'),
+  dateOfBirth: text('date_of_birth'),
+  reportingManager: text('reporting_manager'),
+  location: text('location'),
+  potteryGrade: integer('pottery_grade'),
+  bankAccountNumber: text('bank_account_number'),
+  ifscCode: text('ifsc_code'),
   policeVerificationStatus: text('police_verification_status'),
   idProofUrl: text('id_proof_url'),
   contractUrl: text('contract_url'),

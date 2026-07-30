@@ -19,9 +19,10 @@ const { loadWorkbook } = await import('./xlsx.ts');
 const { parseCepl } = await import('./parseCepl.ts');
 const { parseCafe } = await import('./parseCafe.ts');
 const { parseSienna } = await import('./parseSienna.ts');
+const { parseHr } = await import('./parseHr.ts');
 const { buildMergePlan, commitMergePlan } = await import('./merge.ts');
 const { loadDataset } = await import('../db/dataset.ts');
-const { ready } = await import('../db/client.ts');
+const { ready, db, schema } = await import('../db/client.ts');
 
 const SOURCES = [
   [path.join(ROOT, 'data-sources', 'P&L', 'CEPL P & L_2025-26.xlsx'), parseCepl],
@@ -95,6 +96,42 @@ for (const [file, parser] of SOURCES) {
     if (s.creates || s.updates) {
       bad++;
       console.error(`[idempotence] ${path.basename(file)} → ${table}: ${s.creates} creates, ${s.updates} updates on re-import`);
+    }
+  }
+}
+
+// ── HR Mastersheet: independently skippable (no shared oracle with the
+// financial sources above), but proves the same idempotence guarantee -
+// this is what actually exercises the new Aadhaar/name matching logic. ──
+const HR_FILE = path.join(ROOT, 'data-sources', 'HR Mastersheet for IT.xlsx');
+if (!fs.existsSync(HR_FILE)) {
+  console.log(`SKIPPED HR - ${HR_FILE} not present`);
+} else {
+  const parseHrFile = async () => parseHr(await loadWorkbook(HR_FILE));
+
+  const parsed1 = await parseHrFile();
+  const hrErrors = parsed1.issues.filter((i) => i.level === 'error');
+  if (hrErrors.length) {
+    console.error(`PARSE ERRORS in ${path.basename(HR_FILE)}:`, hrErrors);
+    bad++;
+  } else {
+    await commitMergePlan(await buildMergePlan(parsed1));
+    const employees = await db.select().from(schema.employees);
+    if (employees.length !== 119) {
+      bad++;
+      console.error(`[HR] expected 119 employees after import, got ${employees.length}`);
+    } else {
+      console.log(`[HR] imported ${employees.length} employees`);
+    }
+
+    // idempotence - re-import must change nothing
+    const plan2 = await buildMergePlan(await parseHrFile());
+    const s = plan2.stats.employees;
+    if (s.creates || s.updates) {
+      bad++;
+      console.error(`[idempotence] HR → employees: ${s.creates} creates, ${s.updates} updates on re-import`);
+    } else {
+      console.log(`[HR] idempotence OK - ${s.unchanged} unchanged on re-import`);
     }
   }
 }

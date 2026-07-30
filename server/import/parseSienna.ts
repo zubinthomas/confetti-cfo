@@ -226,7 +226,7 @@ export function parseSienna(wb: ExcelJS.Workbook): ParsedWorkbook {
     kind: 'sienna', businessName: BUSINESS,
     periods: [...periods.values()],
     financialRecords: [],
-    salesRecords: sales, consignmentRecords: consignment,
+    salesRecords: sales, consignmentRecords: consignment, employeeRecords: [],
     issues,
   };
 }
