@@ -113,7 +113,7 @@ export default function LeaveTab() {
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="text-left py-2 pr-4 font-medium">Employee</th>
-                  <th className="text-left py-2 pr-4 font-medium">Division</th>
+                  <th className="text-left py-2 pr-4 font-medium">Department</th>
                   <th className="text-left py-2 pr-4 font-medium">Type</th>
                   <th className="text-left py-2 pr-4 font-medium">Dates</th>
                   <th className="text-left py-2 pr-4 font-medium">Days</th>
@@ -174,7 +174,7 @@ export default function LeaveTab() {
                   emptyMessage={employees.length ? "No matching employees." : "Add one in Headcount & Payroll first."}
                 />
               </div>
-              <FormField label="Division" name="division" value={form.division ?? ""} onChange={updateField} disabled />
+              <FormField label="Department" name="division" value={form.division ?? ""} onChange={updateField} disabled />
               <FormField label="Leave Type" name="leave_type" options={["Sick", "Casual", "Earned", "Unpaid", "Maternity/Paternity"]} value={form.leave_type ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Pending", "Approved", "Rejected"]} value={form.status ?? ""} onChange={updateField} />
               <FormField label="From Date" name="from_date" type="date" value={form.from_date ?? ""} onChange={updateField} />

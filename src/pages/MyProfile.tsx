@@ -106,7 +106,7 @@ export default function MyProfile() {
             <DashCard title="Employment">
               <div className="space-y-2.5 text-sm">
                 <Field label="Employee ID" value={emp.employeeId} />
-                <Field label="Division" value={emp.division} />
+                <Field label="Department" value={emp.division} />
                 <Field label="Role" value={emp.role} />
                 <Field label="Employment Type" value={emp.employmentType} />
                 <Field label="Status" value={emp.status} />

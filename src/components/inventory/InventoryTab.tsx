@@ -8,7 +8,13 @@ import FormField from "@/components/hr/FormField";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
 
-const divisionColors: Record<string, string> = { Ceramics: "#3b82f6", Textiles: "#10b981", Sienna: "#f59e0b", Admin: "#8b5cf6" };
+const divisionColors: Record<string, string> = {
+  Accounts: "#f59e0b", Admin: "#8b5cf6", "Batik Unit": "#ec4899", Culinary: "#ef4444",
+  Driver: "#64748b", "F&B Services": "#f97316", Jewellery: "#eab308", Legal: "#6366f1",
+  Marketing: "#14b8a6", Partner: "#a855f7", Pottery: "#3b82f6", "Quality Control": "#06b6d4",
+  Retail: "#84cc16", Tailor: "#d946ef", Utility: "#10b981",
+};
+const DEFAULT_DIVISION_COLOR = "#888";
 
 const EMPTY = { name: "", sku: "", division: "", category: "", unit: "", quantity_on_hand: "0", reorder_threshold: "", unit_cost: "", notes: "" };
 
@@ -187,11 +193,11 @@ export default function InventoryTab() {
         <KpiCard label="Total Value" value={`₹${totalValue.toLocaleString()}`} sub="Across all items" />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {divStats.map((d) => (
           <DashCard key={d.name}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: divisionColors[d.name] }} />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: divisionColors[d.name] || DEFAULT_DIVISION_COLOR }} />
               <span className="text-sm font-medium text-foreground">{d.name}</span>
             </div>
             <p className="text-2xl font-bold text-foreground">{d.count}</p>
@@ -225,7 +231,7 @@ export default function InventoryTab() {
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="text-left py-2 pr-4 font-medium">Name</th>
                   <th className="text-left py-2 pr-4 font-medium">SKU</th>
-                  <th className="text-left py-2 pr-4 font-medium">Division</th>
+                  <th className="text-left py-2 pr-4 font-medium">Department</th>
                   <th className="text-left py-2 pr-4 font-medium">Category</th>
                   <th className="text-left py-2 font-medium">Quantity</th>
                 </tr>
@@ -240,7 +246,7 @@ export default function InventoryTab() {
                     <td className="py-2.5 pr-4">
                       <span
                         className="text-xs px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: `${divisionColors[item.division] || "#888"}20`, color: divisionColors[item.division] || "#888" }}
+                        style={{ backgroundColor: `${divisionColors[item.division] || DEFAULT_DIVISION_COLOR}20`, color: divisionColors[item.division] || DEFAULT_DIVISION_COLOR }}
                       >
                         {item.division}
                       </span>
@@ -269,7 +275,7 @@ export default function InventoryTab() {
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Name *" name="name" value={form.name ?? ""} onChange={updateField} />
               <FormField label="SKU" name="sku" value={form.sku ?? ""} onChange={updateField} />
-              <FormField label="Division *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Department *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Category" name="category" options={CATEGORIES} value={form.category ?? ""} onChange={updateField} />
               <FormField label="Unit" name="unit" options={UNITS} value={form.unit ?? ""} onChange={updateField} />
               <FormField label="Opening Quantity" name="quantity_on_hand" type="number" value={form.quantity_on_hand ?? ""} onChange={updateField} />
@@ -299,7 +305,7 @@ export default function InventoryTab() {
               {(
                 [
                   ["SKU", selected.sku],
-                  ["Division", selected.division],
+                  ["Department", selected.division],
                   ["Category", selected.category],
                   ["Quantity on Hand", `${selected.quantity_on_hand} ${selected.unit || ""}`],
                   ["Reorder Threshold", selected.reorder_threshold],

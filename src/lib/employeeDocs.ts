@@ -68,7 +68,7 @@ export async function generateSalarySlip(employee: EmployeeDocInfo, record: { mo
   const rows: [string, string][] = [
     ["Employee Name", employee.fullName || "-"],
     ["Employee ID", employee.employeeId || "-"],
-    ["Division", employee.division || "-"],
+    ["Department", employee.division || "-"],
     ["Role", employee.role || "-"],
   ];
   doc.setFont("helvetica", "normal");

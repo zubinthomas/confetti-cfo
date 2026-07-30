@@ -182,7 +182,7 @@ export default function DocumentsTab() {
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="text-left py-2 pr-4 font-medium">Employee</th>
-                  <th className="text-left py-2 pr-4 font-medium">Division</th>
+                  <th className="text-left py-2 pr-4 font-medium">Department</th>
                   <th className="text-left py-2 pr-4 font-medium">ID Proof</th>
                   <th className="text-left py-2 pr-4 font-medium">Aadhar</th>
                   <th className="text-left py-2 pr-4 font-medium">PAN</th>

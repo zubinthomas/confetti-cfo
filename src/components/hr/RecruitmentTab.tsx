@@ -115,7 +115,7 @@ export default function RecruitmentTab() {
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="text-left py-2 pr-4 font-medium">Applicant</th>
                   <th className="text-left py-2 pr-4 font-medium">Role</th>
-                  <th className="text-left py-2 pr-4 font-medium">Division</th>
+                  <th className="text-left py-2 pr-4 font-medium">Department</th>
                   <th className="text-left py-2 pr-4 font-medium">Stage</th>
                   <th className="text-left py-2 pr-4 font-medium">Expected Sal.</th>
                   <th className="text-left py-2 font-medium">Actions</th>
@@ -155,7 +155,7 @@ export default function RecruitmentTab() {
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Role Title *" name="role_title" value={form.role_title ?? ""} onChange={updateField} />
-              <FormField label="Division *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
+              <FormField label="Department *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="No. of Openings" name="openings" type="number" value={form.openings ?? ""} onChange={updateField} />
               <FormField label="Stage" name="stage" options={STAGES} value={form.stage ?? ""} onChange={updateField} />
               <FormField label="Applicant Name" name="applicant_name" value={form.applicant_name ?? ""} onChange={updateField} />

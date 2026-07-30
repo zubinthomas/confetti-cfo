@@ -143,7 +143,7 @@ function EditUserModal({
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-2">Division scope</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Department scope</p>
             <div className="flex flex-wrap gap-2">
               {DIVISIONS.map((d) => {
                 const checked = divisionScope.has(d);
@@ -161,7 +161,7 @@ function EditUserModal({
               })}
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">
-              Restricts this user's Employee/Licence/Recruitment/Leave access to the checked divisions only.
+              Restricts this user's Employee/Licence/Recruitment/Leave access to the checked departments only.
               Leave everything unchecked for unrestricted access (the default).
             </p>
           </div>
