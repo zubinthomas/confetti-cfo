@@ -3,7 +3,7 @@ import { Employee, PayrollRecord } from "@/api/entities";
 import { createInvite } from "@/api/invitesApi";
 import { uploadFile } from "@/api/integrations";
 import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
-import { Plus, X, Loader2, Copy, Check, ImagePlus, IdCard } from "lucide-react";
+import { Plus, X, Loader2, Copy, Check, ImagePlus, IdCard, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "./FormField";
@@ -17,6 +17,10 @@ const divisionColors: Record<string, string> = {
   Retail: "#84cc16", Tailor: "#d946ef", Utility: "#10b981",
 };
 const DEFAULT_DIVISION_COLOR = "#888";
+
+const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Contract", "Intern"];
+const STATUSES = ["Active", "On Leave", "Terminated", "Probation"];
+type SortKey = "full_name" | "division" | "role" | "employment_type" | "status" | "monthly_salary";
 
 const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "", photo_url: "" };
 
@@ -216,6 +220,8 @@ export default function HeadcountTab() {
   const [inviteTarget, setInviteTarget] = useState<any | null>(null);
   const [generatingCard, setGeneratingCard] = useState(false);
   const [error, setError] = useState("");
+  const [filters, setFilters] = useState({ division: "", role: "", employment_type: "", status: "" });
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -291,6 +297,47 @@ export default function HeadcountTab() {
 
   const statusColor: Record<string, string> = { Active: "text-emerald-600", "On Leave": "text-amber-600", Terminated: "text-red-600", Probation: "text-blue-600" };
 
+  const roleOptions = Array.from(new Set(employees.map(e => e.role).filter(Boolean))).sort();
+  const hasActiveFilters = Object.values(filters).some(Boolean);
+  const clearFilters = () => setFilters({ division: "", role: "", employment_type: "", status: "" });
+
+  const filteredEmployees = employees.filter(e =>
+    (!filters.division || e.division === filters.division) &&
+    (!filters.role || e.role === filters.role) &&
+    (!filters.employment_type || e.employment_type === filters.employment_type) &&
+    (!filters.status || e.status === filters.status)
+  );
+
+  // No sort selected = the order records were loaded in (the "default" order
+  // a Reset sort click restores).
+  const visibleEmployees = sort ? [...filteredEmployees].sort((a, b) => {
+    const { key, dir } = sort;
+    const cmp = key === "monthly_salary"
+      ? (Number(a[key]) || 0) - (Number(b[key]) || 0)
+      : String(a[key] ?? "").localeCompare(String(b[key] ?? ""));
+    return dir === "asc" ? cmp : -cmp;
+  }) : filteredEmployees;
+
+  const toggleSort = (key: SortKey) => setSort(prev => {
+    if (!prev || prev.key !== key) return { key, dir: "asc" };
+    if (prev.dir === "asc") return { key, dir: "desc" };
+    return null;
+  });
+
+  const sortableHeader = (label: string, key: SortKey) => (
+    <th
+      onClick={() => toggleSort(key)}
+      className="text-left py-2 pr-4 font-medium cursor-pointer select-none hover:text-foreground"
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sort?.key === key
+          ? (sort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+          : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+      </span>
+    </th>
+  );
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -308,7 +355,10 @@ export default function HeadcountTab() {
               <span className="text-sm font-medium text-foreground">{d.name}</span>
             </div>
             <p className="text-2xl font-bold text-foreground">{d.count}</p>
-            <p className="text-xs text-muted-foreground mt-1">Payroll: ₹{(d.payroll/1000).toFixed(0)}K/mo</p>
+            {d.payroll ? 
+              <p className="text-xs text-muted-foreground mt-1">Payroll: ₹{(d.payroll/1000).toFixed(0)}K/mo</p> :
+              <p className="text-xs text-muted-foreground mt-1"></p>
+            }
           </DashCard>
         ))}
       </div>
@@ -316,35 +366,77 @@ export default function HeadcountTab() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <DashCard title="Employee Directory">
-        {canWrite && (
-          <div className="flex justify-end mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filters.division} onChange={(e) => setFilters(f => ({ ...f, division: e.target.value }))}
+              className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+            >
+              <option value="">All Departments</option>
+              {divisionOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select
+              value={filters.role} onChange={(e) => setFilters(f => ({ ...f, role: e.target.value }))}
+              className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+            >
+              <option value="">All Roles</option>
+              {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <select
+              value={filters.employment_type} onChange={(e) => setFilters(f => ({ ...f, employment_type: e.target.value }))}
+              className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+            >
+              <option value="">All Types</option>
+              {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select
+              value={filters.status} onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
+              className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+            >
+              <option value="">All Statuses</option>
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-primary underline">
+                Clear filters
+              </button>
+            )}
+            {sort && (
+              <button onClick={() => setSort(null)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+                <RotateCcw className="w-3.5 h-3.5" /> Reset sort
+              </button>
+            )}
+          </div>
+          {canWrite && (
             <button onClick={() => { setForm(emptyForm()); setShowForm(true); }}
               className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition">
               <Plus className="w-4 h-4" /> Add Employee
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : employees.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">No employees yet. Add your first employee.</p>
+        ) : visibleEmployees.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">No employees match the selected filters.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="text-left py-2 pr-4 font-medium">Name</th>
-                  <th className="text-left py-2 pr-4 font-medium">Department</th>
-                  <th className="text-left py-2 pr-4 font-medium">Role</th>
-                  <th className="text-left py-2 pr-4 font-medium">Type</th>
-                  <th className="text-left py-2 pr-4 font-medium">Status</th>
-                  <th className="text-left py-2 pr-4 font-medium">Salary/mo</th>
+                  {sortableHeader("Name", "full_name")}
+                  {sortableHeader("Department", "division")}
+                  {sortableHeader("Role", "role")}
+                  {sortableHeader("Type", "employment_type")}
+                  {sortableHeader("Status", "status")}
+                  {sortableHeader("Salary/mo", "monthly_salary")}
                   <th className="text-left py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {employees.map(emp => (
+                {visibleEmployees.map(emp => (
                   <tr key={emp.id} className="border-b border-border last:border-b-0 hover:bg-muted/30">
                     <td className="py-2.5 pr-4">
                       <button onClick={() => setSelected(emp)} className="font-medium text-foreground hover:text-primary text-left">{emp.full_name}</button>
@@ -354,7 +446,7 @@ export default function HeadcountTab() {
                     <td className="py-2.5 pr-4 text-muted-foreground">{emp.role}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{emp.employment_type}</td>
                     <td className="py-2.5 pr-4"><span className={`text-xs font-medium ${statusColor[emp.status] || ""}`}>{emp.status}</span></td>
-                    <td className="py-2.5 pr-4 text-muted-foreground">₹{(emp.monthly_salary||0).toLocaleString()}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground">{emp.monthly_salary ? `₹${emp.monthly_salary.toLocaleString()}` : "-"}</td>
                     <td className="py-2.5">
                       <div className="flex gap-2">
                         {canWrite && <button onClick={() => { setForm({ ...emp }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>}
@@ -398,8 +490,8 @@ export default function HeadcountTab() {
               <FormField label="Employee ID" name="employee_id" value={form.employee_id ?? ""} onChange={updateField} />
               <FormField label="Department *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Role / Designation *" name="role" value={form.role ?? ""} onChange={updateField} />
-              <FormField label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} value={form.employment_type ?? ""} onChange={updateField} />
-              <FormField label="Status" name="status" options={["Active", "On Leave", "Terminated", "Probation"]} value={form.status ?? ""} onChange={updateField} />
+              <FormField label="Employment Type" name="employment_type" options={EMPLOYMENT_TYPES} value={form.employment_type ?? ""} onChange={updateField} />
+              <FormField label="Status" name="status" options={STATUSES} value={form.status ?? ""} onChange={updateField} />
               <FormField label="Joining Date" name="joining_date" type="date" value={form.joining_date ?? ""} onChange={updateField} />
               <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary ?? ""} onChange={updateField} />
               <FormField label="Phone" name="phone" value={form.phone ?? ""} onChange={updateField} />
