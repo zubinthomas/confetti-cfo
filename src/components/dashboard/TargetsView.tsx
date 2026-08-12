@@ -90,9 +90,23 @@ export default function TargetsView({
     );
   }
 
+  // Full-year equivalents of the same three figures, matching the "annual
+  // total" KPI cards past-year views show - these used to only appear as
+  // small caption text below the chart.
   const fyTargetTotal = target.reduce((a, b) => a + (b || 0), 0);
+  const fyActualToDateTotal = actual.reduce((a, b) => a + (b || 0), 0);
   const fyProjectionTotal = projection.reduce((a, b) => a + (b || 0), 0);
   const fyGapTotal = fyProjectionTotal - fyTargetTotal;
+  kpis.push(
+    { label: "FY Target", value: L(fyTargetTotal), sub: fyLabel, status: "green" },
+    { label: "FY Actual to Date", value: L(fyActualToDateTotal), sub: "Booked so far", status: "amber" },
+    { label: "FY Projection", value: L(fyProjectionTotal), sub: "Full year, actual + estimated", status: "amber" },
+    {
+      label: "FY Gap vs Target",
+      value: `${fyGapTotal >= 0 ? "+" : ""}${L(fyGapTotal)}`,
+      status: fyGapTotal >= 0 ? "green" : "red",
+    },
+  );
 
   return (
     <div className="space-y-6">
@@ -105,11 +119,9 @@ export default function TargetsView({
         </div>
       )}
 
-      {kpis.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
-        </div>
-      )}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+      </div>
 
       <DashCard title={`${categoryLabel} - Target vs Projection (${fyLabel})`}>
         <p className="text-xs text-muted-foreground -mt-1 mb-2">
@@ -128,13 +140,6 @@ export default function TargetsView({
             <Line dataKey="Projection" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
           </ComposedChart>
         </ResponsiveContainer>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-          <span>FY Target total: <span className="font-medium text-foreground">{L(fyTargetTotal)}</span></span>
-          <span>FY Projection total (to date): <span className="font-medium text-foreground">{L(fyProjectionTotal)}</span></span>
-          <span className={fyGapTotal >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
-            Gap: {fyGapTotal >= 0 ? "+" : ""}{L(fyGapTotal)}
-          </span>
-        </div>
       </DashCard>
 
       <DashCard title={`${categoryLabel} - ${priorYearLabel} vs ${fyLabel}`}>
