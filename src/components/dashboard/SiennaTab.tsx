@@ -40,8 +40,15 @@ const COGS_TARGET_PCT = 35;
 export default function SiennaTab() {
   const [view, setView] = useState("revenue");
   const fys = useOverviewFiscalYears();
+  // "2026-2027" is always handled as the synthetic/projected targets entry
+  // (below), never as a normal year - now that real FY26-27 F&B data exists,
+  // useOverviewFiscalYears() legitimately includes it too, so it's excluded
+  // here to avoid double-counting it (as a duplicate chip, a duplicate
+  // history-list row, and - since it'd otherwise be the newest entry - the
+  // page's default landing year instead of the last complete one).
+  const realFys = fys?.filter((y) => y !== "2026-2027");
   const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? fys?.at(-1);
+  const fy = selectedFy ?? realFys?.at(-1) ?? fys?.at(-1);
   const isTargetsFy = fy === "2026-2027";
   const FAB = useFabYear(fy);
 
@@ -73,7 +80,7 @@ export default function SiennaTab() {
         ...(allFnbRecords
           ? (() => {
               const idx = buildFrIndex(allFnbRecords);
-              return fys.map((y) => ({
+              return (realFys ?? []).map((y) => ({
                 fy: y,
                 label: fyLabel(y),
                 total: computeFabYear(idx, y, fyLabel(y), monthPeriodIds(ref.periods, y)).totals.revenue,
@@ -85,7 +92,7 @@ export default function SiennaTab() {
       ]
     : [];
 
-  const fyChips = [...fys, "2026-2027"];
+  const fyChips = [...realFys!, "2026-2027"];
   const fyChipRow = (
     <div className="flex gap-1.5">
       {fyChips.map((y) => (
