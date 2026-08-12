@@ -9,7 +9,7 @@ import { useReferenceData } from "@/hooks/useReferenceData";
 import { useSalesRecords } from "@/hooks/useSalesRecords";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { computeChannelBreakdown } from "@/data/storeSalesData";
-import { targetSeries } from "@/data/revenueTargets";
+import { targetSeries, projectionSeries } from "@/data/revenueTargets";
 import { MONTHS, L, avg, maxIdx, minIdx, sum, monthPeriodIds } from "@/data/seriesKernel";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
@@ -58,6 +58,39 @@ export default function StoreTab() {
 
   const { siennaStore, storeSalesByFy, categoriesByFy, storeHistory, aprilByFy, storeFinancialsByFy } = storeData;
 
+  // Store's FY26-27 Target/Actual/Projection series - computed once here so
+  // both the "FY 26-27" targets view and the multi-year history list below
+  // (which needs a full-year total, not just the Apr-May actual sum) can use
+  // the same numbers.
+  const targetsPeriodIds = ref ? monthPeriodIds(ref.periods, "2026-2027") : [];
+  let storeActual2627: (number | null)[] = [];
+  let storeTarget2627: (number | null)[] = [];
+  let storeProjection2627: (number | null)[] = [];
+  if (ref && sales2627 && storeTargets2627) {
+    const hpStoreChannelId = ref.channels.find((c) => c.name === "HP Store")?.id;
+    // computeChannelBreakdown defaults a missing record to 0, which is right
+    // for charts that only ever look at past/complete years, but here it
+    // would make a month with no Store data imported yet (vs. one that's
+    // genuinely zero-revenue) look like a huge miss - null it out instead so
+    // projectionSeries treats it as "no data" rather than "actual is 0".
+    const periodsWithData = new Set(
+      sales2627.filter((r) => r.channelId === hpStoreChannelId && r.categoryId == null).map((r) => r.periodId)
+    );
+    const rawActual = computeChannelBreakdown(sales2627, ref.channels, targetsPeriodIds)["HP Store"] ?? [];
+    storeActual2627 = targetsPeriodIds.map((pid, i) => (periodsWithData.has(pid) ? rawActual[i] : null));
+    storeTarget2627 = targetSeries(storeTargets2627, "store", targetsPeriodIds);
+    storeProjection2627 = projectionSeries(
+      storeActual2627, storeSalesByFy["2025-2026"].channels["HP Store"], storeTarget2627, ref.periods, targetsPeriodIds
+    ).series;
+  }
+  const storeProjectedFyTotal2627 = storeProjection2627.reduce((a: number, b) => a + (b || 0), 0);
+
+  const storeHistoryDisplay = storeHistory.map((h) =>
+    h.fy === "2026-2027"
+      ? { ...h, label: "FY 26-27 (Projected)", total: storeProjectedFyTotal2627, method: "projected" as const }
+      : h
+  );
+
   const fyChipRow = (
     <div className="flex gap-1.5">
       {STORE_FY_CHIPS.map((y) => (
@@ -85,33 +118,18 @@ export default function StoreTab() {
           </p>
           {fyChipRow}
         </div>
-        {ref && sales2627 && storeTargets2627 ? (() => {
-          const targetsPeriodIds = monthPeriodIds(ref.periods, "2026-2027");
-          const hpStoreChannelId = ref.channels.find((c) => c.name === "HP Store")?.id;
-          // computeChannelBreakdown defaults a missing record to 0, which is
-          // right for charts that only ever look at past/complete years, but
-          // here it would make a month with no Store data imported yet (vs.
-          // one that's genuinely zero-revenue) look like a huge miss - null
-          // it out instead so projectionSeries treats it as "no data" rather
-          // than "actual is 0".
-          const periodsWithData = new Set(
-            sales2627.filter((r) => r.channelId === hpStoreChannelId && r.categoryId == null).map((r) => r.periodId)
-          );
-          const rawActual = computeChannelBreakdown(sales2627, ref.channels, targetsPeriodIds)["HP Store"] ?? [];
-          const actual = targetsPeriodIds.map((pid, i) => (periodsWithData.has(pid) ? rawActual[i] : null));
-          return (
-            <TargetsView
-              categoryLabel="Store"
-              fyLabel="FY 26-27"
-              periods={ref.periods}
-              periodIds={targetsPeriodIds}
-              actual={actual}
-              target={targetSeries(storeTargets2627, "store", targetsPeriodIds)}
-              priorYearLabel="FY 25-26"
-              priorYearActual={storeSalesByFy["2025-2026"].channels["HP Store"]}
-            />
-          );
-        })() : (
+        {ref && sales2627 && storeTargets2627 ? (
+          <TargetsView
+            categoryLabel="Store"
+            fyLabel="FY 26-27"
+            periods={ref.periods}
+            periodIds={targetsPeriodIds}
+            actual={storeActual2627}
+            target={storeTarget2627}
+            priorYearLabel="FY 25-26"
+            priorYearActual={storeSalesByFy["2025-2026"].channels["HP Store"]}
+          />
+        ) : (
           <DashCard title="FY 26-27 Targets"><PageSpinner /></DashCard>
         )}
       </div>
@@ -427,21 +445,26 @@ export default function StoreTab() {
 
           <DashCard title="Store Revenue - Full Multi-Year History">
             <div className="space-y-2">
-              {[...storeHistory].reverse().map(({ label, total, method }) => (
+              {[...storeHistoryDisplay].reverse().map(({ label, total, method }) => (
                 <div key={label} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
                   <span className="text-sm text-muted-foreground">{label}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-foreground">{L(total)}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded">
-                      {method === "channel" ? "channel data" : "category data"}
+                    <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                      method === "projected"
+                        ? "text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                        : "text-muted-foreground/70 bg-muted"
+                    }`}>
+                      {method === "channel" ? "channel data" : method === "projected" ? "projected" : "category data"}
                     </span>
                   </div>
                 </div>
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              All years are totaled from the monthly channel-level &ldquo;Overall sales&rdquo; records in the
-              source workbook.
+              Years are totaled from the monthly channel-level &ldquo;Overall sales&rdquo; records in the
+              source workbook. FY 26-27 uses the projected full-year total (see the FY 26-27 tab) since
+              only Apr-May actuals exist so far.
             </p>
           </DashCard>
         </>

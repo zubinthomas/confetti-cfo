@@ -8,8 +8,10 @@ import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFabYear } from "@/hooks/useFabYear";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
-import { targetSeries } from "@/data/revenueTargets";
-import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, monthPeriodIds } from "@/data/seriesKernel";
+import { useFinancialRecords } from "@/hooks/useFinancialRecords";
+import { targetSeries, projectionSeries } from "@/data/revenueTargets";
+import { computeFabYear, FNB_BU } from "@/data/fabData";
+import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -49,8 +51,39 @@ export default function SiennaTab() {
   const FAB2627 = useFabYear("2026-2027");
   const FAB2526 = useFabYear("2025-2026");
   const { data: fnbTargets2627 } = useRevenueTargets({ category: ["fnb"], fiscalYear: ["2026-2027"] });
+  // Unfiltered-by-year fetch so the multi-year history list below can total
+  // every year in one pass, the way StoreTab's storeHistory already does.
+  const { data: allFnbRecords } = useFinancialRecords({ businessUnitId: [FNB_BU] });
 
   if (!fys || !fy || !FAB) return <PageSpinner />;
+
+  // F&B's FY26-27 Target/Actual/Projection series - computed once here so
+  // both the "FY 26-27" targets view and the multi-year history list below
+  // (which needs a full-year total, not the near-zero raw actual) use the
+  // same numbers.
+  const targetsPeriodIds2627 = ref ? monthPeriodIds(ref.periods, "2026-2027") : [];
+  const fnbTarget2627 = fnbTargets2627 ? targetSeries(fnbTargets2627, "fnb", targetsPeriodIds2627) : [];
+  const fnbProjection2627 = ref && FAB2627 && FAB2526 && fnbTargets2627
+    ? projectionSeries(FAB2627.totalRevenue, FAB2526.totalRevenue, fnbTarget2627, ref.periods, targetsPeriodIds2627).series
+    : [];
+  const fnbProjectedFyTotal2627 = fnbProjection2627.reduce((a: number, b) => a + (b || 0), 0);
+
+  const fnbHistory = ref
+    ? [
+        ...(allFnbRecords
+          ? (() => {
+              const idx = buildFrIndex(allFnbRecords);
+              return fys.map((y) => ({
+                fy: y,
+                label: fyLabel(y),
+                total: computeFabYear(idx, y, fyLabel(y), monthPeriodIds(ref.periods, y)).totals.revenue,
+                method: "actual" as const,
+              }));
+            })()
+          : []),
+        { fy: "2026-2027", label: "FY 26-27 (Projected)", total: fnbProjectedFyTotal2627, method: "projected" as const },
+      ]
+    : [];
 
   const fyChips = [...fys, "2026-2027"];
   const fyChipRow = (
@@ -85,9 +118,9 @@ export default function SiennaTab() {
             categoryLabel="F&B"
             fyLabel="FY 26-27"
             periods={ref.periods}
-            periodIds={monthPeriodIds(ref.periods, "2026-2027")}
+            periodIds={targetsPeriodIds2627}
             actual={FAB2627.totalRevenue}
-            target={targetSeries(fnbTargets2627, "fnb", monthPeriodIds(ref.periods, "2026-2027"))}
+            target={fnbTarget2627}
             priorYearLabel="FY 25-26"
             priorYearActual={FAB2526.totalRevenue}
           />
@@ -320,6 +353,34 @@ export default function SiennaTab() {
             above (from the CEPL P&L workbook&rsquo;s Overview sheet) exist for this year. Once a full
             CEPL P&L workbook with F&B department-level monthly data is imported for this year, all
             four views here will appear automatically.
+          </p>
+        </DashCard>
+      )}
+
+      {fnbHistory.length > 0 && (
+        <DashCard title="F&B Revenue - Full Multi-Year History">
+          <div className="space-y-2">
+            {[...fnbHistory].reverse().map(({ label, total, method }) => (
+              <div key={label} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+                <span className="text-sm text-muted-foreground">{label}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">{L(total)}</span>
+                  <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                    method === "projected"
+                      ? "text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                      : "text-muted-foreground/70 bg-muted"
+                  }`}>
+                    {method === "actual" ? "actual" : "projected"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Years are totaled from the CEPL P&L workbook&rsquo;s F&B department records (monthly detail
+            where available, the Overview sheet&rsquo;s annual total otherwise). FY 26-27 uses the
+            projected full-year total (see the FY 26-27 tab) since no monthly F&B data has been
+            imported for it yet.
           </p>
         </DashCard>
       )}
