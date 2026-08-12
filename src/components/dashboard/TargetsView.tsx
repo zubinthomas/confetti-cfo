@@ -38,13 +38,18 @@ export interface TargetsViewProps {
   target: (number | null)[]; // aligned with periodIds
   priorYearLabel: string; // "FY 25-26"
   priorYearActual: (number | null)[]; // aligned with periodIds (same Apr..Mar month positions, prior FY)
+  // Optional override for the growth-rate calculation only (display still
+  // uses `actual`) - see projectionSeries. Only needed by combined
+  // multi-business callers (Overview) whose `actual` may sum only whichever
+  // business has data for a given month.
+  growthRateActual?: (number | null)[];
 }
 
 export default function TargetsView({
-  categoryLabel, fyLabel, periods, periodIds, actual, target, priorYearLabel, priorYearActual,
+  categoryLabel, fyLabel, periods, periodIds, actual, target, priorYearLabel, priorYearActual, growthRateActual,
 }: TargetsViewProps) {
   const today = new Date();
-  const { series: projection, growthRateSource } = projectionSeries(actual, priorYearActual, target, periods, periodIds, today);
+  const { series: projection, growthRateSource } = projectionSeries(actual, priorYearActual, target, periods, periodIds, today, growthRateActual);
   const gap = projection.map((p, i) => computeGap(p, target[i]));
   const isTargetFallback = growthRateSource === "target";
 

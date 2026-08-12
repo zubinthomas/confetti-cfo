@@ -116,12 +116,20 @@ export function projectionSeries(
   target: (number | null)[],
   periods: Period[],
   periodIds: number[],
-  today: Date = new Date()
+  today: Date = new Date(),
+  // Only the growth-rate calculation reads this override; the series itself
+  // still displays `actual` as-is. For a combined multi-business series where
+  // a month may sum only whichever business has data so far (understating
+  // the true total), pass a version with those partial months nulled out
+  // here so they don't drag the growth rate - and therefore every later
+  // month's projection - down. Defaults to `actual` for the normal
+  // single-business case, where there's no such distinction to make.
+  growthRateActual: (number | null)[] = actual
 ): ProjectionResult {
   const periodById = new Map(periods.map((p) => [p.id, p]));
   const todayStr = today.toISOString().slice(0, 10);
 
-  let growthRate = computeGrowthRate(actual, priorYearActual);
+  let growthRate = computeGrowthRate(growthRateActual, priorYearActual);
   let growthRateSource: GrowthRateSource = growthRate != null ? "actual" : "none";
   if (growthRate == null) {
     growthRate = computeGrowthRateFromTargets(target, priorYearActual);

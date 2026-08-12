@@ -3,10 +3,17 @@ import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
+import TargetsView from "./TargetsView";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useOverviewYear } from "@/hooks/useOverviewYear";
 import { useFnbStoreHistory } from "@/hooks/useFnbStoreHistory";
-import { MONTHS, L, lastValidIdx, fyLabel } from "@/data/seriesKernel";
+import { useReferenceData } from "@/hooks/useReferenceData";
+import { useSalesRecords } from "@/hooks/useSalesRecords";
+import { useFabYear } from "@/hooks/useFabYear";
+import { useRevenueTargets } from "@/hooks/useRevenueTargets";
+import { computeChannelBreakdown } from "@/data/storeSalesData";
+import { targetSeries } from "@/data/revenueTargets";
+import { MONTHS, L, lastValidIdx, fyLabel, monthPeriodIds } from "@/data/seriesKernel";
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -29,14 +36,135 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }: { active?: 
 
 export default function OverviewTab() {
   const fys = useOverviewFiscalYears();
+  // "2026-2027" is always handled as the synthetic/projected combined-targets
+  // entry (below), never as a normal year - useOverviewFiscalYears() already
+  // includes it for real once either business has FY26-27 data (as F&B now
+  // does), so it's excluded here to avoid double-counting it as a duplicate
+  // chip and to keep the default landing year on the last complete one.
+  const realFys = fys?.filter((y) => y !== "2026-2027");
   const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? fys?.at(-1);
+  const fy = selectedFy ?? realFys?.at(-1) ?? fys?.at(-1);
+  const isTargetsFy = fy === "2026-2027";
   const fyIdx = fys && fy ? fys.indexOf(fy) : -1;
   const prevFY = fys && fyIdx > 0 ? fys[fyIdx - 1] : null;
   const overview = useOverviewYear(fy, prevFY);
   const fnbStoreHistory = useFnbStoreHistory();
 
+  // Combined FY26-27 Store + F&B targets data - fixed to FY26-27/FY25-26
+  // regardless of the page-level year selector, same as StoreTab/SiennaTab.
+  const { data: ref } = useReferenceData();
+  const { data: sales2627 } = useSalesRecords({ fiscalYear: ["2026-2027"] });
+  const { data: sales2526 } = useSalesRecords({ fiscalYear: ["2025-2026"] });
+  const FAB2627 = useFabYear("2026-2027");
+  const FAB2526 = useFabYear("2025-2026");
+  const { data: combinedTargets2627 } = useRevenueTargets({ category: ["store", "fnb"], fiscalYear: ["2026-2027"] });
+
   if (!fys || !fy || !overview || !fnbStoreHistory) return <PageSpinner />;
+
+  const fyChipRow = (
+    <div className="flex gap-1.5">
+      {[...(realFys ?? []), "2026-2027"].map((y) => (
+        <button
+          key={y}
+          onClick={() => setSelectedFy(y)}
+          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            y === fy
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          {y === "2026-2027" ? "FY 26-27" : fyLabel(y)}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (isTargetsFy) {
+    const targetsPeriodIds = ref ? monthPeriodIds(ref.periods, "2026-2027") : [];
+    const priorPeriodIds = ref ? monthPeriodIds(ref.periods, "2025-2026") : [];
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Group Snapshot - FY 26-27
+          </p>
+          {fyChipRow}
+        </div>
+        {ref && sales2627 && sales2526 && FAB2627 && FAB2526 && combinedTargets2627 ? (() => {
+          const hpStoreChannelId = ref.channels.find((c) => c.name === "HP Store")?.id;
+          // Same 0-vs-null masking StoreTab uses: computeChannelBreakdown
+          // defaults a missing record to 0, which would make a month with no
+          // Store data imported yet look like a genuine zero instead of "no
+          // data" - null it out instead.
+          const periodsWithStoreData = new Set(
+            sales2627.filter((r) => r.channelId === hpStoreChannelId && r.categoryId == null).map((r) => r.periodId)
+          );
+          const rawStoreActual = computeChannelBreakdown(sales2627, ref.channels, targetsPeriodIds)["HP Store"] ?? [];
+          const storeActual = targetsPeriodIds.map((pid, i) => (periodsWithStoreData.has(pid) ? rawStoreActual[i] : null));
+          const storePriorYearActual = computeChannelBreakdown(sales2526, ref.channels, priorPeriodIds)["HP Store"] ?? [];
+
+          const fnbActual = FAB2627.totalRevenue;
+          const fnbPriorYearActual = FAB2526.totalRevenue;
+
+          const storeTarget = targetSeries(combinedTargets2627, "store", targetsPeriodIds);
+          const fnbTarget = targetSeries(combinedTargets2627, "fnb", targetsPeriodIds);
+
+          // A month combines whichever business has data, treating a missing
+          // one as 0 (rather than nulling the whole month) - null only when
+          // BOTH are missing. "Partial" months (exactly one business missing)
+          // are called out below since the combined figure understates the
+          // true total for them.
+          const sumAvailable = (a: number | null, b: number | null) => (a == null && b == null ? null : (a ?? 0) + (b ?? 0));
+          const combinedActual = targetsPeriodIds.map((_, i) => sumAvailable(storeActual[i], fnbActual[i]));
+          const combinedTarget = targetsPeriodIds.map((_, i) => sumAvailable(storeTarget[i], fnbTarget[i]));
+          const combinedPriorYearActual = targetsPeriodIds.map((_, i) => sumAvailable(storePriorYearActual[i], fnbPriorYearActual[i]));
+          // Growth-rate input: partial months are nulled out here (display-only
+          // combinedActual keeps its summed value) so an understated partial
+          // month doesn't drag the growth rate - and every later month's
+          // projection - down. See projectionSeries' growthRateActual param.
+          const growthRateActual = targetsPeriodIds.map((_, i) =>
+            (storeActual[i] == null) !== (fnbActual[i] == null) ? null : combinedActual[i]
+          );
+
+          const missingStoreMonths = targetsPeriodIds
+            .map((_, i) => (storeActual[i] == null && fnbActual[i] != null ? MONTHS[i] : null))
+            .filter((m): m is string => m != null);
+          const missingFnbMonths = targetsPeriodIds
+            .map((_, i) => (fnbActual[i] == null && storeActual[i] != null ? MONTHS[i] : null))
+            .filter((m): m is string => m != null);
+
+          return (
+            <>
+              {(missingStoreMonths.length > 0 || missingFnbMonths.length > 0) && (
+                <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 space-y-1">
+                  {missingStoreMonths.length > 0 && (
+                    <p>{missingStoreMonths.join(", ")}: Store actual isn&rsquo;t imported yet - the combined figure reflects F&B only.</p>
+                  )}
+                  {missingFnbMonths.length > 0 && (
+                    <p>{missingFnbMonths.join(", ")}: F&B actual isn&rsquo;t imported yet - the combined figure reflects Store only.</p>
+                  )}
+                </div>
+              )}
+              <TargetsView
+                categoryLabel="Store + F&B"
+                fyLabel="FY 26-27"
+                periods={ref.periods}
+                periodIds={targetsPeriodIds}
+                actual={combinedActual}
+                target={combinedTarget}
+                priorYearLabel="FY 25-26"
+                priorYearActual={combinedPriorYearActual}
+                growthRateActual={growthRateActual}
+              />
+            </>
+          );
+        })() : (
+          <DashCard title="FY 26-27 Targets"><PageSpinner /></DashCard>
+        )}
+      </div>
+    );
+  }
 
   const CUR = overview.cur;
   const prevTotals = overview.prev?.totals ?? null;
@@ -122,21 +250,7 @@ export default function OverviewTab() {
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Group Snapshot - {CUR.label}
           </p>
-          <div className="flex gap-1.5">
-            {fys.map((y) => (
-              <button
-                key={y}
-                onClick={() => setSelectedFy(y)}
-                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                  y === fy
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {fyLabel(y)}
-              </button>
-            ))}
-          </div>
+          {fyChipRow}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
