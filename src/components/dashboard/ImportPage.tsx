@@ -22,6 +22,7 @@ const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   cafe: "Cafe Weekly P&L",
   sienna: "Sienna Store Sales",
   hr: "HR Mastersheet",
+  target: "FY Target Plan",
 };
 
 const STATUS_STYLE: Record<ImportBatch["status"], string> = {

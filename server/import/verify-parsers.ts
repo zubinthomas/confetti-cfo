@@ -10,6 +10,7 @@ import { parseCepl } from './parseCepl.ts';
 import { parseCafe } from './parseCafe.ts';
 import { parseSienna } from './parseSienna.ts';
 import { parseHr } from './parseHr.ts';
+import { parseTarget } from './parseTarget.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -125,6 +126,39 @@ for (const [businessName, file, parser] of SOURCES) {
       bad++;
     }
     console.log(`  [HR] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
+    total += bad;
+  }
+}
+
+// The FY Target Plan workbook has no extracted_data.json-style oracle either
+// - spot-check instead: 12 months x 2 categories (store/fnb), zero parse
+// errors, and April's known target split (from the earlier cross-checked
+// analysis: store + fnb = the sheet's own stated 8,000,000 April target).
+{
+  const TARGET_FILE = path.join(ROOT, 'data-sources', 'HP_FY26_27_Target_Plan.xlsx');
+  if (!fs.existsSync(TARGET_FILE)) {
+    console.log(`skipping Target Plan (no ${TARGET_FILE})`);
+  } else {
+    const pw = parseTarget(await loadWorkbook(TARGET_FILE));
+    const errors = pw.issues.filter((i) => i.level === 'error').length;
+    const warnings = pw.issues.filter((i) => i.level === 'warning').length;
+    console.log(`== Target Plan - issues: ${errors} error(s), ${warnings} warning(s)`);
+    let bad = 0;
+    if (pw.targetRecords.length !== 24) {
+      console.error(`  [Target] expected 24 target rows (12 months x 2 categories), got ${pw.targetRecords.length}`);
+      bad++;
+    }
+    if (errors > 0) {
+      console.error(`  [Target] expected 0 parse errors, got ${errors}`);
+      bad++;
+    }
+    const april = pw.targetRecords.filter((r) => r.periodStart === '2026-04-01');
+    const aprilTotal = april.reduce((s, r) => s + r.amount, 0);
+    if (Math.round(aprilTotal) !== 8000000) {
+      console.error(`  [Target] April store+fnb target expected ~8,000,000, got ${aprilTotal}`);
+      bad++;
+    }
+    console.log(`  [Target] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
     total += bad;
   }
 }

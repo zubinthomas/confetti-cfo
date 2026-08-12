@@ -25,6 +25,7 @@ export const lineItemCategoryEnum = pgEnum('line_item_category', [
 ]);
 export const valueTypeEnum = pgEnum('value_type', ['amount', 'percentage']);
 export const vendorGroupEnum = pgEnum('vendor_group', ['consignment', 'other_brands']);
+export const revenueTargetCategoryEnum = pgEnum('revenue_target_category', ['store', 'fnb']);
 
 // ── Dataset tables (from the Excel extraction) ───────────────────────────────
 export const businesses = pgTable('businesses', {
@@ -70,6 +71,15 @@ export const financialRecords = pgTable('financial_records', {
   notes: text('notes'),
 }, (t) => [
   uniqueIndex('financial_records_natural_key').on(t.businessUnitId, t.periodId, t.lineItemId),
+]);
+
+export const revenueTargets = pgTable('revenue_targets', {
+  id: integer('id').primaryKey(),
+  periodId: integer('period_id').notNull().references(() => periods.id),
+  category: revenueTargetCategoryEnum('category').notNull(),
+  targetAmount: doublePrecision('target_amount').notNull(),
+}, (t) => [
+  uniqueIndex('revenue_targets_natural_key').on(t.periodId, t.category),
 ]);
 
 export const categories = pgTable('categories', {

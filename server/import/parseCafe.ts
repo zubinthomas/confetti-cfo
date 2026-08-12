@@ -229,7 +229,7 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     kind: 'cafe', businessName: BUSINESS,
     periods: [...periods.values()],
     financialRecords: records,
-    salesRecords: [], consignmentRecords: [], employeeRecords: [],
+    salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
     issues,
   };
 }

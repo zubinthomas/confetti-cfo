@@ -16,7 +16,7 @@ export type ImportBatchDetails = Record<string, ImportRecordChange[]> | null;
 export interface ImportBatch {
   id: number;
   filename: string;
-  kind: "cepl" | "cafe" | "sienna" | "hr";
+  kind: "cepl" | "cafe" | "sienna" | "hr" | "target";
   status: "preview" | "committed" | "discarded";
   uploadedAt: string;
   committedAt: string | null;

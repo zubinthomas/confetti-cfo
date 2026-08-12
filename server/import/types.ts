@@ -102,14 +102,26 @@ export interface ParsedEmployeeRecord {
   ifscCode: string | null;
 }
 
+// One (month, category) target from the FY26-27 Target Plan sheet's "FY26-27
+// Store Target"/"FY26-27 F&B Target" columns - main categories only, no
+// sub-category breakdown (deferred pending separate feedback, not parsed here).
+export interface ParsedTargetRecord {
+  periodStart: string;
+  periodEnd: string;
+  periodType: 'month';
+  category: 'store' | 'fnb';
+  amount: number;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
   salesRecords: ParsedSalesRecord[];
   consignmentRecords: ParsedConsignmentRecord[];
   employeeRecords: ParsedEmployeeRecord[];
+  targetRecords: ParsedTargetRecord[];
   issues: Issue[];
 }
 

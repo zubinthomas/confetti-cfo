@@ -110,7 +110,7 @@ export function parseHr(wb: ExcelJS.Workbook): ParsedWorkbook {
   const ws = wb.worksheets.find((w) => findHeaderRow(w) !== null);
   if (!ws) {
     issues.push({ level: 'error', sheet: wb.worksheets[0]?.name ?? '(none)', message: 'no HR Mastersheet header row found' });
-    return { kind: 'hr', businessName: '', periods: [], financialRecords: [], salesRecords: [], consignmentRecords: [], employeeRecords: [], issues };
+    return { kind: 'hr', businessName: '', periods: [], financialRecords: [], salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [], issues };
   }
   const cols = findHeaderRow(ws)!;
   const at = (row: ExcelJS.Row, h: Header) => (cols.has(h) ? row.getCell(cols.get(h)!).value : null);
@@ -202,6 +202,7 @@ export function parseHr(wb: ExcelJS.Workbook): ParsedWorkbook {
     salesRecords: [],
     consignmentRecords: [],
     employeeRecords: records,
+    targetRecords: [],
     issues,
   };
 }

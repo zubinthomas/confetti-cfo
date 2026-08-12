@@ -37,19 +37,19 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   const stats: Record<string, TableStats> = {
     businesses: stat(), businessUnits: stat(), periods: stat(), lineItems: stat(),
     categories: stat(), channels: stat(), vendors: stat(),
-    financialRecords: stat(), salesRecords: stat(), consignmentRecords: stat(),
+    financialRecords: stat(), salesRecords: stat(), consignmentRecords: stat(), revenueTargets: stat(),
   };
   const details: Record<string, RecordChange[]> = {
     businesses: [], businessUnits: [], periods: [], lineItems: [],
     categories: [], channels: [], vendors: [],
-    financialRecords: [], salesRecords: [], consignmentRecords: [],
+    financialRecords: [], salesRecords: [], consignmentRecords: [], revenueTargets: [],
   };
   const inserts: { table: keyof typeof schema; rows: Record<string, unknown>[] }[] = [];
   const updates: { table: keyof typeof schema; id: number; set: Record<string, unknown> }[] = [];
 
   // ── current db state ────────────────────────────────────────────────────────
   const [businesses, units, periods, lineItems, categories, channels, vendors,
-    finRecords, salesRecords, conRecords] = await Promise.all([
+    finRecords, salesRecords, conRecords, targetRecords] = await Promise.all([
     db.select().from(schema.businesses),
     db.select().from(schema.businessUnits),
     db.select().from(schema.periods),
@@ -60,6 +60,7 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
     db.select().from(schema.financialRecords),
     db.select().from(schema.salesRecords),
     db.select().from(schema.consignmentRecords),
+    db.select().from(schema.revenueTargets),
   ]);
 
   const nextId: Record<string, number> = {};
@@ -77,10 +78,16 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   const nextFin = alloc('financialRecords', finRecords);
   const nextSales = alloc('salesRecords', salesRecords);
   const nextCon = alloc('consignmentRecords', conRecords);
+  const nextTarget = alloc('revenueTargets', targetRecords);
 
   // ── dimension resolution (create-if-missing, never mutate existing) ────────
+  // Target-plan rows have no business (they're period+category only, not
+  // scoped to a business/unit) - -1 is an unused sentinel here, never
+  // referenced since parsed.financialRecords/salesRecords/consignmentRecords
+  // are always empty for the 'target' kind, so resolveUnit/resolveNamed/
+  // resolveVendor (the only consumers of businessId) never run.
   const businessByName = new Map(businesses.map((b) => [b.name, b.id]));
-  const businessId = (() => {
+  const businessId = parsed.businessName ? (() => {
     const existing = businessByName.get(parsed.businessName);
     if (existing != null) { stats.businesses.unchanged++; return existing; }
     const id = nextBusiness();
@@ -92,7 +99,7 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
     stats.businesses.creates++;
     details.businesses.push({ action: 'create', description: parsed.businessName });
     return id;
-  })();
+  })() : -1;
 
   const unitKey = (bid: number, name: string) => `${bid}|${name}`;
   const unitIds = new Map(units.map((u) => [unitKey(u.businessId, u.name), u.id]));
@@ -106,7 +113,7 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
 
   const pendingRows: Record<string, Record<string, unknown>[]> = {
     businessUnits: [], periods: [], lineItems: [], categories: [], channels: [], vendors: [],
-    financialRecords: [], salesRecords: [], consignmentRecords: [],
+    financialRecords: [], salesRecords: [], consignmentRecords: [], revenueTargets: [],
   };
 
   const resolveUnit = (name: string, unitType: 'department' | 'outlet') => {
@@ -264,13 +271,35 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
     }
   }
 
+  // ── revenue targets ─────────────────────────────────────────────────────────
+  const targetsByKey = new Map(targetRecords.map((t) => [`${t.periodId}|${t.category}`, t]));
+  for (const r of parsed.targetRecords) {
+    const periodId = resolvePeriod({
+      periodType: r.periodType, startDate: r.periodStart, endDate: r.periodEnd,
+      label: r.periodStart, fiscalYear: '', isSpecialEvent: false,
+    });
+    const description = `${r.category} target · ${r.periodStart}–${r.periodEnd}`;
+    const existing = targetsByKey.get(`${periodId}|${r.category}`);
+    if (!existing) {
+      pendingRows.revenueTargets.push({ id: nextTarget(), periodId, category: r.category, targetAmount: r.amount });
+      stats.revenueTargets.creates++;
+      details.revenueTargets.push({ action: 'create', description, fields: [{ field: 'targetAmount', from: null, to: r.amount }] });
+    } else if (!Object.is(existing.targetAmount, r.amount)) {
+      updates.push({ table: 'revenueTargets', id: existing.id, set: { targetAmount: r.amount } });
+      stats.revenueTargets.updates++;
+      details.revenueTargets.push({ action: 'update', description, fields: [{ field: 'targetAmount', from: existing.targetAmount, to: r.amount }] });
+    } else {
+      stats.revenueTargets.unchanged++;
+    }
+  }
+
   // fill unchanged counts for dimensions we touched
   stats.businessUnits.unchanged = new Set(parsed.financialRecords.map((r) => r.unitName)).size - stats.businessUnits.creates;
   stats.lineItems.unchanged = new Set(parsed.financialRecords.map((r) => `${r.lineItemName}|${r.valueType}`)).size - stats.lineItems.creates;
 
   const INSERT_ORDER: (keyof typeof pendingRows)[] = [
     'businessUnits', 'periods', 'lineItems', 'categories', 'channels', 'vendors',
-    'financialRecords', 'salesRecords', 'consignmentRecords',
+    'financialRecords', 'salesRecords', 'consignmentRecords', 'revenueTargets',
   ];
   const ops: ((tx: Tx) => Promise<void>)[] = [];
   for (const ins of inserts) {
