@@ -55,3 +55,9 @@ export interface ConsignmentRecord {
   amount: number;
   commissionRate: number | null;
 }
+export interface RevenueTarget {
+  id: number;
+  periodId: number;
+  category: "store" | "fnb";
+  targetAmount: number;
+}

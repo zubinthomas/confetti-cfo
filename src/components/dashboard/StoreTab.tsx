@@ -3,8 +3,14 @@ import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
+import TargetsView from "./TargetsView";
 import { useStoreData, STORE_FYS } from "@/hooks/useStoreData";
-import { MONTHS, L, avg, maxIdx, minIdx, sum } from "@/data/seriesKernel";
+import { useReferenceData } from "@/hooks/useReferenceData";
+import { useSalesRecords } from "@/hooks/useSalesRecords";
+import { useRevenueTargets } from "@/hooks/useRevenueTargets";
+import { computeChannelBreakdown } from "@/data/storeSalesData";
+import { targetSeries } from "@/data/revenueTargets";
+import { MONTHS, L, avg, maxIdx, minIdx, sum, monthPeriodIds } from "@/data/seriesKernel";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -33,14 +39,84 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }: { active?: 
   );
 };
 
+const STORE_FY_CHIPS = [...STORE_FYS, "2026-2027"];
+
 export default function StoreTab() {
   const storeData = useStoreData();
   const [view, setView] = useState("channels");
   const [fy, setFy] = useState(STORE_FYS.at(-1)!);
+  const isTargetsFy = fy === "2026-2027";
+
+  // FY26-27 Targets data - deliberately NOT reusing useStoreData's
+  // siennaStore.fy2627 (capped to Apr-May, the only months with real sales
+  // data today) since Targets need all 12 months, most still target-only.
+  const { data: ref } = useReferenceData();
+  const { data: sales2627 } = useSalesRecords({ fiscalYear: ["2026-2027"] });
+  const { data: storeTargets2627 } = useRevenueTargets({ category: ["store"], fiscalYear: ["2026-2027"] });
 
   if (!storeData) return <PageSpinner />;
 
   const { siennaStore, storeSalesByFy, categoriesByFy, storeHistory, aprilByFy, storeFinancialsByFy } = storeData;
+
+  const fyChipRow = (
+    <div className="flex gap-1.5">
+      {STORE_FY_CHIPS.map((y) => (
+        <button
+          key={y}
+          onClick={() => setFy(y)}
+          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            y === fy
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          {y === "2026-2027" ? "FY 26-27" : storeSalesByFy[y].label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (isTargetsFy) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Sienna Store - Sales Analysis · FY 26-27
+          </p>
+          {fyChipRow}
+        </div>
+        {ref && sales2627 && storeTargets2627 ? (() => {
+          const targetsPeriodIds = monthPeriodIds(ref.periods, "2026-2027");
+          const hpStoreChannelId = ref.channels.find((c) => c.name === "HP Store")?.id;
+          // computeChannelBreakdown defaults a missing record to 0, which is
+          // right for charts that only ever look at past/complete years, but
+          // here it would make a month with no Store data imported yet (vs.
+          // one that's genuinely zero-revenue) look like a huge miss - null
+          // it out instead so projectionSeries treats it as "no data" rather
+          // than "actual is 0".
+          const periodsWithData = new Set(
+            sales2627.filter((r) => r.channelId === hpStoreChannelId && r.categoryId == null).map((r) => r.periodId)
+          );
+          const rawActual = computeChannelBreakdown(sales2627, ref.channels, targetsPeriodIds)["HP Store"] ?? [];
+          const actual = targetsPeriodIds.map((pid, i) => (periodsWithData.has(pid) ? rawActual[i] : null));
+          return (
+            <TargetsView
+              categoryLabel="Store"
+              fyLabel="FY 26-27"
+              periods={ref.periods}
+              periodIds={targetsPeriodIds}
+              actual={actual}
+              target={targetSeries(storeTargets2627, "store", targetsPeriodIds)}
+              priorYearLabel="FY 25-26"
+              priorYearActual={storeSalesByFy["2025-2026"].channels["HP Store"]}
+            />
+          );
+        })() : (
+          <DashCard title="FY 26-27 Targets"><PageSpinner /></DashCard>
+        )}
+      </div>
+    );
+  }
 
   // FY26-27 is only Apr-May so far - the YoY view and its KPI/status items are
   // fixed to "FY 25-26 vs the newest in-progress year" regardless of which
@@ -188,21 +264,7 @@ export default function StoreTab() {
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Sienna Store - Sales Analysis · {FY.label}
           </p>
-          <div className="flex gap-1.5">
-            {STORE_FYS.map((y) => (
-              <button
-                key={y}
-                onClick={() => setFy(y)}
-                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                  y === fy
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {storeSalesByFy[y].label}
-              </button>
-            ))}
-          </div>
+          {fyChipRow}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}

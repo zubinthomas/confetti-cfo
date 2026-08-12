@@ -3,9 +3,13 @@ import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
+import TargetsView from "./TargetsView";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFabYear } from "@/hooks/useFabYear";
-import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel } from "@/data/seriesKernel";
+import { useReferenceData } from "@/hooks/useReferenceData";
+import { useRevenueTargets } from "@/hooks/useRevenueTargets";
+import { targetSeries } from "@/data/revenueTargets";
+import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, monthPeriodIds } from "@/data/seriesKernel";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -36,9 +40,63 @@ export default function SiennaTab() {
   const fys = useOverviewFiscalYears();
   const [selectedFy, setSelectedFy] = useState<string | null>(null);
   const fy = selectedFy ?? fys?.at(-1);
+  const isTargetsFy = fy === "2026-2027";
   const FAB = useFabYear(fy);
 
+  // FY26-27 Targets data - fixed to FY26-27/FY25-26 regardless of the
+  // page-level year selector above, same as StoreTab's yoy view.
+  const { data: ref } = useReferenceData();
+  const FAB2627 = useFabYear("2026-2027");
+  const FAB2526 = useFabYear("2025-2026");
+  const { data: fnbTargets2627 } = useRevenueTargets({ category: ["fnb"], fiscalYear: ["2026-2027"] });
+
   if (!fys || !fy || !FAB) return <PageSpinner />;
+
+  const fyChips = [...fys, "2026-2027"];
+  const fyChipRow = (
+    <div className="flex gap-1.5">
+      {fyChips.map((y) => (
+        <button
+          key={y}
+          onClick={() => setSelectedFy(y)}
+          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            y === fy
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          {y === "2026-2027" ? "FY 26-27" : fyLabel(y)}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (isTargetsFy) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Sienna F&B - Monthly P&L · FY 26-27
+          </p>
+          {fyChipRow}
+        </div>
+        {ref && FAB2627 && FAB2526 && fnbTargets2627 ? (
+          <TargetsView
+            categoryLabel="F&B"
+            fyLabel="FY 26-27"
+            periods={ref.periods}
+            periodIds={monthPeriodIds(ref.periods, "2026-2027")}
+            actual={FAB2627.totalRevenue}
+            target={targetSeries(fnbTargets2627, "fnb", monthPeriodIds(ref.periods, "2026-2027"))}
+            priorYearLabel="FY 25-26"
+            priorYearActual={FAB2526.totalRevenue}
+          />
+        ) : (
+          <DashCard title="FY 26-27 Targets"><PageSpinner /></DashCard>
+        )}
+      </div>
+    );
+  }
 
   const fyTotal = FAB.totals.revenue;
   const fyPL = FAB.totals.pl;
@@ -151,21 +209,7 @@ export default function SiennaTab() {
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Sienna F&B - Monthly P&L · {FAB.label}
           </p>
-          <div className="flex gap-1.5">
-            {fys.map((y) => (
-              <button
-                key={y}
-                onClick={() => setSelectedFy(y)}
-                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                  y === fy
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {fyLabel(y)}
-              </button>
-            ))}
-          </div>
+          {fyChipRow}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
