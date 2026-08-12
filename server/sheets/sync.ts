@@ -56,7 +56,7 @@ export async function syncSource(source: SheetSource, prefetchedBuffer?: Buffer)
     const wb = await loadWorkbook(buffer);
     const kind = detectKind(wb);
     if (!kind) {
-      const msg = 'Unrecognised workbook - expected a CEPL P&L, Cafe Weekly P&L, Sienna Store Sales, HR Mastersheet, or FY Target Plan file';
+      const msg = 'Unrecognised workbook - expected a CEPL P&L, Cafe Weekly P&L, Sienna Store Sales, HR Mastersheet, FY Target Plan, or Monthly F&B P&L file';
       return { status: 'error', error: msg, source: await recordOutcome(source.id, 'error', msg) };
     }
     const parsed = PARSERS[kind](wb);

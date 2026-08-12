@@ -6,6 +6,7 @@ import { parseCafe } from './parseCafe.ts';
 import { parseSienna } from './parseSienna.ts';
 import { parseHr } from './parseHr.ts';
 import { parseTarget, findTargetSheet } from './parseTarget.ts';
+import { parseFnbMonthly, findFnbMonthlySheets } from './parseFnbMonthly.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 export type WorkbookKind = ParsedWorkbook['kind'];
@@ -33,6 +34,7 @@ export function detectKind(wb: ExcelJS.Workbook): WorkbookKind | null {
   if (names.has('Overall sales')) return 'sienna';
   if ([...names].some((n) => /^\d{2}-\d{2}-\d{4} to \d{2}-\d{2}-\d{4}$/.test(n))) return 'cafe';
   if (findTargetSheet(wb)) return 'target';
+  if (findFnbMonthlySheets(wb).length) return 'fnbMonthly';
   if (looksLikeHrMastersheet(wb)) return 'hr';
   return null;
 }
@@ -43,4 +45,5 @@ export const PARSERS: Record<WorkbookKind, (wb: ExcelJS.Workbook) => ParsedWorkb
   sienna: parseSienna,
   hr: parseHr,
   target: parseTarget,
+  fnbMonthly: parseFnbMonthly,
 };

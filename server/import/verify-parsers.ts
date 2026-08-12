@@ -11,6 +11,7 @@ import { parseCafe } from './parseCafe.ts';
 import { parseSienna } from './parseSienna.ts';
 import { parseHr } from './parseHr.ts';
 import { parseTarget } from './parseTarget.ts';
+import { parseFnbMonthly } from './parseFnbMonthly.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -159,6 +160,40 @@ for (const [businessName, file, parser] of SOURCES) {
       bad++;
     }
     console.log(`  [Target] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
+    total += bad;
+  }
+}
+
+// The Monthly F&B P&L workbook has no extracted_data.json-style oracle
+// either - spot-check instead: 4 month sheets found so far (Apr-Jul 2026),
+// zero parse errors, and April's known Total F&B Sales figure (cross-checked
+// by hand against the sheet's own "Total" column and the Department Revenue
+// summary sheet, which agree).
+{
+  const FNB_MONTHLY_FILE = path.join(ROOT, 'data-sources', 'Monthly F&B P&L (2026-27).xlsx');
+  if (!fs.existsSync(FNB_MONTHLY_FILE)) {
+    console.log(`skipping Monthly F&B P&L (no ${FNB_MONTHLY_FILE})`);
+  } else {
+    const pw = parseFnbMonthly(await loadWorkbook(FNB_MONTHLY_FILE));
+    const errors = pw.issues.filter((i) => i.level === 'error').length;
+    const warnings = pw.issues.filter((i) => i.level === 'warning').length;
+    console.log(`== Monthly F&B P&L - issues: ${errors} error(s), ${warnings} warning(s)`);
+    let bad = 0;
+    if (pw.periods.length !== 4) {
+      console.error(`  [FnbMonthly] expected 4 month sheets (Apr-Jul 2026), got ${pw.periods.length}`);
+      bad++;
+    }
+    if (errors > 0) {
+      console.error(`  [FnbMonthly] expected 0 parse errors, got ${errors}`);
+      bad++;
+    }
+    const april = pw.financialRecords.find(
+      (r) => r.periodStart === '2026-04-01' && r.lineItemName === 'Total F&B Sales Monthwise');
+    if (!april || Math.round(april.value) !== 6718652) {
+      console.error(`  [FnbMonthly] April Total F&B Sales expected 6,718,652, got ${april?.value}`);
+      bad++;
+    }
+    console.log(`  [FnbMonthly] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
     total += bad;
   }
 }

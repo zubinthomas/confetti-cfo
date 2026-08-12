@@ -38,7 +38,7 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
     const kind = detectKind(wb);
     if (!kind) {
       return res.status(400).json({
-        message: 'Unrecognised workbook - expected a CEPL P&L, Cafe Weekly P&L, Sienna Store Sales, HR Mastersheet, or FY Target Plan file',
+        message: 'Unrecognised workbook - expected a CEPL P&L, Cafe Weekly P&L, Sienna Store Sales, HR Mastersheet, FY Target Plan, or Monthly F&B P&L file',
       });
     }
     const parsed = PARSERS[kind](wb);

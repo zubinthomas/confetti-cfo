@@ -114,7 +114,7 @@ export interface ParsedTargetRecord {
 }
 
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
