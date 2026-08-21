@@ -24,6 +24,7 @@ const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   hr: "HR Mastersheet",
   target: "FY Target Plan",
   fnbMonthly: "Monthly F&B P&L",
+  fnbWeekly: "Weekly F&B P&L",
 };
 
 const STATUS_STYLE: Record<ImportBatch["status"], string> = {

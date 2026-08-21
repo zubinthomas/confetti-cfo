@@ -12,6 +12,7 @@ import { parseSienna } from './parseSienna.ts';
 import { parseHr } from './parseHr.ts';
 import { parseTarget } from './parseTarget.ts';
 import { parseFnbMonthly } from './parseFnbMonthly.ts';
+import { parseFnbWeekly } from './parseFnbWeekly.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -194,6 +195,41 @@ for (const [businessName, file, parser] of SOURCES) {
       bad++;
     }
     console.log(`  [FnbMonthly] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
+    total += bad;
+  }
+}
+
+// The Weekly F&B P&L workbook has no extracted_data.json-style oracle
+// either - spot-check instead: 19 week sheets found so far (01-Apr through
+// 09-Aug 2026), zero parse errors, and the first week's known Total F&B
+// Sales figure (cross-checked by hand against the sheet's own "Total"
+// column).
+{
+  const FNB_WEEKLY_FILE = path.join(ROOT, 'data-sources', 'F&B Weekly P&L (2026-27).xlsx');
+  if (!fs.existsSync(FNB_WEEKLY_FILE)) {
+    console.log(`skipping Weekly F&B P&L (no ${FNB_WEEKLY_FILE})`);
+  } else {
+    const pw = parseFnbWeekly(await loadWorkbook(FNB_WEEKLY_FILE));
+    const errors = pw.issues.filter((i) => i.level === 'error').length;
+    const warnings = pw.issues.filter((i) => i.level === 'warning').length;
+    console.log(`== Weekly F&B P&L - issues: ${errors} error(s), ${warnings} warning(s)`);
+    for (const i of pw.issues) console.log(`    [${i.level}] ${i.sheet}: ${i.message}`);
+    let bad = 0;
+    if (pw.periods.length !== 19) {
+      console.error(`  [FnbWeekly] expected 19 week sheets (01-Apr through 09-Aug 2026), got ${pw.periods.length}`);
+      bad++;
+    }
+    if (errors > 0) {
+      console.error(`  [FnbWeekly] expected 0 parse errors, got ${errors}`);
+      bad++;
+    }
+    const week1 = pw.financialRecords.find(
+      (r) => r.periodStart === '2026-04-01' && r.unitName === 'F&B' && r.lineItemName === 'Total F&B Sales');
+    if (!week1 || Math.round(week1.value) !== 1747698) {
+      console.error(`  [FnbWeekly] week of 01-04-2026 Total F&B Sales expected 1,747,698, got ${week1?.value}`);
+      bad++;
+    }
+    console.log(`  [FnbWeekly] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
     total += bad;
   }
 }

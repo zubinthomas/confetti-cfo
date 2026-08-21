@@ -4,13 +4,16 @@ import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
+import { MenuMixCard } from "@/components/fnb/OutletPage";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFabYear } from "@/hooks/useFabYear";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
+import { useFnbVenueData } from "@/hooks/useFnbVenueData";
 import { targetSeries, projectionSeries } from "@/data/revenueTargets";
 import { computeFabYear, FNB_BU } from "@/data/fabData";
+import { VENUE_NAMES, DRILL_DOWN_CATEGORIES } from "@/data/fnbVenueData";
 import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -18,6 +21,7 @@ import {
 } from "recharts";
 
 const COLORS = { product: "#3b82f6", retail: "#10b981", events: "#f59e0b", pl: "#8b5cf6" };
+const VENUE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#ec4899"];
 
 const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   if (!active || !payload?.length) return null;
@@ -39,6 +43,8 @@ const COGS_TARGET_PCT = 35;
 
 export default function SiennaTab() {
   const [view, setView] = useState("revenue");
+  const [fyDetailView, setFyDetailView] = useState<"targets" | "venue" | "item">("targets");
+  const [drillCategory, setDrillCategory] = useState<string | null>(null);
   const fys = useOverviewFiscalYears();
   // "2026-2027" is always handled as the synthetic/projected targets entry
   // (below), never as a normal year - now that real FY26-27 F&B data exists,
@@ -58,6 +64,11 @@ export default function SiennaTab() {
   const FAB2627 = useFabYear("2026-2027");
   const FAB2526 = useFabYear("2025-2026");
   const { data: fnbTargets2627 } = useRevenueTargets({ category: ["fnb"], fiscalYear: ["2026-2027"] });
+  // Opt-in venue/item drill-down (F&B Weekly P&L import) - only ever has
+  // data for FY26-27 weeks so far, surfaced as an extra toggle on that tab
+  // rather than the general view switcher below (which FY26-27 never
+  // reaches - it's fully replaced by the targets branch).
+  const venueData = useFnbVenueData();
   // Unfiltered-by-year fetch so the multi-year history list below can total
   // every year in one pass, the way StoreTab's storeHistory already does.
   const { data: allFnbRecords } = useFinancialRecords({ businessUnitId: [FNB_BU] });
@@ -120,19 +131,125 @@ export default function SiennaTab() {
           </p>
           {fyChipRow}
         </div>
-        {ref && FAB2627 && FAB2526 && fnbTargets2627 ? (
-          <TargetsView
-            categoryLabel="F&B"
-            fyLabel="FY 26-27"
-            periods={ref.periods}
-            periodIds={targetsPeriodIds2627}
-            actual={FAB2627.totalRevenue}
-            target={fnbTarget2627}
-            priorYearLabel="FY 25-26"
-            priorYearActual={FAB2526.totalRevenue}
-          />
-        ) : (
-          <DashCard title="FY 26-27 Targets"><PageSpinner /></DashCard>
+
+        {venueData && (
+          <div className="flex gap-1.5 flex-wrap">
+            {[
+              { key: "targets", label: "Targets" },
+              { key: "venue", label: "By Venue" },
+              { key: "item", label: "By Item" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFyDetailView(key as typeof fyDetailView)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  fyDetailView === key
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {fyDetailView === "targets" && (
+          ref && FAB2627 && FAB2526 && fnbTargets2627 ? (
+            <TargetsView
+              categoryLabel="F&B"
+              fyLabel="FY 26-27"
+              periods={ref.periods}
+              periodIds={targetsPeriodIds2627}
+              actual={FAB2627.totalRevenue}
+              target={fnbTarget2627}
+              priorYearLabel="FY 25-26"
+              priorYearActual={FAB2526.totalRevenue}
+            />
+          ) : (
+            <DashCard title="FY 26-27 Targets"><PageSpinner /></DashCard>
+          )
+        )}
+
+        {fyDetailView === "venue" && venueData && (() => {
+          const venueChartData = venueData.weeks.map((w, i) => {
+            const row: { week: string; [k: string]: string | number | null } = { week: w.short };
+            for (const name of VENUE_NAMES) {
+              const v = venueData.venues[name];
+              if (v) row[name] = v.totalSales[i];
+            }
+            return row;
+          });
+          const activeVenues = VENUE_NAMES.filter((name) => venueData.venues[name]);
+          return (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {activeVenues.map((name) => {
+                  const v = venueData.venues[name]!;
+                  const rev = sum(v.totalSales);
+                  const pl = sum(v.pl);
+                  return (
+                    <KpiCard
+                      key={name}
+                      label={name}
+                      value={L(rev)}
+                      sub={rev ? `${((pl / rev) * 100).toFixed(1)}% margin` : "-"}
+                      status={pl >= 0 ? "green" : "red"}
+                    />
+                  );
+                })}
+              </div>
+              <DashCard title="Weekly Revenue by Venue">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={venueChartData}>
+                    <XAxis dataKey="week" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+                    <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {activeVenues.map((name, i) => (
+                      <Bar key={name} dataKey={name} stackId="v" fill={VENUE_COLORS[i % VENUE_COLORS.length]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </DashCard>
+            </>
+          );
+        })()}
+
+        {fyDetailView === "item" && venueData && (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <MenuMixCard items={venueData.menuMix} title="Menu Mix (FY 26-27, all venues)" />
+              <MenuMixCard items={venueData.liquorMix} title="Liquor Mix (FY 26-27, all venues)" />
+              <MenuMixCard items={venueData.costMix} title="Cost Breakdown by Category (FY 26-27, all venues)" />
+              <MenuMixCard items={venueData.deliveryPlatformMix} title="Delivery Platform Mix (FY 26-27, all venues)" />
+            </div>
+
+            <div>
+              <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-2">
+                Drill into a category
+              </p>
+              <div className="flex gap-1.5 flex-wrap">
+                {DRILL_DOWN_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setDrillCategory(drillCategory === cat ? null : cat)}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                      drillCategory === cat
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {drillCategory && (
+              <MenuMixCard items={venueData.drillDown(drillCategory)} title={`${drillCategory} - Detail (FY 26-27, all venues)`} />
+            )}
+          </>
         )}
       </div>
     );
