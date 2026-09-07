@@ -141,6 +141,34 @@
       "when": 1786187236911,
       "tag": "0019_outstanding_pepper_potts",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787723023047,
+      "tag": "0020_legal_pandemic",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788069600000,
+      "tag": "0021_lonely_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788069600001,
+      "tag": "0022_sturdy_queen_noir",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788074502737,
+      "tag": "0023_sloppy_quasimodo",
+      "breakpoints": true
     }
   ]
 }

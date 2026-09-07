@@ -475,6 +475,12 @@ export const reservationLocations = pgTable('reservation_locations', {
 // and (see reservations below) it holds at most one active reservation per
 // overlapping time window. This is what makes the chef's table need no
 // special-casing: it's just a table like any other.
+//
+// maxExtraCapacity is overflow seating the floor can squeeze onto the table
+// when friends join an already-full party (see server/db/guestSignIns.ts's
+// merge-onto-an-occupied-table flow). Default 0 - a table seats exactly its
+// capacity unless someone deliberately raises this. Physically pushing whole
+// tables together for a big party is a separate thing - see tableMerges below.
 export const reservationTables = pgTable('reservation_tables', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
@@ -482,6 +488,7 @@ export const reservationTables = pgTable('reservation_tables', {
   name: text('name').notNull(),
   type: text('type'),
   capacity: integer('capacity').notNull(),
+  maxExtraCapacity: integer('max_extra_capacity').notNull().default(0),
 }, (t) => [
   uniqueIndex('reservation_tables_location_name').on(t.locationId, t.name),
 ]);
@@ -491,10 +498,25 @@ export const reservationStatusEnum = pgEnum('reservation_status', [
 ]);
 
 // A reservation occupies [date+time, date+time+durationMinutes) on its
-// table. Editing time/size after creation isn't supported - cancel and
-// rebook instead (see server/db/reservations.ts) - only status transitions
-// are, so there's no "re-check the conflict, excluding myself" path to
-// maintain.
+// table. Date, time and durationMinutes are editable after creation via
+// server/db/reservations.ts (extendReservation / rescheduleReservation /
+// endReservationEarly) - the floor needs to stretch, shorten or move a
+// booking as the evening runs, not just cancel and rebook. Every such edit
+// is an UPDATE, and the 0021 EXCLUDE constraint below re-checks the overlap
+// rule on UPDATE just as it does on INSERT, so there is no hand-rolled
+// "re-check excluding myself" path to keep correct.
+//
+// Overlap safety has a DB-level backstop that Drizzle can't express and so
+// lives in migration 0021: a partial `EXCLUDE USING gist` constraint
+// (reservations_no_table_overlap) rejecting two active reservations whose
+// time ranges intersect on the same table, plus CHECK constraints pinning
+// date/time to their literal formats. The app-level check in
+// createReservation runs first for a friendly message; the constraint is
+// what makes it race-safe.
+//
+// seatedAt / departedAt are the *actual* arrival and departure stamps the
+// floor view reads ("occupied since 19:05", freed early at 20:40) - distinct
+// from the booked `time` and `durationMinutes`.
 export const reservations = pgTable('reservations', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
@@ -508,5 +530,68 @@ export const reservations = pgTable('reservations', {
   guestEmail: text('guest_email'),
   status: reservationStatusEnum('status').notNull().default('pending'),
   notes: text('notes'),
+  seatedAt: text('seated_at'),      // ISO-8601, set when the party is actually seated
+  departedAt: text('departed_at'),  // ISO-8601, set by endReservationEarly / Free table
   createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
+
+// ── Guest sign-in register (Sienna front-of-house) ────────────────────────
+// The digital replacement for Sienna's handwritten arrivals book, managed in
+// server/db/guestSignIns.ts and gated by the same `Reservation` permission
+// as the booking book it sits beside. A sign-in is NOT a reservation: a
+// walk-in or function guest has no booked window, no capacity ceiling of its
+// own, and often no table yet. locationId / tableId / reservationId all reuse
+// the reservations catalogue and all null out (never cascade-delete) if the
+// referenced row goes away - a register entry is a historical record.
+export const guestVisitTypeEnum = pgEnum('guest_visit_type', ['walk_in', 'event']);
+
+export const guestSignIns = pgTable('guest_sign_ins', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  visitType: guestVisitTypeEnum('visit_type').notNull().default('walk_in'),
+  guestName: text('guest_name').notNull(),
+  guestPhone: text('guest_phone'),
+  guestEmail: text('guest_email'),
+  partySize: integer('party_size').notNull().default(1),
+  purpose: text('purpose'),
+  host: text('host'),
+  locationId: text('location_id').references(() => reservationLocations.id, { onDelete: 'set null' }),
+  tableId: text('table_id').references(() => reservationTables.id, { onDelete: 'set null' }),
+  reservationId: text('reservation_id').references(() => reservations.id, { onDelete: 'set null' }),
+  signedInAt: text('signed_in_at').notNull(),  // ISO-8601
+  seatedAt: text('seated_at'),                 // ISO-8601, when a table was assigned
+  expectedUntil: text('expected_until'),       // ISO-8601, editable turn-time projection
+  signedOutAt: text('signed_out_at'),          // ISO-8601, null = still on premises
+  notes: text('notes'),
+  createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+});
+
+// ── Ad-hoc table merges (Sienna front-of-house) ───────────────────────────
+// Staff physically push tables together for a party too big for any single
+// table (usually a function). A merge is created as part of seating that
+// party from the guest register (server/db/tableMerges.ts) and auto-releases
+// when they sign out / are freed. While `releasedAt IS NULL` the member
+// tables act as one unit of `combinedCapacity` for seating; an independent
+// booking on a member table is still allowed, but only outside the occupying
+// party's turn window plus `bufferMinutes` (cleanup / reset time, set by
+// staff). "At most one active merge per table" is enforced in tableMerges.ts.
+export const tableMergeKindEnum = pgEnum('table_merge_kind', ['adjacent', 'end_to_end']);
+
+export const tableMerges = pgTable('table_merges', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  mergeKind: tableMergeKindEnum('merge_kind').notNull(),
+  combinedCapacity: integer('combined_capacity').notNull(),
+  bufferMinutes: integer('buffer_minutes').notNull().default(30),
+  createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  releasedAt: text('released_at'), // ISO-8601, null = active
+});
+
+// One row per table in a merge (>= 2). Cascade on both sides: dropping the
+// merge or a table tidies its membership.
+export const tableMergeMembers = pgTable('table_merge_members', {
+  mergeId: text('merge_id').notNull().references(() => tableMerges.id, { onDelete: 'cascade' }),
+  tableId: text('table_id').notNull().references(() => reservationTables.id, { onDelete: 'cascade' }),
+}, (t) => [
+  uniqueIndex('table_merge_members_merge_table').on(t.mergeId, t.tableId),
+]);

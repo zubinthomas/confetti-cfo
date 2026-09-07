@@ -5,24 +5,55 @@
 // (plus a party-size-vs-capacity check) is what gives every table real
 // capacity enforcement, the chef's table included, with no special-casing.
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
+import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
+import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow } from './tableMerges.ts';
+
+// Re-exported for server/db/guestSignIns.ts, which imports the time helpers
+// from here alongside the reservation query helpers below.
+export { toMinutes, fromMinutes, istNow, istDayBounds };
 
 export class ReservationError extends Error {}
 
-const INACTIVE_STATUSES: readonly string[] = ['cancelled', 'no_show'];
+/** Postgres raises 23P01 when the reservations_no_table_overlap EXCLUDE
+ *  constraint (migration 0021) rejects a write - the DB-level backstop for the
+ *  same-table/overlapping-window rule the checks below enforce first. A race
+ *  that slips past those checks, or a status change into an already-booked
+ *  slot, lands here; surface it as a normal 400 rather than a 500. */
+function asReservationError(err: unknown): never {
+  // drizzle wraps the driver error, so the SQLSTATE can be on err or err.cause.
+  const code = (err as { code?: string })?.code
+    ?? (err as { cause?: { code?: string } })?.cause?.code;
+  if (code === '23P01') {
+    throw new ReservationError('That table is already booked for an overlapping time on this date');
+  }
+  throw err;
+}
+
+export const INACTIVE_STATUSES: readonly string[] = ['cancelled', 'no_show'];
 const RESERVATION_STATUSES = ['pending', 'confirmed', 'seated', 'completed', 'cancelled', 'no_show'] as const;
 type ReservationStatus = typeof RESERVATION_STATUSES[number];
 
-function toMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return h * 60 + m;
-}
-
-function fromMinutes(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+/** Active (not cancelled/no_show) reservations on `tableId` (one id, or a
+ *  merged group of ids) / `date` whose [time, time+duration) window intersects
+ *  [startMin, endMin), excluding `excludeId`. Shared by the extend/reschedule
+ *  checks here and the walk-in-vs-booking clash check in
+ *  server/db/guestSignIns.ts. */
+export async function listActiveReservationOverlaps(
+  { tableId, date, startMin, endMin, excludeId }:
+  { tableId: string | string[]; date: string; startMin: number; endMin: number; excludeId?: string },
+) {
+  await ready();
+  const ids = Array.isArray(tableId) ? tableId : [tableId];
+  const rows = await db.select().from(schema.reservations)
+    .where(and(inArray(schema.reservations.tableId, ids), eq(schema.reservations.date, date)));
+  return rows
+    .filter((r) => r.id !== excludeId
+      && !INACTIVE_STATUSES.includes(r.status)
+      && toMinutes(r.time) < endMin
+      && toMinutes(r.time) + r.durationMinutes > startMin)
+    .sort((a, b) => toMinutes(a.time) - toMinutes(b.time));
 }
 
 /** Deterministic and code-only (the two location names, not real table
@@ -103,13 +134,18 @@ export async function listTables({ locationId }: { locationId?: string } = {}) {
   return query.orderBy(asc(schema.reservationTables.name));
 }
 
-export async function createTable({ locationId, name, type, capacity }: { locationId: string; name: string; type?: string | null; capacity: number }) {
+export async function createTable(
+  { locationId, name, type, capacity, maxExtraCapacity }:
+  { locationId: string; name: string; type?: string | null; capacity: number; maxExtraCapacity?: number },
+) {
   await ready();
   const [location] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, locationId));
   if (!location) throw new ReservationError(`No location with id ${locationId}`);
   const trimmed = name?.trim();
   if (!trimmed) throw new ReservationError('Table name is required');
   if (!Number.isInteger(capacity) || capacity <= 0) throw new ReservationError('Capacity must be a positive whole number');
+  const extra = maxExtraCapacity ?? 0;
+  if (!Number.isInteger(extra) || extra < 0) throw new ReservationError('Max extra capacity must be a whole number of 0 or more');
   const [dupe] = await db.select().from(schema.reservationTables)
     .where(and(eq(schema.reservationTables.locationId, locationId), eq(schema.reservationTables.name, trimmed)));
   if (dupe) throw new ReservationError(`${location.name} already has a table named "${trimmed}"`);
@@ -121,16 +157,20 @@ export async function createTable({ locationId, name, type, capacity }: { locati
     name: trimmed,
     type: type?.trim() || null,
     capacity,
+    maxExtraCapacity: extra,
   }).returning();
   return row;
 }
 
-export async function updateTable(id: string, { name, type, capacity }: { name?: string; type?: string | null; capacity?: number }) {
+export async function updateTable(
+  id: string,
+  { name, type, capacity, maxExtraCapacity }: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number },
+) {
   await ready();
   const [existing] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
   if (!existing) throw new ReservationError(`No table with id ${id}`);
 
-  const patch: { name?: string; type?: string | null; capacity?: number } = {};
+  const patch: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number } = {};
   if (name !== undefined) {
     const trimmed = name.trim();
     if (!trimmed) throw new ReservationError('Table name is required');
@@ -145,6 +185,12 @@ export async function updateTable(id: string, { name, type, capacity }: { name?:
   if (capacity !== undefined) {
     if (!Number.isInteger(capacity) || capacity <= 0) throw new ReservationError('Capacity must be a positive whole number');
     patch.capacity = capacity;
+  }
+  if (maxExtraCapacity !== undefined) {
+    if (!Number.isInteger(maxExtraCapacity) || maxExtraCapacity < 0) {
+      throw new ReservationError('Max extra capacity must be a whole number of 0 or more');
+    }
+    patch.maxExtraCapacity = maxExtraCapacity;
   }
 
   const [row] = await db.update(schema.reservationTables).set(patch).where(eq(schema.reservationTables.id, id)).returning();
@@ -183,6 +229,9 @@ export async function listReservations({ date, tableId, locationId }: { date?: s
       guestEmail: schema.reservations.guestEmail,
       status: schema.reservations.status,
       notes: schema.reservations.notes,
+      seatedAt: schema.reservations.seatedAt,
+      departedAt: schema.reservations.departedAt,
+      tableMaxExtraCapacity: schema.reservationTables.maxExtraCapacity,
     })
     .from(schema.reservations)
     .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.reservations.tableId))
@@ -230,6 +279,19 @@ export async function createReservation(
     }
   }
 
+  // A table physically merged with others right now can still take a booking,
+  // but not one overlapping the merged party's turn + reset buffer.
+  const merge = await activeMergeForTable(tableId);
+  if (merge) {
+    const blocked = await mergeBlockWindow(merge, date);
+    if (blocked && start < blocked.endMin && end > blocked.startMin) {
+      const others = merge.tableNames.filter((n) => n !== table.name).join(' + ') || 'another table';
+      throw new ReservationError(
+        `${table.name} is merged with ${others} until about ${fromMinutes(blocked.endMin)} (includes a ${merge.bufferMinutes}-min reset) - book a later slot or a different table`,
+      );
+    }
+  }
+
   const [row] = await db.insert(schema.reservations).values({
     id: randomUUID(),
     createdDate: new Date().toISOString(),
@@ -244,7 +306,7 @@ export async function createReservation(
     status: 'pending',
     notes: notes?.trim() || null,
     createdByUserId: userId,
-  }).returning();
+  }).returning().catch(asReservationError);
   return row;
 }
 
@@ -255,8 +317,110 @@ export async function updateReservationStatus(id: string, status: string) {
   }
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
-  const [row] = await db.update(schema.reservations).set({ status: status as ReservationStatus })
+
+  // Keep the floor-view timestamps in step with the lifecycle no matter where
+  // the transition came from (this screen, or a linked guest sign-in).
+  const patch: { status: ReservationStatus; seatedAt?: string; departedAt?: string } = {
+    status: status as ReservationStatus,
+  };
+  const now = new Date().toISOString();
+  if (status === 'seated' && !existing.seatedAt) patch.seatedAt = now;
+  if (status === 'completed' && !existing.departedAt) patch.departedAt = now;
+
+  const [row] = await db.update(schema.reservations).set(patch)
+    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
+  // A booking that has ended (or was killed) no longer holds its merge, if any.
+  if (['completed', 'cancelled', 'no_show'].includes(status)) {
+    await releaseMergeForTable(existing.tableId);
+  }
+  return row;
+}
+
+/** Stretch a booking's duration. Rejected (friendly message first, then the
+ *  0021 EXCLUDE constraint as backstop) if the longer window runs into the
+ *  next active booking on the table or past midnight. */
+export async function extendReservation(id: string, { durationMinutes }: { durationMinutes: number }) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+    throw new ReservationError('Duration must be a positive whole number of minutes');
+  }
+  if (durationMinutes <= existing.durationMinutes) {
+    throw new ReservationError('Extend must lengthen the booking - use Free table to end it early');
+  }
+  const start = toMinutes(existing.time);
+  if (start + durationMinutes > 24 * 60) {
+    throw new ReservationError("A booking can't run past midnight - end earlier instead");
+  }
+  const [clash] = await listActiveReservationOverlaps({
+    tableId: await mergedGroup(existing.tableId), date: existing.date, startMin: start, endMin: start + durationMinutes, excludeId: id,
+  });
+  if (clash) throw new ReservationError(`The next booking on this table starts at ${clash.time} (${clash.guestName})`);
+
+  const [row] = await db.update(schema.reservations).set({ durationMinutes })
+    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
+  return row;
+}
+
+/** Move a booking to a new date/time/duration (any subset). Same validation as
+ *  createReservation; the EXCLUDE constraint backstops the overlap rule. */
+export async function rescheduleReservation(
+  id: string,
+  { date, time, durationMinutes }: { date?: string; time?: string; durationMinutes?: number },
+) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, existing.tableId));
+
+  const nextDate = date ?? existing.date;
+  const nextTime = time ?? existing.time;
+  const nextDuration = durationMinutes ?? existing.durationMinutes;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) throw new ReservationError('Date must be in YYYY-MM-DD format');
+  if (!/^\d{2}:\d{2}$/.test(nextTime)) throw new ReservationError('Time must be in HH:MM format');
+  if (!Number.isInteger(nextDuration) || nextDuration <= 0) {
+    throw new ReservationError('Duration must be a positive whole number of minutes');
+  }
+  const start = toMinutes(nextTime);
+  if (start + nextDuration > 24 * 60) {
+    throw new ReservationError("A booking can't run past midnight - use a shorter duration or an earlier time");
+  }
+  const [clash] = await listActiveReservationOverlaps({
+    tableId: await mergedGroup(existing.tableId), date: nextDate, startMin: start, endMin: start + nextDuration, excludeId: id,
+  });
+  if (clash) {
+    throw new ReservationError(`${table?.name ?? 'That table'} is already booked ${clash.time}–${fromMinutes(toMinutes(clash.time) + clash.durationMinutes)} (${clash.guestName})`);
+  }
+
+  const [row] = await db.update(schema.reservations)
+    .set({ date: nextDate, time: nextTime, durationMinutes: nextDuration })
+    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
+  return row;
+}
+
+/** "Free table" for a booking: mark it done now and hand the rest of the slot
+ *  back. Shrinking the window can never violate the overlap constraint. A
+ *  no-op for an already-closed booking. */
+export async function endReservationEarly(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  if (['completed', 'cancelled', 'no_show'].includes(existing.status)) return existing;
+
+  const now = new Date();
+  const patch: { status: ReservationStatus; departedAt: string; durationMinutes?: number } = {
+    status: 'completed',
+    departedAt: now.toISOString(),
+  };
+  const { date: today, minutes: nowMin } = istNow(now);
+  if (existing.date === today) {
+    const elapsed = nowMin - toMinutes(existing.time);
+    if (elapsed >= 1 && elapsed < existing.durationMinutes) patch.durationMinutes = elapsed;
+  }
+  const [row] = await db.update(schema.reservations).set(patch)
     .where(eq(schema.reservations.id, id)).returning();
+  await releaseMergeForTable(existing.tableId);
   return row;
 }
 
@@ -265,4 +429,5 @@ export async function deleteReservation(id: string) {
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
   await db.delete(schema.reservations).where(eq(schema.reservations.id, id));
+  await releaseMergeForTable(existing.tableId);
 }

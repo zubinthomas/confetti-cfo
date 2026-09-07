@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
+import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import * as schema from './schema.ts';
@@ -53,7 +54,9 @@ try {
   process.exit(1);
 }
 
-const client = new PGlite(DATA_DIR);
+// btree_gist backs the reservations no-overlap EXCLUDE constraint (migration
+// 0021); production Postgres has it built in, PGlite must load it explicitly.
+const client = new PGlite(DATA_DIR, { extensions: { btree_gist } });
 export const db = drizzle(client, { schema });
 
 let migrated: Promise<void> | null = null;

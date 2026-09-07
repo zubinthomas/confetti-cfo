@@ -8,13 +8,15 @@ import {
   listLocations, createLocation, updateLocation, deleteLocation,
   listTables, createTable, updateTable, deleteTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
+  extendReservation, rescheduleReservation, endReservationEarly,
 } from '../db/reservations.ts';
+import { TableMergeError, listActiveMerges, createMerge, releaseMerge } from '../db/tableMerges.ts';
 
 const router = Router();
 router.use(authMiddleware);
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const status = (err: unknown) => (err instanceof ReservationError ? 400 : 500);
+const status = (err: unknown) => (err instanceof ReservationError || err instanceof TableMergeError ? 400 : 500);
 
 // ── Locations ────────────────────────────────────────────────────────────
 
@@ -66,10 +68,13 @@ router.get('/tables', requirePermission('Reservation', 'read'), async (req: Auth
 
 router.post('/tables', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { locationId, name, type, capacity } = req.body ?? {};
+    const { locationId, name, type, capacity, maxExtraCapacity } = req.body ?? {};
     if (typeof locationId !== 'string') return res.status(400).json({ message: 'locationId is required' });
     if (typeof capacity !== 'number') return res.status(400).json({ message: 'capacity must be a number' });
-    res.status(201).json(await createTable({ locationId, name, type, capacity }));
+    if (maxExtraCapacity !== undefined && typeof maxExtraCapacity !== 'number') {
+      return res.status(400).json({ message: 'maxExtraCapacity must be a number' });
+    }
+    res.status(201).json(await createTable({ locationId, name, type, capacity, maxExtraCapacity }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -77,9 +82,12 @@ router.post('/tables', requirePermission('Reservation', 'write'), async (req: Au
 
 router.patch('/tables/:id', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { name, type, capacity } = req.body ?? {};
+    const { name, type, capacity, maxExtraCapacity } = req.body ?? {};
     if (capacity !== undefined && typeof capacity !== 'number') return res.status(400).json({ message: 'capacity must be a number' });
-    res.json(await updateTable(req.params.id, { name, type, capacity }));
+    if (maxExtraCapacity !== undefined && typeof maxExtraCapacity !== 'number') {
+      return res.status(400).json({ message: 'maxExtraCapacity must be a number' });
+    }
+    res.json(await updateTable(req.params.id, { name, type, capacity, maxExtraCapacity }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -89,6 +97,46 @@ router.delete('/tables/:id', requirePermission('Reservation', 'delete'), async (
   try {
     await deleteTable(req.params.id);
     res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+// ── Table merges ─────────────────────────────────────────────────────────
+// (Defined before the '/:id' reservation routes so the paths never collide.)
+
+router.get('/table-merges', requirePermission('Reservation', 'read'), async (_req: AuthedRequest, res) => {
+  try {
+    res.json(await listActiveMerges());
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.post('/table-merges', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { tableIds, mergeKind, combinedCapacity, bufferMinutes } = req.body ?? {};
+    if (!Array.isArray(tableIds) || !tableIds.every((t) => typeof t === 'string')) {
+      return res.status(400).json({ message: 'tableIds must be an array of table ids' });
+    }
+    if (typeof mergeKind !== 'string') return res.status(400).json({ message: 'mergeKind is required' });
+    if (combinedCapacity !== undefined && typeof combinedCapacity !== 'number') {
+      return res.status(400).json({ message: 'combinedCapacity must be a number' });
+    }
+    if (bufferMinutes !== undefined && typeof bufferMinutes !== 'number') {
+      return res.status(400).json({ message: 'bufferMinutes must be a number' });
+    }
+    res.status(201).json(await createMerge(req.user!.id, { tableIds, mergeKind, combinedCapacity, bufferMinutes }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/table-merges/:id/release', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const view = await releaseMerge(req.params.id);
+    if (!view) return res.status(404).json({ message: 'No merge with that id' });
+    res.json(view);
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -126,6 +174,36 @@ router.patch('/:id/status', requirePermission('Reservation', 'write'), async (re
     const { status: newStatus } = req.body ?? {};
     if (typeof newStatus !== 'string') return res.status(400).json({ message: 'status is required' });
     res.json(await updateReservationStatus(req.params.id, newStatus));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { durationMinutes } = req.body ?? {};
+    if (typeof durationMinutes !== 'number') return res.status(400).json({ message: 'durationMinutes must be a number' });
+    res.json(await extendReservation(req.params.id, { durationMinutes }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/:id/reschedule', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { date, time, durationMinutes } = req.body ?? {};
+    if (durationMinutes !== undefined && typeof durationMinutes !== 'number') {
+      return res.status(400).json({ message: 'durationMinutes must be a number' });
+    }
+    res.json(await rescheduleReservation(req.params.id, { date, time, durationMinutes }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/:id/end-early', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    res.json(await endReservationEarly(req.params.id));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }

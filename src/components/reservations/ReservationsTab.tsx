@@ -3,16 +3,20 @@ import {
   listLocations, createLocation, updateLocation, deleteLocation,
   listTables, createTable, updateTable, deleteTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
-  type ReservationLocation, type ReservationTable, type Reservation, type ReservationStatus,
+  extendReservation, endReservationEarly, listTableMerges, releaseTableMerge,
+  type ReservationLocation, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
 } from "@/api/reservationsApi";
-import { Plus, X, Loader2, Settings2, CalendarDays, Trash2, Pencil } from "lucide-react";
+import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
+import { Plus, X, Loader2, Settings2, CalendarDays, Trash2, Pencil, DoorOpen, Clock, Link2, Link2Off } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import GuestRegister from "@/components/reservations/GuestRegister";
 import { useAuth } from "@/lib/AuthContext";
+import { istDateStr, istMinutes, istClock } from "@/lib/ist";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => istDateStr();
 
 const STATUS_LABELS: Record<ReservationStatus, string> = {
   pending: "Pending", confirmed: "Confirmed", seated: "Seated",
@@ -34,6 +38,14 @@ function endTime(time: string, durationMinutes: number) {
   const total = h * 60 + m + durationMinutes;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
+
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
+const nowMinutes = () => istMinutes();
+const clockOf = istClock;
+const FLOOR_EXTEND_STEPS = [15, 30, 60];
 
 const EMPTY_BOOKING = { locationId: "", tableId: "", date: todayStr(), time: "19:00", durationMinutes: "90", partySize: "2", guestName: "", guestPhone: "", guestEmail: "", notes: "" };
 
@@ -172,7 +184,11 @@ function LocationModal({ location, onClose, onSaved }: { location: ReservationLo
 function TableModal({ table, locationId, locationName, onClose, onSaved }: {
   table: ReservationTable | null; locationId: string; locationName: string; onClose: () => void; onSaved: () => void;
 }) {
-  const [form, setForm] = useState({ name: table?.name ?? "", type: table?.type ?? "", capacity: String(table?.capacity ?? "") });
+  const [form, setForm] = useState({
+    name: table?.name ?? "", type: table?.type ?? "",
+    capacity: String(table?.capacity ?? ""),
+    maxExtraCapacity: String(table?.maxExtraCapacity ?? "0"),
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
@@ -181,9 +197,11 @@ function TableModal({ table, locationId, locationName, onClose, onSaved }: {
     setError("");
     const capacity = Number(form.capacity);
     if (!capacity || capacity <= 0) { setError("Enter a valid capacity"); return; }
+    const maxExtraCapacity = Number(form.maxExtraCapacity) || 0;
+    if (maxExtraCapacity < 0) { setError("Extra capacity can't be negative"); return; }
     setSaving(true);
     try {
-      const payload = { name: form.name.trim(), type: form.type.trim() || null, capacity };
+      const payload = { name: form.name.trim(), type: form.type.trim() || null, capacity, maxExtraCapacity };
       if (table) await updateTable(table.id, payload);
       else await createTable({ locationId, ...payload });
       onSaved();
@@ -205,6 +223,8 @@ function TableModal({ table, locationId, locationName, onClose, onSaved }: {
           <FormField label="Name *" name="name" value={form.name} onChange={update} placeholder="e.g. Table 4" />
           <FormField label="Type" name="type" value={form.type} onChange={update} placeholder="e.g. Standard, Booth, Chef's Table" />
           <FormField label="Capacity (seats) *" name="capacity" type="number" value={form.capacity} onChange={update} />
+          <FormField label="Max extra capacity" name="maxExtraCapacity" type="number" value={form.maxExtraCapacity} onChange={update} />
+          <p className="text-xs text-muted-foreground -mt-2">Overflow seats the floor can squeeze on when friends join a full party. Default 0.</p>
         </div>
         {error && <p className="px-6 text-xs text-destructive -mt-2 mb-2">{error}</p>}
         <div className="px-6 pb-6 flex justify-end gap-3">
@@ -218,15 +238,60 @@ function TableModal({ table, locationId, locationName, onClose, onSaved }: {
   );
 }
 
+type FloorInfo = {
+  state: "free" | "reserved" | "occupied";
+  label: string;
+  until: string | null;
+  seatedBooking?: Reservation;
+  guests: GuestSignIn[];
+};
+const FLOOR_DOT: Record<FloorInfo["state"], string> = {
+  free: "#10b981", reserved: "#f59e0b", occupied: "#8b5cf6",
+};
+
+function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
+  floor: FloorInfo; canWrite: boolean; onExtend: (m: number) => void; onFree: () => void;
+}) {
+  const [extendOpen, setExtendOpen] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+      <span className="text-xs flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: FLOOR_DOT[floor.state] }} />
+        <span className="text-muted-foreground">{floor.label}{floor.until ? ` · until ${floor.until}` : ""}</span>
+      </span>
+      {canWrite && floor.state === "occupied" && (
+        <span className="flex items-center gap-2 text-xs">
+          <span className="relative">
+            <button onClick={() => setExtendOpen((v) => !v)} className="flex items-center gap-1 text-primary hover:underline">
+              <Clock className="w-3.5 h-3.5" /> Extend
+            </button>
+            {extendOpen && (
+              <span className="absolute right-0 mt-1 z-10 bg-card border border-border rounded-lg p-1 flex gap-1 shadow-md">
+                {FLOOR_EXTEND_STEPS.map((m) => (
+                  <button key={m} onClick={() => { setExtendOpen(false); onExtend(m); }}
+                    className="text-xs px-2 py-1 rounded hover:bg-muted">+{m}</button>
+                ))}
+              </span>
+            )}
+          </span>
+          <button onClick={onFree} className="text-primary hover:underline">Free table</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ReservationsTab() {
   const { can } = useAuth();
   const canWrite = can("Reservation", "write");
   const canDelete = can("Reservation", "delete");
 
-  const [view, setView] = useState<"day" | "manage">("day");
+  const [view, setView] = useState<"day" | "manage" | "signin">("day");
   const [locations, setLocations] = useState<ReservationLocation[]>([]);
   const [tables, setTables] = useState<ReservationTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
+  const [daySignIns, setDaySignIns] = useState<GuestSignIn[]>([]);
+  const [merges, setMerges] = useState<TableMerge[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [error, setError] = useState("");
@@ -255,7 +320,14 @@ export default function ReservationsTab() {
   const loadReservations = async (date: string) => {
     setReservations(null);
     try {
-      setReservations(await listReservations({ date }));
+      const [rs, signIns, ms] = await Promise.all([
+        listReservations({ date }),
+        listSignIns({ date }).catch(() => [] as GuestSignIn[]),
+        listTableMerges().catch(() => [] as TableMerge[]),
+      ]);
+      setReservations(rs);
+      setDaySignIns(signIns);
+      setMerges(ms);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load reservations");
     }
@@ -275,6 +347,62 @@ export default function ReservationsTab() {
     return map;
   }, [reservations]);
 
+  const signInsByTable = useMemo(() => {
+    const map = new Map<string, GuestSignIn[]>();
+    for (const s of daySignIns) {
+      if (!s.tableId || s.signedOutAt) continue;
+      const list = map.get(s.tableId) ?? [];
+      list.push(s);
+      map.set(s.tableId, list);
+    }
+    return map;
+  }, [daySignIns]);
+
+  const isToday = selectedDate === todayStr();
+
+  const mergeByTableId = useMemo(() => {
+    const map = new Map<string, TableMerge>();
+    for (const m of merges) for (const id of m.tableIds) map.set(id, m);
+    return map;
+  }, [merges]);
+
+  /** Live status of a table (or a merged unit, when `merge` is passed) on the
+   *  selected day: who's sitting there now and what's next. */
+  const tableFloor = (t: ReservationTable, merge?: TableMerge): FloorInfo => {
+    const ids = merge ? merge.tableIds : [t.id];
+    const bookings = ids.flatMap((id) => reservationsByTable.get(id) ?? []);
+    const guests = ids.flatMap((id) => signInsByTable.get(id) ?? []);
+    const seatedBooking = bookings.find((b) => b.status === "seated");
+    const now = nowMinutes();
+    const nextBooking = isToday
+      ? bookings.find((b) => ["pending", "confirmed"].includes(b.status) && toMin(b.time) >= now)
+      : undefined;
+
+    if (seatedBooking || guests.length > 0) {
+      const names = [
+        ...(seatedBooking ? [seatedBooking.guestName] : []),
+        ...guests.map((g) => g.guestName),
+      ];
+      const untilBooking = seatedBooking ? endTime(seatedBooking.time, seatedBooking.durationMinutes) : null;
+      const untilGuest = guests
+        .map((g) => (g.expectedUntil ? clockOf(g.expectedUntil) : null))
+        .filter(Boolean)
+        .sort()
+        .pop();
+      return {
+        state: "occupied" as const,
+        label: `Occupied · ${names.join(", ")}`,
+        until: untilBooking ?? untilGuest ?? null,
+        seatedBooking,
+        guests,
+      };
+    }
+    if (nextBooking) {
+      return { state: "reserved" as const, label: `Next booking ${nextBooking.time}`, until: null, seatedBooking: undefined, guests: [] };
+    }
+    return { state: "free" as const, label: "Free", until: null, seatedBooking: undefined, guests: [] };
+  };
+
   const coversBooked = (reservations ?? [])
     .filter((r) => ACTIVE_STATUSES.includes(r.status))
     .reduce((sum, r) => sum + r.partySize, 0);
@@ -289,6 +417,30 @@ export default function ReservationsTab() {
       setError(err instanceof Error ? err.message : "Failed to update reservation");
     }
   };
+
+  const runFloorAction = async (fn: () => Promise<unknown>) => {
+    setError("");
+    try {
+      await fn();
+      await loadReservations(selectedDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Action failed");
+    }
+  };
+
+  const freeTable = (floor: ReturnType<typeof tableFloor>) => runFloorAction(async () => {
+    if (floor.seatedBooking) await endReservationEarly(floor.seatedBooking.id);
+    await Promise.all(floor.guests.map((g) => signOutGuest(g.id)));
+  });
+
+  const extendFloor = (floor: ReturnType<typeof tableFloor>, minutes: number) => runFloorAction(async () => {
+    if (floor.seatedBooking) {
+      await extendReservation(floor.seatedBooking.id, floor.seatedBooking.durationMinutes + minutes);
+    }
+    await Promise.all(floor.guests.map((g) => extendSignIn(g.id, minutes)));
+  });
+
+  const splitMerge = (mergeId: string) => runFloorAction(() => releaseTableMerge(mergeId));
 
   const removeReservation = async (id: string) => {
     setError("");
@@ -338,6 +490,12 @@ export default function ReservationsTab() {
           className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "day" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
         >
           <CalendarDays className="w-4 h-4" /> Reservations
+        </button>
+        <button
+          onClick={() => setView("signin")}
+          className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "signin" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+        >
+          <DoorOpen className="w-4 h-4" /> Guest Register
         </button>
         <button
           onClick={() => setView("manage")}
@@ -391,14 +549,37 @@ export default function ReservationsTab() {
                     <div key={loc.id}>
                       <p className="text-sm font-semibold text-foreground mb-2">{loc.name}</p>
                       <div className="space-y-3">
-                        {locTables.map((t) => {
-                          const bookings = reservationsByTable.get(t.id) ?? [];
+                        {locTables.filter((t) => {
+                          const m = mergeByTableId.get(t.id);
+                          return !m || m.tableIds[0] === t.id; // merged unit renders once, at its first table
+                        }).map((t) => {
+                          const merge = mergeByTableId.get(t.id);
+                          const unitIds = merge ? merge.tableIds : [t.id];
+                          const bookings = unitIds.flatMap((id) => reservationsByTable.get(id) ?? [])
+                            .sort((a, b) => a.time.localeCompare(b.time));
+                          const floor = tableFloor(t, merge);
                           return (
-                            <div key={t.id} className="border border-border rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-foreground">{t.name}</span>
-                                <span className="text-xs text-muted-foreground">seats {t.capacity}</span>
+                            <div key={merge ? merge.id : t.id} className="border border-border rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                                <span className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                                  {merge && <Link2 className="w-3.5 h-3.5 text-primary" />}
+                                  {merge ? merge.tableNames.join(" ＋ ") : t.name}
+                                </span>
+                                <span className="text-xs text-muted-foreground flex items-center gap-2">
+                                  seats {merge ? `${merge.combinedCapacity} (merged)` : `${t.capacity}${t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""}`}
+                                  {merge && canWrite && (
+                                    <button onClick={() => splitMerge(merge.id)} className="text-primary hover:underline flex items-center gap-1">
+                                      <Link2Off className="w-3.5 h-3.5" /> Split
+                                    </button>
+                                  )}
+                                </span>
                               </div>
+                              <TableFloorLine
+                                floor={floor}
+                                canWrite={canWrite}
+                                onExtend={(m) => extendFloor(floor, m)}
+                                onFree={() => freeTable(floor)}
+                              />
                               {bookings.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">No bookings today</p>
                               ) : (
@@ -442,6 +623,8 @@ export default function ReservationsTab() {
             )}
           </DashCard>
         </>
+      ) : view === "signin" ? (
+        <GuestRegister locations={locations} tables={tables} canWrite={canWrite} canDelete={canDelete} />
       ) : (
         <DashCard
           title="Locations & Tables"

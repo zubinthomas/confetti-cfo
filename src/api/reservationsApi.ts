@@ -18,6 +18,7 @@ export interface ReservationTable {
   name: string;
   type: string | null;
   capacity: number;
+  maxExtraCapacity: number;
 }
 
 export type ReservationStatus = "pending" | "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
@@ -39,6 +40,9 @@ export interface Reservation {
   guestEmail: string | null;
   status: ReservationStatus;
   notes: string | null;
+  seatedAt: string | null;
+  departedAt: string | null;
+  tableMaxExtraCapacity: number;
 }
 
 export const listLocations = () => get<ReservationLocation[]>("/reservations/locations");
@@ -50,9 +54,9 @@ export const deleteLocation = (id: string) => del(`/reservations/locations/${id}
 
 export const listTables = (locationId?: string) =>
   get<ReservationTable[]>(`/reservations/tables${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`);
-export const createTable = (data: { locationId: string; name: string; type?: string | null; capacity: number }) =>
+export const createTable = (data: { locationId: string; name: string; type?: string | null; capacity: number; maxExtraCapacity?: number }) =>
   post<ReservationTable>("/reservations/tables", data);
-export const updateTable = (id: string, data: { name?: string; type?: string | null; capacity?: number }) =>
+export const updateTable = (id: string, data: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number }) =>
   patch<ReservationTable>(`/reservations/tables/${id}`, data);
 export const deleteTable = (id: string) => del(`/reservations/tables/${id}`);
 
@@ -80,4 +84,41 @@ export const createReservation = (data: {
 export const updateReservationStatus = (id: string, status: ReservationStatus) =>
   patch<Reservation>(`/reservations/${id}/status`, { status });
 
+export const extendReservation = (id: string, durationMinutes: number) =>
+  patch<Reservation>(`/reservations/${id}/extend`, { durationMinutes });
+
+export const rescheduleReservation = (id: string, data: { date?: string; time?: string; durationMinutes?: number }) =>
+  patch<Reservation>(`/reservations/${id}/reschedule`, data);
+
+export const endReservationEarly = (id: string) =>
+  patch<Reservation>(`/reservations/${id}/end-early`, {});
+
 export const deleteReservation = (id: string) => del(`/reservations/${id}`);
+
+// ── Table merges ─────────────────────────────────────────────────────────
+
+export type MergeKind = "adjacent" | "end_to_end";
+
+export interface TableMerge {
+  id: string;
+  createdDate: string;
+  mergeKind: MergeKind;
+  combinedCapacity: number;
+  bufferMinutes: number;
+  releasedAt: string | null;
+  tableIds: string[];
+  tableNames: string[];
+  locationId: string | null;
+}
+
+export const listTableMerges = () => get<TableMerge[]>("/reservations/table-merges");
+
+export const createTableMerge = (data: {
+  tableIds: string[];
+  mergeKind: MergeKind;
+  combinedCapacity?: number;
+  bufferMinutes?: number;
+}) => post<TableMerge>("/reservations/table-merges", data);
+
+export const releaseTableMerge = (id: string) =>
+  patch<TableMerge>(`/reservations/table-merges/${id}/release`, {});

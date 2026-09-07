@@ -16,7 +16,7 @@ export default function Reservations() {
             <h1 className="text-xl font-bold font-heading text-foreground tracking-tight flex items-center gap-2">
               <CalendarDays className="w-5 h-5 text-primary" /> Reservations
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Table bookings for the Cafe and Restaurant</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Bookings, guest arrivals and floor status for Sienna</p>
           </div>
         </div>
       </header>
