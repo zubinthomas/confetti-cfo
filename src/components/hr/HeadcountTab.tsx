@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Employee, PayrollRecord } from "@/api/entities";
+import { Employee, PayrollRecord, EmployeeExit } from "@/api/entities";
 import { createInvite } from "@/api/invitesApi";
 import { uploadFile } from "@/api/integrations";
+import { offboardEmployee, type OffboardInput } from "@/api/hrApi";
 import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
-import { Plus, X, Loader2, Copy, Check, ImagePlus, IdCard, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw } from "lucide-react";
+import { Plus, X, Loader2, Copy, Check, ImagePlus, IdCard, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, UserMinus } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "./FormField";
+import EmployeeDocumentsPanel from "./EmployeeDocumentsPanel";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
 
@@ -22,7 +24,7 @@ const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Contract", "Intern"];
 const STATUSES = ["Active", "On Leave", "Terminated", "Probation"];
 type SortKey = "full_name" | "division" | "role" | "employment_type" | "status" | "monthly_salary";
 
-const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "", photo_url: "" };
+const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "", photo_url: "", manager_id: "" };
 
 const toDocInfo = (emp: any): EmployeeDocInfo => ({
   fullName: emp.full_name ?? null,
@@ -34,27 +36,50 @@ const toDocInfo = (emp: any): EmployeeDocInfo => ({
 
 // Local to the employee detail modal - fetched records are already filtered
 // to this one employee by the caller.
+const PAYROLL_COMPONENTS: { field: string; label: string; sign: 1 | -1 }[] = [
+  { field: "basic_pay", label: "Basic Pay", sign: 1 },
+  { field: "hra", label: "HRA", sign: 1 },
+  { field: "other_allowances", label: "Other Allowances", sign: 1 },
+  { field: "bonus", label: "Bonus", sign: 1 },
+  { field: "pf_deduction", label: "PF", sign: -1 },
+  { field: "tax_deduction", label: "Tax", sign: -1 },
+  { field: "other_deductions", label: "Other Deductions", sign: -1 },
+];
+const EMPTY_COMPONENTS = Object.fromEntries(PAYROLL_COMPONENTS.map((c) => [c.field, ""]));
+
 function PayrollSection({ employee, records, canRecord, onRecorded }: {
   employee: any; records: any[]; canRecord: boolean; onRecorded: () => void;
 }) {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [amount, setAmount] = useState(String(employee.monthly_salary ?? ""));
+  const [itemize, setItemize] = useState(false);
+  const [components, setComponents] = useState<Record<string, string>>(EMPTY_COMPONENTS);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState("");
 
   const sorted = [...records].sort((a, b) => b.month.localeCompare(a.month));
   const alreadyRecorded = sorted.some((r) => r.month === month);
 
+  const applyItemizedTotal = (next: Record<string, string>) => {
+    const total = PAYROLL_COMPONENTS.reduce((sum, c) => sum + c.sign * (Number(next[c.field]) || 0), 0);
+    setAmount(String(total));
+  };
+
   const record = async () => {
     setError("");
     setRecording(true);
     try {
+      const componentValues = itemize
+        ? Object.fromEntries(PAYROLL_COMPONENTS.map((c) => [c.field, components[c.field] ? Number(components[c.field]) : null]))
+        : {};
       await PayrollRecord.create({
         employee_id: employee.id,
         division: employee.division,
         month,
         gross_salary: Number(amount) || 0,
+        ...componentValues,
       });
+      setComponents(EMPTY_COMPONENTS);
       onRecorded();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record payroll");
@@ -76,7 +101,11 @@ function PayrollSection({ employee, records, canRecord, onRecorded }: {
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">₹{(r.gross_salary || 0).toLocaleString()}</span>
                 <button
-                  onClick={() => generateSalarySlip(toDocInfo(employee), { month: r.month, grossSalary: r.gross_salary })}
+                  onClick={() => generateSalarySlip(toDocInfo(employee), {
+                    month: r.month, grossSalary: r.gross_salary,
+                    basicPay: r.basic_pay, hra: r.hra, otherAllowances: r.other_allowances, bonus: r.bonus,
+                    pfDeduction: r.pf_deduction, taxDeduction: r.tax_deduction, otherDeductions: r.other_deductions,
+                  })}
                   className="text-xs text-primary hover:underline"
                 >
                   Download Slip
@@ -109,6 +138,27 @@ function PayrollSection({ employee, records, canRecord, onRecorded }: {
           >
             {recording && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Record
           </button>
+          <button onClick={() => setItemize((v) => !v)} className="text-xs text-muted-foreground hover:text-primary underline">
+            {itemize ? "Hide breakdown" : "Itemize"}
+          </button>
+        </div>
+      )}
+      {canRecord && itemize && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+          {PAYROLL_COMPONENTS.map((c) => (
+            <div key={c.field} className="space-y-1">
+              <label className="text-xs text-muted-foreground">{c.label}</label>
+              <input
+                type="number" value={components[c.field]}
+                onChange={(e) => setComponents((prev) => {
+                  const next = { ...prev, [c.field]: e.target.value };
+                  applyItemizedTotal(next);
+                  return next;
+                })}
+                className="w-full text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+              />
+            </div>
+          ))}
         </div>
       )}
       {error && <p className="text-xs text-destructive mt-2">{error}</p>}
@@ -196,6 +246,96 @@ function InviteSelfServiceModal({ employee, onClose, onSent }: { employee: any; 
   );
 }
 
+const EXIT_TYPES = ["resignation", "termination", "end_of_contract"] as const;
+const exitTypeLabel: Record<string, string> = { resignation: "Resignation", termination: "Termination", end_of_contract: "End of Contract" };
+
+function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onClose: () => void; onOffboarded: () => void }) {
+  const [form, setForm] = useState<OffboardInput>({
+    exit_type: "resignation",
+    notice_date: "",
+    last_working_date: "",
+    reason: "",
+    exit_interview_notes: "",
+    assets_returned: false,
+    full_settlement_done: false,
+    rehire_eligible: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      await offboardEmployee(employee.id, form);
+      onOffboarded();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to offboard employee");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-card rounded-2xl border border-border w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">Offboard {employee.full_name}</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground block">Exit Type</label>
+            <select
+              value={form.exit_type} onChange={(e) => setForm((f) => ({ ...f, exit_type: e.target.value as OffboardInput["exit_type"] }))}
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
+            >
+              {EXIT_TYPES.map((t) => <option key={t} value={t}>{exitTypeLabel[t]}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground block">Notice Date</label>
+              <input type="date" value={form.notice_date} onChange={(e) => setForm((f) => ({ ...f, notice_date: e.target.value }))} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground block">Last Working Date</label>
+              <input type="date" value={form.last_working_date} onChange={(e) => setForm((f) => ({ ...f, last_working_date: e.target.value }))} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground block">Reason</label>
+            <input type="text" value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground block">Exit Interview Notes</label>
+            <textarea value={form.exit_interview_notes} onChange={(e) => setForm((f) => ({ ...f, exit_interview_notes: e.target.value }))} rows={2} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground" />
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={form.assets_returned} onChange={(e) => setForm((f) => ({ ...f, assets_returned: e.target.checked }))} /> Assets returned
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={form.full_settlement_done} onChange={(e) => setForm((f) => ({ ...f, full_settlement_done: e.target.checked }))} /> Full settlement done
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={form.rehire_eligible} onChange={(e) => setForm((f) => ({ ...f, rehire_eligible: e.target.checked }))} /> Rehire eligible
+            </label>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <div className="px-6 pb-6 flex justify-end gap-3">
+          <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+          <button onClick={submit} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Confirm Offboarding
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HeadcountTab() {
   const { user, can } = useAuth();
   const canWrite = can("Employee", "write");
@@ -203,6 +343,8 @@ export default function HeadcountTab() {
   const canInvite = can("Invite", "write");
   const canPayrollRead = can("PayrollRecord", "read");
   const canPayrollWrite = can("PayrollRecord", "write");
+  const canOffboard = can("Employee", "write") && can("EmployeeExit", "write");
+  const canExitRead = can("EmployeeExit", "read");
   // A scoped manager's dropdown only offers their own division(s); an
   // unscoped user (the default) sees the full list, matching today's
   // behavior. The server enforces this either way - this is just so a
@@ -211,6 +353,8 @@ export default function HeadcountTab() {
   const emptyForm = () => ({ ...EMPTY, division: divisionOptions[0] ?? "" });
   const [employees, setEmployees] = useState<any[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<any[]>([]);
+  const [exits, setExits] = useState<any[]>([]);
+  const [offboardTarget, setOffboardTarget] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Record<string, any>>(emptyForm);
@@ -227,13 +371,18 @@ export default function HeadcountTab() {
 
   const load = async () => {
     setLoading(true);
-    const [empData, payrollData] = await Promise.all([
+    const [empData, payrollData, exitData] = await Promise.all([
       Employee.list(),
       canPayrollRead ? PayrollRecord.list() : Promise.resolve([]),
+      canExitRead ? EmployeeExit.list() : Promise.resolve([]),
     ]);
     setEmployees(empData);
     setPayrollRecords(payrollData);
+    setExits(exitData);
     setLoading(false);
+    // Keep an open detail modal showing live data (e.g. right after a
+    // document upload) instead of the stale snapshot it was opened with.
+    setSelected((prev: any) => prev ? (empData.find((e) => e.id === prev.id) ?? null) : prev);
   };
 
   const save = async () => {
@@ -501,6 +650,18 @@ export default function HeadcountTab() {
               <FormField label="Blood Group" name="blood_group" value={form.blood_group ?? ""} onChange={updateField} />
               <FormField label="Emergency Contact Name" name="emergency_contact_name" value={form.emergency_contact_name ?? ""} onChange={updateField} />
               <FormField label="Emergency Contact Phone" name="emergency_contact_phone" value={form.emergency_contact_phone ?? ""} onChange={updateField} />
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Manager</label>
+                <select
+                  value={form.manager_id ?? ""} onChange={(e) => updateField("manager_id", e.target.value)}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">None</option>
+                  {employees.filter((e) => e.id !== form.id).map((e) => (
+                    <option key={e.id} value={e.id}>{e.full_name}{e.role ? ` — ${e.role}` : ""}</option>
+                  ))}
+                </select>
+              </div>
               <div className="sm:col-span-2"><FormField label="Address" name="address" value={form.address ?? ""} onChange={updateField} /></div>
               <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
@@ -528,7 +689,7 @@ export default function HeadcountTab() {
               <button onClick={() => setSelected(null)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <div className="p-6 space-y-3 text-sm">
-              {[["Department", selected.division], ["Role", selected.role], ["Reporting Manager", selected.reporting_manager], ["Location", selected.location], ["Pottery Grade", selected.pottery_grade], ["Type", selected.employment_type], ["Status", selected.status], ["Joining Date", selected.joining_date], ["Salary/mo", selected.monthly_salary ? `₹${selected.monthly_salary.toLocaleString()}` : "-"], ["Gender", selected.gender], ["Date of Birth", selected.date_of_birth], ["Phone", selected.phone], ["Email", selected.email], ["Aadhar", selected.aadhar_number], ["PAN", selected.pan_number], ["Blood Group", selected.blood_group], ["Bank Account", selected.bank_account_number], ["IFSC", selected.ifsc_code], ["Emergency Contact", selected.emergency_contact_name ? `${selected.emergency_contact_name}${selected.emergency_contact_relation ? ` (${selected.emergency_contact_relation})` : ""} - ${selected.emergency_contact_phone}` : "-"]].map(([k, v]) => v ? (
+              {[["Department", selected.division], ["Role", selected.role], ["Manager", employees.find((e) => e.id === selected.manager_id)?.full_name || selected.reporting_manager], ["Location", selected.location], ["Pottery Grade", selected.pottery_grade], ["Type", selected.employment_type], ["Status", selected.status], ["Joining Date", selected.joining_date], ["Salary/mo", selected.monthly_salary ? `₹${selected.monthly_salary.toLocaleString()}` : "-"], ["Gender", selected.gender], ["Date of Birth", selected.date_of_birth], ["Phone", selected.phone], ["Email", selected.email], ["Aadhar", selected.aadhar_number], ["PAN", selected.pan_number], ["Blood Group", selected.blood_group], ["Bank Account", selected.bank_account_number], ["IFSC", selected.ifsc_code], ["Emergency Contact", selected.emergency_contact_name ? `${selected.emergency_contact_name}${selected.emergency_contact_relation ? ` (${selected.emergency_contact_relation})` : ""} - ${selected.emergency_contact_phone}` : "-"]].map(([k, v]) => v ? (
                 <div key={k} className="flex justify-between border-b border-border pb-2 last:border-b-0">
                   <span className="text-muted-foreground">{k}</span>
                   <span className="text-foreground font-medium text-right">{v}</span>
@@ -545,6 +706,32 @@ export default function HeadcountTab() {
                 {generatingCard ? <Loader2 className="w-4 h-4 animate-spin" /> : <IdCard className="w-4 h-4" />} Download ID Card
               </button>
             </div>
+
+            <div className="px-6 pb-6 pt-3 border-t border-border">
+              <EmployeeDocumentsPanel employee={selected} canWrite={canWrite} onChange={load} />
+            </div>
+
+            {(canExitRead || canOffboard) && (() => {
+              const exitRecords = exits.filter((e) => e.employee_id === selected.id);
+              return (
+                <div className="px-6 pb-3 space-y-2">
+                  {exitRecords.map((e) => (
+                    <div key={e.id} className="text-xs bg-muted/40 rounded-lg p-3 space-y-1">
+                      <p className="font-medium text-foreground">{exitTypeLabel[e.exit_type] || e.exit_type}{e.last_working_date ? ` · Last day ${e.last_working_date}` : ""}</p>
+                      {e.reason && <p className="text-muted-foreground">{e.reason}</p>}
+                    </div>
+                  ))}
+                  {canOffboard && selected.status !== "Terminated" && (
+                    <button
+                      onClick={() => setOffboardTarget(selected)}
+                      className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10"
+                    >
+                      <UserMinus className="w-4 h-4" /> Offboard Employee
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
             {canPayrollRead && (
               <div className="px-6 pb-6 pt-3 border-t border-border">
@@ -580,6 +767,14 @@ export default function HeadcountTab() {
           employee={inviteTarget}
           onClose={() => setInviteTarget(null)}
           onSent={load}
+        />
+      )}
+
+      {offboardTarget && (
+        <OffboardModal
+          employee={offboardTarget}
+          onClose={() => setOffboardTarget(null)}
+          onOffboarded={() => { load(); setSelected(null); }}
         />
       )}
     </div>

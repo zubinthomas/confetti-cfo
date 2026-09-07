@@ -13,7 +13,7 @@
 // text column to keep the existing API contract byte-identical.
 import {
   pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
-  uniqueIndex, unique,
+  uniqueIndex, unique, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import type { RecordChange } from '../import/types.ts';
 
@@ -329,6 +329,11 @@ export const employees = pgTable('employees', {
   gender: text('gender'),
   dateOfBirth: text('date_of_birth'),
   reportingManager: text('reporting_manager'),
+  // Real FK counterpart to reportingManager (free text, kept as-is for names
+  // that don't resolve to an employee row) - this is what per-manager
+  // scoping (server/db/managerScope.ts) actually walks. Nullable/optional:
+  // most employees won't have this set until picked from the form dropdown.
+  managerId: text('manager_id').references((): AnyPgColumn => employees.id, { onDelete: 'set null' }),
   location: text('location'),
   potteryGrade: integer('pottery_grade'),
   bankAccountNumber: text('bank_account_number'),
@@ -371,9 +376,44 @@ export const payrollRecords = pgTable('payroll_records', {
   division: text('division'),
   month: text('month').notNull(), // 'YYYY-MM'
   grossSalary: doublePrecision('gross_salary'),
+  // Optional itemized breakdown - all nullable, all purely additive detail
+  // below grossSalary (which stays the authoritative total used everywhere
+  // else). A record with none of these set renders identically to before
+  // this feature existed. Flat columns rather than a child table: the
+  // component set is small, fixed, and one-per-month, unlike
+  // employees.internalDocuments' unbounded-cardinality case.
+  basicPay: doublePrecision('basic_pay'),
+  hra: doublePrecision('hra'),
+  otherAllowances: doublePrecision('other_allowances'),
+  bonus: doublePrecision('bonus'),
+  pfDeduction: doublePrecision('pf_deduction'),
+  taxDeduction: doublePrecision('tax_deduction'),
+  otherDeductions: doublePrecision('other_deductions'),
 }, (t) => [
   uniqueIndex('payroll_records_employee_month').on(t.employeeId, t.month),
 ]);
+
+export const employeeExitTypeEnum = pgEnum('employee_exit_type', ['resignation', 'termination', 'end_of_contract']);
+
+// One row per offboarding event, created atomically with employees.status
+// flipping to 'Terminated' by POST /api/employees/:id/offboard (see
+// server/routes/entities.ts) - never by the generic entity CRUD directly,
+// since that side effect has to happen in the same transaction. Otherwise a
+// plain generic entity (server/db.ts's TABLES map), same as payrollRecords.
+export const employeeExits = pgTable('employee_exits', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  employeeId: text('employee_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  division: text('division'),
+  exitType: employeeExitTypeEnum('exit_type').notNull(),
+  noticeDate: text('notice_date'),
+  lastWorkingDate: text('last_working_date'),
+  reason: text('reason'),
+  exitInterviewNotes: text('exit_interview_notes'),
+  assetsReturned: boolean('assets_returned').notNull().default(false),
+  fullSettlementDone: boolean('full_settlement_done').notNull().default(false),
+  rehireEligible: boolean('rehire_eligible').notNull().default(true),
+});
 
 export const licences = pgTable('licences', {
   id: text('id').primaryKey(),
@@ -405,6 +445,13 @@ export const recruitments = pgTable('recruitments', {
   stage: text('stage'),
   expectedSalary: doublePrecision('expected_salary'),
   notes: text('notes'),
+  // Same shape convention as employees.internalDocuments - a small,
+  // per-row-varying checklist, so jsonb over a child table for the same
+  // reason (generic entity CRUD only reads/writes whole rows).
+  checklist: jsonb('checklist').$type<{ label: string; done: boolean }[]>(),
+  // Set atomically by POST /api/recruitment/:id/hire (server/routes/
+  // recruitmentHire.ts) alongside stage='Hired' - null until then.
+  convertedEmployeeId: text('converted_employee_id').references(() => employees.id, { onDelete: 'set null' }),
 });
 
 export const leaveRequests = pgTable('leave_requests', {

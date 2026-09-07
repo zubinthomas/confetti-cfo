@@ -1,5 +1,6 @@
 // Auth calls against the Express server (server/routes/auth.ts).
 import { get, post, setToken, clearToken } from "./http";
+import type { PayrollSlipRecord } from "@/lib/employeeDocs";
 
 export interface Role {
   id: number;
@@ -37,7 +38,7 @@ export interface SelfEmployeeView {
   panUrl: string | null;
   offerLetterUrl: string | null;
   photoUrl: string | null;
-  payrollRecords: { month: string; grossSalary: number | null }[];
+  payrollRecords: PayrollSlipRecord[];
 }
 
 export interface User {

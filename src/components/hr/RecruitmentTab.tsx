@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Recruitment } from "@/api/entities";
-import { Plus, X, Loader2 } from "lucide-react";
+import { hireApplicant } from "@/api/hrApi";
+import { Plus, X, Loader2, UserPlus } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
@@ -8,11 +9,118 @@ import FormField from "./FormField";
 import { DIVISIONS } from "@/lib/hrDivisions";
 import { useAuth } from "@/lib/AuthContext";
 
-const EMPTY = { role_title: "", division: "", openings: 1, applicant_name: "", applicant_email: "", applicant_phone: "", stage: "Applied", expected_salary: "", notes: "" };
+const EMPTY = { role_title: "", division: "", openings: 1, applicant_name: "", applicant_email: "", applicant_phone: "", stage: "Applied", expected_salary: "", notes: "", checklist: [] as { label: string; done: boolean }[] };
 
 const stageStatus: Record<string, "green" | "amber" | "red"> = { Applied: "amber", Screening: "amber", Interview: "amber", Offer: "green", Hired: "green", Rejected: "red" };
 
 const STAGES = ["Applied", "Screening", "Interview", "Offer", "Hired", "Rejected"];
+const HIREABLE_STAGES = ["Interview", "Offer"];
+
+// Local to the applicant edit form - a small label+checkbox list, same
+// {label, done} shape as recruitments.checklist.
+function ChecklistEditor({ items, onChange }: { items: { label: string; done: boolean }[]; onChange: (items: { label: string; done: boolean }[]) => void }) {
+  const [newLabel, setNewLabel] = useState("");
+  const add = () => {
+    if (!newLabel.trim()) return;
+    onChange([...items, { label: newLabel.trim(), done: false }]);
+    setNewLabel("");
+  };
+  return (
+    <div className="sm:col-span-2 space-y-2">
+      <label className="text-xs text-muted-foreground block">Onboarding Checklist</label>
+      {items.length > 0 && (
+        <div className="space-y-1.5">
+          {items.map((item, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox" checked={item.done}
+                onChange={(e) => onChange(items.map((it, j) => j === i ? { ...it, done: e.target.checked } : it))}
+                className="w-4 h-4"
+              />
+              <span className={`flex-1 ${item.done ? "line-through text-muted-foreground" : "text-foreground"}`}>{item.label}</span>
+              <button onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          type="text" value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          placeholder="Add a checklist item (e.g. Background check)"
+          className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
+        />
+        <button onClick={add} className="text-sm px-3 py-2 rounded-lg border border-border text-foreground hover:bg-muted">Add</button>
+      </div>
+    </div>
+  );
+}
+
+const HIRE_EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "" };
+
+// Pre-fills from the recruitment's own fields - the applicant fills most of
+// this in already, hiring just carries it over into a real employee record.
+function HireModal({ recruitment, divisionOptions, onClose, onHired }: { recruitment: any; divisionOptions: readonly string[]; onClose: () => void; onHired: () => void }) {
+  const [form, setForm] = useState({
+    ...HIRE_EMPTY,
+    full_name: recruitment.applicant_name || "",
+    division: recruitment.division || "",
+    role: recruitment.role_title || "",
+    email: recruitment.applicant_email || "",
+    phone: recruitment.applicant_phone || "",
+    monthly_salary: recruitment.expected_salary || "",
+    joining_date: new Date().toISOString().slice(0, 10),
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const updateField = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
+
+  const submit = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      await hireApplicant(recruitment.id, { ...form, monthly_salary: Number(form.monthly_salary) || 0 });
+      onHired();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to hire applicant");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-card rounded-2xl border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">Hire {recruitment.applicant_name || "Applicant"}</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Full Name *" name="full_name" value={form.full_name} onChange={updateField} />
+          <FormField label="Employee ID" name="employee_id" value={form.employee_id} onChange={updateField} />
+          <FormField label="Department *" name="division" options={divisionOptions} value={form.division} onChange={updateField} />
+          <FormField label="Role / Designation *" name="role" value={form.role} onChange={updateField} />
+          <FormField label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} value={form.employment_type} onChange={updateField} />
+          <FormField label="Joining Date" name="joining_date" type="date" value={form.joining_date} onChange={updateField} />
+          <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary} onChange={updateField} />
+          <FormField label="Phone" name="phone" value={form.phone} onChange={updateField} />
+          <FormField label="Email" name="email" type="email" value={form.email} onChange={updateField} />
+        </div>
+        {error && <p className="px-6 text-sm text-destructive">{error}</p>}
+        <div className="px-6 pb-6 pt-2 flex justify-end gap-3">
+          <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+          <button onClick={submit} disabled={saving || !form.full_name || !form.division || !form.role} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Create Employee
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function RecruitmentTab() {
   const { user } = useAuth();
@@ -24,6 +132,7 @@ export default function RecruitmentTab() {
   const [form, setForm] = useState<Record<string, any>>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [filterStage, setFilterStage] = useState("All");
+  const [hireTarget, setHireTarget] = useState<any | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => { load(); }, []);
@@ -133,8 +242,14 @@ export default function RecruitmentTab() {
                     <td className="py-2.5 pr-4"><StatusBadge status={stageStatus[item.stage]}>{item.stage}</StatusBadge></td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{item.expected_salary ? `₹${Number(item.expected_salary).toLocaleString()}` : "-"}</td>
                     <td className="py-2.5">
-                      <div className="flex gap-2">
-                        <button onClick={() => { setForm({ ...item }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>
+                      <div className="flex items-center gap-2">
+                        {HIREABLE_STAGES.includes(item.stage) && !item.converted_employee_id && (
+                          <button onClick={() => setHireTarget(item)} className="flex items-center gap-1 text-xs text-emerald-600 hover:underline">
+                            <UserPlus className="w-3.5 h-3.5" /> Hire
+                          </button>
+                        )}
+                        {item.converted_employee_id && <span className="text-xs text-muted-foreground">Hired</span>}
+                        <button onClick={() => { setForm({ ...item, checklist: item.checklist ?? [] }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>
                         <button onClick={() => remove(item.id)} className="text-xs text-red-500 hover:underline">Delete</button>
                       </div>
                     </td>
@@ -163,6 +278,7 @@ export default function RecruitmentTab() {
               <FormField label="Applicant Phone" name="applicant_phone" value={form.applicant_phone ?? ""} onChange={updateField} />
               <FormField label="Expected Salary (₹/mo)" name="expected_salary" type="number" value={form.expected_salary ?? ""} onChange={updateField} />
               <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
+              <ChecklistEditor items={form.checklist ?? []} onChange={(checklist) => setForm((f) => ({ ...f, checklist }))} />
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
@@ -172,6 +288,10 @@ export default function RecruitmentTab() {
             </div>
           </div>
         </div>
+      )}
+
+      {hireTarget && (
+        <HireModal recruitment={hireTarget} divisionOptions={divisionOptions} onClose={() => setHireTarget(null)} onHired={load} />
       )}
     </div>
   );

@@ -19,6 +19,23 @@ export interface EmployeeDocInfo {
   photoUrl: string | null;
 }
 
+// Optional itemized breakdown fields, all nullable - a record with none of
+// them set (every prior payroll record, plus any future gross-only one)
+// still renders exactly as before this feature existed. Mirrors
+// payrollRecords' new columns (server/db/schema.ts) minus id/employeeId/
+// division/month, which the call sites already pass separately.
+export interface PayrollSlipRecord {
+  month: string;
+  grossSalary: number | null;
+  basicPay?: number | null;
+  hra?: number | null;
+  otherAllowances?: number | null;
+  bonus?: number | null;
+  pfDeduction?: number | null;
+  taxDeduction?: number | null;
+  otherDeductions?: number | null;
+}
+
 export function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
   if (!y || !m) return month;
@@ -45,7 +62,7 @@ async function urlToImageData(url: string): Promise<{ dataUrl: string; format: s
   return { dataUrl, format };
 }
 
-export async function generateSalarySlip(employee: EmployeeDocInfo, record: { month: string; grossSalary: number | null }) {
+export async function generateSalarySlip(employee: EmployeeDocInfo, record: PayrollSlipRecord) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 20;
@@ -79,6 +96,41 @@ export async function generateSalarySlip(employee: EmployeeDocInfo, record: { mo
     doc.setTextColor(0, 0, 0);
     doc.text(value, marginX + 55, y);
     y += 8;
+  }
+
+  const earnings: [string, number][] = [
+    ["Basic Pay", record.basicPay ?? 0], ["HRA", record.hra ?? 0],
+    ["Other Allowances", record.otherAllowances ?? 0], ["Bonus", record.bonus ?? 0],
+  ].filter(([, v]) => v) as [string, number][];
+  const deductions: [string, number][] = [
+    ["PF", record.pfDeduction ?? 0], ["Tax", record.taxDeduction ?? 0], ["Other Deductions", record.otherDeductions ?? 0],
+  ].filter(([, v]) => v) as [string, number][];
+
+  if (earnings.length || deductions.length) {
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Earnings", marginX, y);
+    doc.text("Deductions", marginX + (pageWidth - marginX * 2) / 2, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    const lineCount = Math.max(earnings.length, deductions.length);
+    for (let i = 0; i < lineCount; i++) {
+      doc.setTextColor(90, 90, 90);
+      if (earnings[i]) {
+        doc.text(earnings[i][0], marginX, y);
+        doc.text(`Rs. ${earnings[i][1].toLocaleString("en-IN")}`, marginX + (pageWidth - marginX * 2) / 2 - 8, y, { align: "right" });
+      }
+      if (deductions[i]) {
+        const half = marginX + (pageWidth - marginX * 2) / 2;
+        doc.text(deductions[i][0], half, y);
+        doc.text(`Rs. ${deductions[i][1].toLocaleString("en-IN")}`, pageWidth - marginX, y, { align: "right" });
+      }
+      y += 6;
+    }
+    y += 4;
   }
 
   y += 6;

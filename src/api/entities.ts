@@ -22,4 +22,5 @@ export const Licence = entityApi("Licence");
 export const Recruitment = entityApi("Recruitment");
 export const LeaveRequest = entityApi("LeaveRequest");
 export const PayrollRecord = entityApi("PayrollRecord");
+export const EmployeeExit = entityApi("EmployeeExit");
 export const Inventory = entityApi("Inventory");

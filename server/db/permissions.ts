@@ -13,7 +13,7 @@ import { db, ready, schema } from './client.ts';
 // scoped role out of the whole dashboard shell. It's open to any
 // authenticated user instead, so it isn't part of this catalog.
 export const RESOURCES = [
-  'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'Inventory', 'Reservation',
+  'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'Integration', 'Settings', 'Invite', 'User', 'Role',
 ] as const;
@@ -28,7 +28,7 @@ export type Perm = { resource: Resource; action: Action };
  *  assertGrantable below. */
 export class PermissionGrantError extends Error {}
 
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'Invite', 'User', 'Role'];
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'Invite', 'User', 'Role'];
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
 const READ_WRITE: Resource[] = ['Integration'];
 

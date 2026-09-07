@@ -19,6 +19,8 @@ import usersRoutes from './routes/users.ts';
 import inventoryRoutes from './routes/inventory.ts';
 import reservationsRoutes from './routes/reservations.ts';
 import guestSignInsRoutes from './routes/guestSignIns.ts';
+import recruitmentHireRoutes from './routes/recruitmentHire.ts';
+import offboardingRoutes from './routes/offboarding.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { config } from 'dotenv';
 
@@ -53,6 +55,8 @@ app.use('/api/users', usersRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/reservations', reservationsRoutes);
 app.use('/api/guest-sign-ins', guestSignInsRoutes);
+app.use('/api/recruitment', recruitmentHireRoutes);
+app.use('/api/employees', offboardingRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));

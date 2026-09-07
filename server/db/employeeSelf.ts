@@ -43,7 +43,17 @@ export async function getSelfEmployeeView(userId: number) {
   const [row] = await db.select(SELF_VIEW_COLUMNS).from(schema.employees).where(eq(schema.employees.userId, userId));
   if (!row) return null;
   const payrollRecords = await db
-    .select({ month: schema.payrollRecords.month, grossSalary: schema.payrollRecords.grossSalary })
+    .select({
+      month: schema.payrollRecords.month,
+      grossSalary: schema.payrollRecords.grossSalary,
+      basicPay: schema.payrollRecords.basicPay,
+      hra: schema.payrollRecords.hra,
+      otherAllowances: schema.payrollRecords.otherAllowances,
+      bonus: schema.payrollRecords.bonus,
+      pfDeduction: schema.payrollRecords.pfDeduction,
+      taxDeduction: schema.payrollRecords.taxDeduction,
+      otherDeductions: schema.payrollRecords.otherDeductions,
+    })
     .from(schema.payrollRecords)
     .where(eq(schema.payrollRecords.employeeId, row.id));
   return { ...row, payrollRecords };
