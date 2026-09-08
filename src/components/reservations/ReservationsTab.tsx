@@ -318,7 +318,6 @@ export default function ReservationsTab() {
   };
 
   const loadReservations = async (date: string) => {
-    setReservations(null);
     try {
       const [rs, signIns, ms] = await Promise.all([
         listReservations({ date }),
@@ -334,7 +333,10 @@ export default function ReservationsTab() {
   };
 
   useEffect(() => { loadCatalog(); }, []);
-  useEffect(() => { loadReservations(selectedDate); }, [selectedDate]);
+  // Re-fetch whenever the day view is (re-)entered or the date changes: the
+  // Guest Register tab mutates the same sign-ins/merges from its own state, so
+  // switching back here must pick those changes up without a page reload.
+  useEffect(() => { loadReservations(selectedDate); }, [view, selectedDate]);
 
   const reservationsByTable = useMemo(() => {
     const map = new Map<string, Reservation[]>();
