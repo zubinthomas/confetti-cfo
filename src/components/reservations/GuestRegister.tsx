@@ -202,11 +202,12 @@ function SignInModal({
 // ── Assign / change table ────────────────────────────────────────────────
 
 function AssignTableModal({
-  signIn, tables, merges, onClose, onSaved,
+  signIn, tables, merges, occupiedTableIds, onClose, onSaved,
 }: {
   signIn: GuestSignIn;
   tables: ReservationTable[];
   merges: TableMerge[];
+  occupiedTableIds: Set<string>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -224,12 +225,13 @@ function AssignTableModal({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeKind, setMergeKind] = useState<MergeKind>("adjacent");
   const [mergeWithIds, setMergeWithIds] = useState<string[]>([]);
-  const [combined, setCombined] = useState("");
-  const [buffer, setBuffer] = useState("30");
+  // `combined` follows the live suggestion until the host types their own number.
+  const [combinedOverride, setCombinedOverride] = useState<string | null>(null);
   const baseTable = tables.find((t) => t.id === tableId);
   const mergeTables = [baseTable, ...mergeWithIds.map((id) => tables.find((t) => t.id === id))]
     .filter((t): t is ReservationTable => !!t);
   const suggestion = suggestCombined(mergeTables, mergeKind);
+  const combined = combinedOverride ?? String(suggestion);
   const toggleMergeWith = (id: string) => setMergeWithIds((cur) =>
     cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
 
@@ -264,13 +266,12 @@ function AssignTableModal({
     setError("");
     if (mergeWithIds.length === 0) { setError("Pick at least one table to join"); return; }
     const capacity = Number(combined) || suggestion;
-    const bufferMinutes = Number(buffer) || 0;
     setSaving(true);
     try {
       await createTableMerge({
-        tableIds: [tableId, ...mergeWithIds], mergeKind, combinedCapacity: capacity, bufferMinutes,
+        tableIds: [tableId, ...mergeWithIds], mergeKind, combinedCapacity: capacity,
       });
-      setMergeOpen(false); setMergeWithIds([]); setBranch(null);
+      setMergeOpen(false); setMergeWithIds([]); setCombinedOverride(null); setBranch(null);
       await submit(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to merge tables");
@@ -285,7 +286,9 @@ function AssignTableModal({
     finally { setSaving(false); }
   };
 
-  const mergeCandidates = areaTables.filter((t) => t.id !== tableId && !mergedTableIds.has(t.id));
+  const mergeCandidates = areaTables.filter(
+    (t) => t.id !== tableId && !mergedTableIds.has(t.id) && !occupiedTableIds.has(t.id),
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -325,13 +328,15 @@ function AssignTableModal({
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
               <p>{branch.message}</p>
               {branch.detail?.alreadyMerged ? (
-                <p className="opacity-80">This party is too big even for the merged tables — split it across areas or reduce the party.</p>
+                <p className="opacity-80">Too big even for the joined tables — split the party across areas or reduce it.</p>
+              ) : Number(branch.detail?.occupants ?? 0) > 0 ? (
+                <p className="opacity-80">Another party is seated here. Pick an empty table, or reduce the party.</p>
               ) : mergeCandidates.length === 0 ? (
-                <p className="opacity-80">No free tables in this area to join — pick another table.</p>
+                <p className="opacity-80">No free tables in this area to join. Pick another table, or reduce the party.</p>
               ) : !mergeOpen ? (
-                <button onClick={() => { setMergeOpen(true); setCombined(String(suggestion)); }}
+                <button onClick={() => setMergeOpen(true)}
                   className="text-xs font-medium px-3 py-1.5 rounded-md bg-destructive text-white hover:opacity-90">
-                  Merge tables to fit them
+                  Join with another table
                 </button>
               ) : null}
             </div>
@@ -339,7 +344,7 @@ function AssignTableModal({
 
           {mergeOpen && (
             <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-3 text-xs">
-              <p className="font-medium text-foreground">Push {baseTable?.name ?? "this table"} together with:</p>
+              <p className="font-medium text-foreground">Join {baseTable?.name ?? "this table"} with:</p>
               <div className="space-y-1">
                 {mergeCandidates.map((t) => (
                   <label key={t.id} className="flex items-center gap-2 text-muted-foreground">
@@ -349,21 +354,19 @@ function AssignTableModal({
                 ))}
               </div>
               <div>
-                <span className="text-muted-foreground block mb-1">How they join</span>
+                <span className="text-muted-foreground block mb-1">How the tables sit</span>
                 <div className="flex gap-2">
                   {(Object.keys(MERGE_KIND_LABELS) as MergeKind[]).map((k) => (
                     <button key={k} type="button"
-                      onClick={() => { setMergeKind(k); setCombined(String(suggestCombined(mergeTables, k))); }}
+                      onClick={() => setMergeKind(k)}
                       className={`px-2 py-1 rounded border ${mergeKind === k ? "border-primary text-primary" : "border-border text-muted-foreground"}`}>
                       {MERGE_KIND_LABELS[k]}
                     </button>
                   ))}
                 </div>
               </div>
-              <FormField label={`Combined capacity (suggested ${suggestion})`} name="combined" type="number"
-                value={combined} onChange={(_n, v) => setCombined(v)} />
-              <FormField label="Reset buffer after (min)" name="buffer" type="number"
-                value={buffer} onChange={(_n, v) => setBuffer(v)} />
+              <FormField label={`Seats once joined (suggested ${suggestion})`} name="combined" type="number"
+                value={combined} onChange={(_n, v) => setCombinedOverride(v)} />
               <button onClick={mergeAndSeat} disabled={saving || mergeWithIds.length === 0}
                 className="w-full text-xs font-medium px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Merge &amp; seat
@@ -538,6 +541,14 @@ export default function GuestRegister({
   const coversOnPremises = (onPremises ?? []).reduce((n, s) => n + s.partySize, 0);
   const seatedNow = (onPremises ?? []).filter((s) => s.tableId).length;
 
+  // Tables with a walk-in sitting at them now, so the merge picker can skip
+  // them. Seated *bookings* aren't in this list (the register doesn't load
+  // reservations) but the server re-checks occupancy on merge-and-seat.
+  const occupiedTableIds = useMemo(
+    () => new Set((onPremises ?? []).filter((s) => s.tableId).map((s) => s.tableId as string)),
+    [onPremises],
+  );
+
   const runAction = async (fn: () => Promise<unknown>) => {
     setActionError("");
     try { await fn(); await load(); return true; }
@@ -633,6 +644,7 @@ export default function GuestRegister({
           signIn={assignTarget}
           tables={tables}
           merges={merges}
+          occupiedTableIds={occupiedTableIds}
           onClose={() => setAssignTarget(null)}
           onSaved={() => { setAssignTarget(null); load(); }}
         />

@@ -173,37 +173,53 @@ async function checkTableAssignment(
     );
   }
 
-  // (B) Currently occupied (a seated booking or a not-signed-out guest)
-  // anywhere in the unit? Merging is allowed up to the unit's capacity.
+  // (B) Who is physically at the unit *right now*, so we can offer a merge or
+  // block. Both scans are scoped to today (IST) and the seating window: a
+  // booking left in `seated` or a walk-in never signed out on a past day is
+  // not sitting here now, and must not inflate the occupant count.
+  const winEnd = Math.max(endMin, startMin + 1);
+  const { gte: dayFrom, lt: dayUntil } = istDayBounds(seatAt.date);
   const seatedRes = (await db.select().from(schema.reservations)
     .where(and(inArray(schema.reservations.tableId, groupIds), eq(schema.reservations.status, 'seated'))))
-    .filter((r) => r.id !== excludeReservationId);
+    .filter((r) => r.id !== excludeReservationId && r.date === seatAt.date
+      && toMinutes(r.time) < winEnd && toMinutes(r.time) + r.durationMinutes > startMin);
   const seatedGuests = (await db.select().from(schema.guestSignIns)
     .where(and(inArray(schema.guestSignIns.tableId, groupIds), isNull(schema.guestSignIns.signedOutAt))))
-    .filter((g) => g.id !== excludeSignInId);
+    .filter((g) => {
+      if (g.id === excludeSignInId) return false;
+      const at = g.seatedAt ?? g.signedInAt;
+      return at >= dayFrom && at < dayUntil;
+    });
   const occupants = seatedRes.reduce((s, r) => s + r.partySize, 0) + seatedGuests.reduce((s, g) => s + g.partySize, 0);
+
+  // How to say the ceiling: a bare number, or "4 + 2 extra", or "8 when joined".
+  const capacityText = merge
+    ? `${capacity} seats when joined`
+    : table.maxExtraCapacity > 0
+      ? `${capacity} seats (${table.capacity} + ${table.maxExtraCapacity} extra)`
+      : `${capacity} seats`;
 
   if (occupants > 0) {
     const combined = occupants + partySize;
+    const occName = seatedRes[0]?.guestName ?? seatedGuests[0]?.guestName ?? 'Another party';
     if (combined > capacity) {
       throw new GuestSignInError(
-        `${unitName} would seat ${combined} but holds ${capacity}${merge ? ' even joined together' : ' even with overflow'}. ${merge ? 'This party is too big for the merge.' : 'Merge tables to seat this party.'}`,
+        `${unitName} has ${capacityText} and ${occupants} already seated - no room for ${partySize} more.`,
         'over_capacity',
         { tableName: unitName, occupants, partySize, capacity, combined, alreadyMerged: !!merge },
       );
     }
     if (!acknowledgeMerge) {
-      const occName = seatedRes[0]?.guestName ?? seatedGuests[0]?.guestName ?? 'another party';
       throw new GuestSignInError(
-        `${unitName} is occupied by ${occName} (${occupants} seated). Seat this party of ${partySize} with them — ${combined} of ${capacity} seats?`,
+        `${occName}'s party of ${occupants} is already at ${unitName}. Seat this party of ${partySize} with them? That fills ${combined} of ${capacity} seats.`,
         'merge_prompt',
         { tableName: unitName, occupants, partySize, capacity, combined },
       );
     }
   } else if (partySize > capacity) {
-    // Empty table, but the party alone doesn't fit even with overflow / merge.
+    // Empty table, but the party alone doesn't fit.
     throw new GuestSignInError(
-      `${unitName} holds ${capacity}${merge ? ' joined together' : ' with overflow'} - a party of ${partySize} won't fit. ${merge ? '' : 'Merge tables to seat this party.'}`.trim(),
+      `${unitName} has ${capacityText} - a party of ${partySize} won't fit.`,
       'over_capacity',
       { tableName: unitName, occupants: 0, partySize, capacity, combined: partySize, alreadyMerged: !!merge },
     );
