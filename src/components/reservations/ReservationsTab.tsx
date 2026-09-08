@@ -286,7 +286,7 @@ export default function ReservationsTab() {
   const canWrite = can("Reservation", "write");
   const canDelete = can("Reservation", "delete");
 
-  const [view, setView] = useState<"day" | "manage" | "signin">("day");
+  const [view, setView] = useState<"day" | "manage" | "signin">("signin");
   const [locations, setLocations] = useState<ReservationLocation[]>([]);
   const [tables, setTables] = useState<ReservationTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
@@ -486,16 +486,16 @@ export default function ReservationsTab() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <button
-          onClick={() => setView("day")}
-          className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "day" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-        >
-          <CalendarDays className="w-4 h-4" /> Reservations
-        </button>
-        <button
           onClick={() => setView("signin")}
           className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "signin" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
         >
           <DoorOpen className="w-4 h-4" /> Guest Register
+        </button>
+        <button
+          onClick={() => setView("day")}
+          className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "day" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+        >
+          <CalendarDays className="w-4 h-4" /> Reservations
         </button>
         <button
           onClick={() => setView("manage")}
