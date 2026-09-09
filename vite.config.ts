@@ -15,6 +15,11 @@ export default defineConfig({
     },
   },
   server: {
+    // Listen on all interfaces so the dev site is reachable over the tailnet,
+    // and let this machine's MagicDNS name past Vite's host check. Set
+    // VITE_ALLOWED_HOSTS (comma-separated) to override for another machine.
+    host: true,
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS?.split(',') ?? ['.internal.errantquill.com'],
     proxy: {
       // Proxy all /api requests to the Express server during development
       '/api': {
