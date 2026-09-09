@@ -13,7 +13,7 @@
 // text column to keep the existing API contract byte-identical.
 import {
   pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
-  uniqueIndex, unique, type AnyPgColumn,
+  uniqueIndex, unique, primaryKey, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import type { RecordChange } from '../import/types.ts';
 
@@ -536,6 +536,11 @@ export const reservationTables = pgTable('reservation_tables', {
   type: text('type'),
   capacity: integer('capacity').notNull(),
   maxExtraCapacity: integer('max_extra_capacity').notNull().default(0),
+  // Off by default: this table can only be pushed together with tables it is
+  // explicitly paired with in table_merge_links. free_merge = true drops that
+  // restriction for this table, but the other table still has to allow the
+  // join (see tablesCanMerge in server/db/tableMerges.ts).
+  freeMerge: boolean('free_merge').notNull().default(false),
 }, (t) => [
   uniqueIndex('reservation_tables_location_name').on(t.locationId, t.name),
 ]);
@@ -641,4 +646,22 @@ export const tableMergeMembers = pgTable('table_merge_members', {
   tableId: text('table_id').notNull().references(() => reservationTables.id, { onDelete: 'cascade' }),
 }, (t) => [
   uniqueIndex('table_merge_members_merge_table').on(t.mergeId, t.tableId),
+]);
+
+// ── Static merge-eligibility links (Sienna front-of-house) ────────────────
+// Which tables MAY be pushed together, set per table in the "Locations &
+// Tables" manager (server/db/reservations.ts createTable / updateTable). This
+// is static configuration, NOT the runtime tableMerges above.
+//
+// Undirected: one row per unordered pair, always stored with
+// table_a_id < table_b_id (app-level [a, b].sort() before insert, plus a CHECK
+// added in the migration). Reciprocity is inherent - pairing 3 with 7 from
+// either table's editor writes the same single row, and "what can X merge
+// with" is `WHERE table_a_id = X OR table_b_id = X`. Cascade on both sides:
+// deleting a table drops its links.
+export const tableMergeLinks = pgTable('table_merge_links', {
+  tableAId: text('table_a_id').notNull().references(() => reservationTables.id, { onDelete: 'cascade' }),
+  tableBId: text('table_b_id').notNull().references(() => reservationTables.id, { onDelete: 'cascade' }),
+}, (t) => [
+  primaryKey({ columns: [t.tableAId, t.tableBId] }),
 ]);

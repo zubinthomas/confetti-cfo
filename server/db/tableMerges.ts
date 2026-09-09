@@ -18,7 +18,7 @@
 // releasedAt, and two staff merging the same table on the shared terminal at
 // the same millisecond is not a real threat.
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { istNow, toMinutes } from './reservationsTime.ts';
 
@@ -133,6 +133,40 @@ export function suggestCombinedCapacity(
   return withOverflow;
 }
 
+// ── Static merge eligibility ─────────────────────────────────────────────
+// Which tables MAY be pushed together, configured per table in the manager
+// (server/db/reservations.ts). table_merge_links holds one row per allowed
+// pair, always table_a_id < table_b_id.
+
+/** Canonical key for an undirected table pair (matches the table_merge_links
+ *  row ordering). */
+export function tablePairKey(id1: string, id2: string): string {
+  return [id1, id2].sort().join('|');
+}
+
+type MergeableTable = { id: string; locationId: string; freeMerge: boolean; name?: string };
+
+/** Two tables may be merged iff they share a location AND either an explicit
+ *  link pairs them or BOTH are marked free-merge. `freeMerge` only lifts a
+ *  table's own restriction; the other side still has to allow the join. */
+export function tablesCanMerge(a: MergeableTable, b: MergeableTable, linkSet: Set<string>): boolean {
+  if (a.id === b.id) return false;
+  if (a.locationId !== b.locationId) return false;
+  if (linkSet.has(tablePairKey(a.id, b.id))) return true;
+  return a.freeMerge && b.freeMerge;
+}
+
+/** Set of canonical pair keys (a|b, a<b) that have a link row, among `tableIds`. */
+export async function loadLinkSet(tableIds: string[]): Promise<Set<string>> {
+  const ids = [...new Set(tableIds)];
+  if (ids.length < 2) return new Set();
+  const links = await db.select().from(schema.tableMergeLinks).where(or(
+    inArray(schema.tableMergeLinks.tableAId, ids),
+    inArray(schema.tableMergeLinks.tableBId, ids),
+  ));
+  return new Set(links.map((l) => `${l.tableAId}|${l.tableBId}`)); // rows already stored a<b
+}
+
 // ── Write ────────────────────────────────────────────────────────────────
 
 export async function createMerge(
@@ -151,6 +185,20 @@ export async function createMerge(
   if (tables.length !== uniqueIds.length) throw new TableMergeError('One or more tables no longer exist');
   const locationIds = new Set(tables.map((t) => t.locationId));
   if (locationIds.size > 1) throw new TableMergeError('All tables in a merge must be in the same area');
+
+  // Every pair in the group must be set up to merge (a chain 3-7, 7-9 is not
+  // enough to 3-way merge 3+7+9 - link 3-9 too, or free-merge a table).
+  const linkSet = await loadLinkSet(uniqueIds);
+  for (let i = 0; i < tables.length; i++) {
+    for (let j = i + 1; j < tables.length; j++) {
+      if (!tablesCanMerge(tables[i], tables[j], linkSet)) {
+        throw new TableMergeError(
+          `${tables[i].name} and ${tables[j].name} aren't set up to merge. `
+          + 'Set each as a merge target of the other, or turn on free merge for both, in Locations and Tables.',
+        );
+      }
+    }
+  }
 
   const active = await listActiveMerges();
   for (const t of tables) {

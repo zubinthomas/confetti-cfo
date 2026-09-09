@@ -11,7 +11,7 @@ import {
   type GuestSignIn, type GuestVisitType,
 } from "@/api/guestSignInsApi";
 import {
-  listReservations, listTableMerges, createTableMerge,
+  listReservations, listTableMerges, createTableMerge, canMergeTables,
   type Reservation, type ReservationLocation, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
@@ -286,9 +286,21 @@ function AssignTableModal({
     finally { setSaving(false); }
   };
 
-  const mergeCandidates = areaTables.filter(
-    (t) => t.id !== tableId && !mergedTableIds.has(t.id) && !occupiedTableIds.has(t.id),
-  );
+  const selectedTables = mergeWithIds
+    .map((id) => tables.find((t) => t.id === id))
+    .filter((t): t is ReservationTable => !!t);
+
+  // A table is a merge candidate only if it's set up to merge with the base
+  // table AND with every table already picked (an N-way merge needs every pair
+  // eligible, matching the server check). Because the list only ever offers
+  // tables compatible with the whole current selection, the checked set can't
+  // drift out of sync - and `tableId` changes already clear it (see the table
+  // <select> above).
+  const mergeCandidates = areaTables.filter((t) => {
+    if (t.id === tableId || mergedTableIds.has(t.id) || occupiedTableIds.has(t.id)) return false;
+    if (!baseTable || !canMergeTables(baseTable, t)) return false;
+    return selectedTables.every((s) => s.id === t.id || canMergeTables(s, t));
+  });
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -332,7 +344,7 @@ function AssignTableModal({
               ) : Number(branch.detail?.occupants ?? 0) > 0 ? (
                 <p className="opacity-80">Another party is seated here. Pick an empty table, or reduce the party.</p>
               ) : mergeCandidates.length === 0 ? (
-                <p className="opacity-80">No free tables in this area to join. Pick another table, or reduce the party.</p>
+                <p className="opacity-80">No tables here are set up to merge with this one. Set merge targets in Locations and Tables, or reduce the party.</p>
               ) : !mergeOpen ? (
                 <button onClick={() => setMergeOpen(true)}
                   className="text-xs font-medium px-3 py-1.5 rounded-md bg-destructive text-white hover:opacity-90">

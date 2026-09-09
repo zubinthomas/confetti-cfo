@@ -68,13 +68,20 @@ router.get('/tables', requirePermission('Reservation', 'read'), async (req: Auth
 
 router.post('/tables', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { locationId, name, type, capacity, maxExtraCapacity } = req.body ?? {};
+    const { locationId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith } = req.body ?? {};
     if (typeof locationId !== 'string') return res.status(400).json({ message: 'locationId is required' });
     if (typeof capacity !== 'number') return res.status(400).json({ message: 'capacity must be a number' });
     if (maxExtraCapacity !== undefined && typeof maxExtraCapacity !== 'number') {
       return res.status(400).json({ message: 'maxExtraCapacity must be a number' });
     }
-    res.status(201).json(await createTable({ locationId, name, type, capacity, maxExtraCapacity }));
+    if (freeMerge !== undefined && typeof freeMerge !== 'boolean') {
+      return res.status(400).json({ message: 'freeMerge must be a boolean' });
+    }
+    if (mergeableWith !== undefined
+      && (!Array.isArray(mergeableWith) || !mergeableWith.every((x: unknown) => typeof x === 'string'))) {
+      return res.status(400).json({ message: 'mergeableWith must be an array of table ids' });
+    }
+    res.status(201).json(await createTable({ locationId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -82,12 +89,19 @@ router.post('/tables', requirePermission('Reservation', 'write'), async (req: Au
 
 router.patch('/tables/:id', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { name, type, capacity, maxExtraCapacity } = req.body ?? {};
+    const { name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith } = req.body ?? {};
     if (capacity !== undefined && typeof capacity !== 'number') return res.status(400).json({ message: 'capacity must be a number' });
     if (maxExtraCapacity !== undefined && typeof maxExtraCapacity !== 'number') {
       return res.status(400).json({ message: 'maxExtraCapacity must be a number' });
     }
-    res.json(await updateTable(req.params.id, { name, type, capacity, maxExtraCapacity }));
+    if (freeMerge !== undefined && typeof freeMerge !== 'boolean') {
+      return res.status(400).json({ message: 'freeMerge must be a boolean' });
+    }
+    if (mergeableWith !== undefined
+      && (!Array.isArray(mergeableWith) || !mergeableWith.every((x: unknown) => typeof x === 'string'))) {
+      return res.status(400).json({ message: 'mergeableWith must be an array of table ids' });
+    }
+    res.json(await updateTable(req.params.id, { name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }

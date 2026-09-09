@@ -5,7 +5,7 @@
 // (plus a party-size-vs-capacity check) is what gives every table real
 // capacity enforcement, the chef's table included, with no special-casing.
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow } from './tableMerges.ts';
@@ -15,6 +15,39 @@ import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindo
 export { toMinutes, fromMinutes, istNow, istDayBounds };
 
 export class ReservationError extends Error {}
+
+/** A reservation_tables row plus its merge configuration: `freeMerge` (the
+ *  column) and `mergeableWith` (the ids it is paired with in
+ *  table_merge_links, both directions, sorted). What listTables / createTable /
+ *  updateTable return. */
+export interface TableView {
+  id: string;
+  createdDate: string;
+  locationId: string;
+  name: string;
+  type: string | null;
+  capacity: number;
+  maxExtraCapacity: number;
+  freeMerge: boolean;
+  mergeableWith: string[];
+}
+
+/** Validate a proposed merge-target list for a table in `locationId`: dedupe,
+ *  drop self, then require every id to exist and sit in the same area. Returns
+ *  the cleaned id list. */
+async function resolveMergeTargets(
+  tableId: string, locationId: string, mergeableWith: string[],
+): Promise<string[]> {
+  const ids = [...new Set(mergeableWith)].filter((x) => x !== tableId);
+  if (ids.length === 0) return [];
+  const partners = await db.select().from(schema.reservationTables)
+    .where(inArray(schema.reservationTables.id, ids));
+  if (partners.length !== ids.length) throw new ReservationError('One or more merge targets no longer exist');
+  if (partners.some((p) => p.locationId !== locationId)) {
+    throw new ReservationError('Merge targets must be in the same area as this table');
+  }
+  return ids;
+}
 
 /** Postgres raises 23P01 when the reservations_no_table_overlap EXCLUDE
  *  constraint (migration 0021) rejects a write - the DB-level backstop for the
@@ -127,17 +160,43 @@ export async function deleteLocation(id: string) {
 
 // ── Tables ───────────────────────────────────────────────────────────────
 
-export async function listTables({ locationId }: { locationId?: string } = {}) {
+/** Map of table id -> the ids it can be merged with (both directions of every
+ *  table_merge_links row), each list sorted. */
+async function mergeLinksByTable(): Promise<Map<string, string[]>> {
+  const links = await db.select().from(schema.tableMergeLinks);
+  const map = new Map<string, string[]>();
+  const add = (k: string, v: string) => {
+    const cur = map.get(k);
+    if (cur) cur.push(v); else map.set(k, [v]);
+  };
+  for (const l of links) { add(l.tableAId, l.tableBId); add(l.tableBId, l.tableAId); }
+  for (const list of map.values()) list.sort();
+  return map;
+}
+
+/** Merge targets for one table (both directions), sorted. */
+async function mergeTargetsFor(id: string): Promise<string[]> {
+  const rows = await db.select().from(schema.tableMergeLinks).where(or(
+    eq(schema.tableMergeLinks.tableAId, id),
+    eq(schema.tableMergeLinks.tableBId, id),
+  ));
+  return rows.map((r) => (r.tableAId === id ? r.tableBId : r.tableAId)).sort();
+}
+
+export async function listTables({ locationId }: { locationId?: string } = {}): Promise<TableView[]> {
   await ready();
   let query = db.select().from(schema.reservationTables).$dynamic();
   if (locationId) query = query.where(eq(schema.reservationTables.locationId, locationId));
-  return query.orderBy(asc(schema.reservationTables.name));
+  const rows = await query.orderBy(asc(schema.reservationTables.name));
+  const links = await mergeLinksByTable();
+  return rows.map((r) => ({ ...r, mergeableWith: links.get(r.id) ?? [] }));
 }
 
 export async function createTable(
-  { locationId, name, type, capacity, maxExtraCapacity }:
-  { locationId: string; name: string; type?: string | null; capacity: number; maxExtraCapacity?: number },
-) {
+  { locationId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }:
+  { locationId: string; name: string; type?: string | null; capacity: number;
+    maxExtraCapacity?: number; freeMerge?: boolean; mergeableWith?: string[] },
+): Promise<TableView> {
   await ready();
   const [location] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, locationId));
   if (!location) throw new ReservationError(`No location with id ${locationId}`);
@@ -150,27 +209,41 @@ export async function createTable(
     .where(and(eq(schema.reservationTables.locationId, locationId), eq(schema.reservationTables.name, trimmed)));
   if (dupe) throw new ReservationError(`${location.name} already has a table named "${trimmed}"`);
 
-  const [row] = await db.insert(schema.reservationTables).values({
-    id: randomUUID(),
-    createdDate: new Date().toISOString(),
-    locationId,
-    name: trimmed,
-    type: type?.trim() || null,
-    capacity,
-    maxExtraCapacity: extra,
-  }).returning();
-  return row;
+  const id = randomUUID();
+  const targetIds = await resolveMergeTargets(id, locationId, mergeableWith ?? []);
+
+  await db.transaction(async (tx) => {
+    await tx.insert(schema.reservationTables).values({
+      id,
+      createdDate: new Date().toISOString(),
+      locationId,
+      name: trimmed,
+      type: type?.trim() || null,
+      capacity,
+      maxExtraCapacity: extra,
+      freeMerge: freeMerge ?? false,
+    });
+    for (const partnerId of targetIds) {
+      const [a, b] = [id, partnerId].sort();
+      await tx.insert(schema.tableMergeLinks).values({ tableAId: a, tableBId: b });
+    }
+  });
+
+  const [row] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
+  return { ...row, mergeableWith: [...targetIds].sort() };
 }
 
 export async function updateTable(
   id: string,
-  { name, type, capacity, maxExtraCapacity }: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number },
-) {
+  { name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }:
+  { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number;
+    freeMerge?: boolean; mergeableWith?: string[] },
+): Promise<TableView> {
   await ready();
   const [existing] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
   if (!existing) throw new ReservationError(`No table with id ${id}`);
 
-  const patch: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number } = {};
+  const patch: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number; freeMerge?: boolean } = {};
   if (name !== undefined) {
     const trimmed = name.trim();
     if (!trimmed) throw new ReservationError('Table name is required');
@@ -192,9 +265,30 @@ export async function updateTable(
     }
     patch.maxExtraCapacity = maxExtraCapacity;
   }
+  if (freeMerge !== undefined) patch.freeMerge = !!freeMerge;
 
-  const [row] = await db.update(schema.reservationTables).set(patch).where(eq(schema.reservationTables.id, id)).returning();
-  return row;
+  const targetIds = mergeableWith === undefined
+    ? null
+    : await resolveMergeTargets(id, existing.locationId, mergeableWith);
+
+  await db.transaction(async (tx) => {
+    if (Object.keys(patch).length > 0) {
+      await tx.update(schema.reservationTables).set(patch).where(eq(schema.reservationTables.id, id));
+    }
+    if (targetIds !== null) {
+      await tx.delete(schema.tableMergeLinks).where(or(
+        eq(schema.tableMergeLinks.tableAId, id),
+        eq(schema.tableMergeLinks.tableBId, id),
+      ));
+      for (const partnerId of targetIds) {
+        const [a, b] = [id, partnerId].sort();
+        await tx.insert(schema.tableMergeLinks).values({ tableAId: a, tableBId: b });
+      }
+    }
+  });
+
+  const [row] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
+  return { ...row, mergeableWith: await mergeTargetsFor(id) };
 }
 
 export async function deleteTable(id: string) {

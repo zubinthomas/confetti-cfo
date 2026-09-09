@@ -19,6 +19,23 @@ export interface ReservationTable {
   type: string | null;
   capacity: number;
   maxExtraCapacity: number;
+  /** True: no fixed list, this table drops its own merge restriction (the
+   *  other table's list still applies). */
+  freeMerge: boolean;
+  /** Table ids this one may be pushed together with, both directions, hydrated
+   *  by the server from table_merge_links. */
+  mergeableWith: string[];
+}
+
+/** Mirrors tablesCanMerge on the server (server/db/tableMerges.ts): two tables
+ *  may be merged iff they share a location AND either is listed by the other or
+ *  both are free-merge. `mergeableWith` is symmetric, so the direction of the
+ *  includes check does not matter. */
+export function canMergeTables(a: ReservationTable, b: ReservationTable): boolean {
+  if (a.id === b.id) return false;
+  if (a.locationId !== b.locationId) return false;
+  if (a.mergeableWith.includes(b.id)) return true;
+  return a.freeMerge && b.freeMerge;
 }
 
 export type ReservationStatus = "pending" | "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
@@ -54,10 +71,14 @@ export const deleteLocation = (id: string) => del(`/reservations/locations/${id}
 
 export const listTables = (locationId?: string) =>
   get<ReservationTable[]>(`/reservations/tables${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`);
-export const createTable = (data: { locationId: string; name: string; type?: string | null; capacity: number; maxExtraCapacity?: number }) =>
-  post<ReservationTable>("/reservations/tables", data);
-export const updateTable = (id: string, data: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number }) =>
-  patch<ReservationTable>(`/reservations/tables/${id}`, data);
+export const createTable = (data: {
+  locationId: string; name: string; type?: string | null; capacity: number;
+  maxExtraCapacity?: number; freeMerge?: boolean; mergeableWith?: string[];
+}) => post<ReservationTable>("/reservations/tables", data);
+export const updateTable = (id: string, data: {
+  name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number;
+  freeMerge?: boolean; mergeableWith?: string[];
+}) => patch<ReservationTable>(`/reservations/tables/${id}`, data);
 export const deleteTable = (id: string) => del(`/reservations/tables/${id}`);
 
 export const listReservations = (params: { date?: string; tableId?: string; locationId?: string } = {}) => {
