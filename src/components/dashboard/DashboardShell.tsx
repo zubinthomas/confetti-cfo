@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/AuthContext";
 // that still need a header title/subtitle.
 const EXTRA_TITLES: Record<string, string> = {
   "/data/import": "Import Workbooks",
+  "/data/tally": "Tally Integration",
   "/settings": "General Settings",
   "/settings/user": "User Settings",
   "/settings/users": "Users and Permissions",

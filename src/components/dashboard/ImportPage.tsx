@@ -13,7 +13,7 @@ import {
 import {
   Upload, Loader2, AlertTriangle, AlertCircle, Info, CheckCircle2,
   RefreshCw, Trash2, ExternalLink, FileSpreadsheet, Link2, Filter,
-  ChevronLeft, ChevronRight, Eye,
+  ChevronLeft, ChevronRight, Eye, Cable,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -25,6 +25,7 @@ const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   target: "FY Target Plan",
   fnbMonthly: "Monthly F&B P&L",
   fnbWeekly: "Weekly F&B P&L",
+  tally: "Tally sync",
 };
 
 const STATUS_STYLE: Record<ImportBatch["status"], string> = {
@@ -569,6 +570,7 @@ export default function ImportPage() {
             <option value="all">All sources</option>
             <option value="upload">Uploaded file</option>
             <option value="sheet">Google Sheet</option>
+            <option value="tally">Tally agent</option>
           </select>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
             <input
@@ -622,9 +624,11 @@ export default function ImportPage() {
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
             {b.sourceType === "sheet"
               ? <><FileSpreadsheet className="w-3.5 h-3.5" /> Google Sheet</>
-              : <><Upload className="w-3.5 h-3.5" /> Uploaded file</>}
+              : b.sourceType === "tally"
+                ? <><Cable className="w-3.5 h-3.5" /> Tally agent</>
+                : <><Upload className="w-3.5 h-3.5" /> Uploaded file</>}
             <span>
-              · {KIND_LABELS[b.kind]} · {b.sourceType === "sheet" ? "synced" : "uploaded"} {new Date(b.uploadedAt).toLocaleString()}
+              · {KIND_LABELS[b.kind]} · {b.sourceType === "upload" ? "uploaded" : "synced"} {new Date(b.uploadedAt).toLocaleString()}
               {b.committedAt && ` · committed ${new Date(b.committedAt).toLocaleString()}`}
             </span>
           </p>

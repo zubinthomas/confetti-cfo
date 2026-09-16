@@ -1,5 +1,7 @@
 node_modules
 dist
+agent/target
+agent/config.toml
 .claude
 data-sources
 test-results

@@ -1,0 +1,21 @@
+# Copy to config.toml next to the built executable (or point
+# CONFETTI_TALLY_CONFIG at it elsewhere) and fill in the real values.
+# config.toml holds a live API key - it's gitignored, never commit it.
+
+server_url = "https://data.confetti.errantquill.com"
+
+# From POST /api/tally/sources (or a rotate-key call) - shown once, store it
+# here immediately.
+api_key = "REPLACE_ME"
+
+# This machine's Tally gateway port. Tally's own default is 9000; confirm
+# the actual configured port on-site (Gateway of Tally -> F1 -> Settings ->
+# Connectivity) rather than assuming the default. Optional - an admin can
+# also set this remotely on the source in the web UI, which takes
+# precedence; only needed here as a fallback for before that's set, or if
+# you'd rather manage it locally.
+tally_gateway_url = "http://localhost:9001"
+
+# Only needed if more than one company is loaded in Tally on this machine.
+# Optional, same fallback rule as tally_gateway_url above.
+# tally_company_name = "CONFETTI EXPORTS PVT. LTD"

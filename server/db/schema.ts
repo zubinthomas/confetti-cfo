@@ -297,9 +297,52 @@ export const importBatches = pgTable('import_batches', {
   stats: jsonb('stats').notNull(),             // per-table creates/updates/unchanged
   details: jsonb('details').$type<Record<string, RecordChange[]> | null>(), // row-level detail behind stats; null for pre-feature batches
   payload: jsonb('payload').notNull(),         // the ParsedWorkbook, so commit needn't re-parse
-  sourceType: text('source_type').notNull().default('upload'), // upload | sheet
+  sourceType: text('source_type').notNull().default('upload'), // upload | sheet | tally
   sheetSourceId: integer('sheet_source_id').references(() => sheetSources.id, { onDelete: 'set null' }),
+  tallySourceId: integer('tally_source_id').references(() => tallySources.id, { onDelete: 'set null' }),
 });
+
+// ── Tally integration (a Rust agent installed on the client's machine pushes
+// ledger data over HTTPS, authenticated with its own API key - see
+// server/middleware/tallyAgentAuth.ts, server/tally/sync.ts,
+// server/routes/tally.ts + tallyAgent.ts). Mirrors sheet_sources' shape and
+// lifecycle (own enum, not a shared one: a different external-source kind
+// with its own independent evolution). ────────────────────────────────────
+export const tallySyncModeEnum = pgEnum('tally_sync_mode', ['auto', 'manual', 'paused']);
+
+export const tallySources = pgTable('tally_sources', {
+  id: serial('id').primaryKey(),
+  label: text('label').notNull(),
+  apiKeyHash: text('api_key_hash').notNull(),
+  syncMode: tallySyncModeEnum('sync_mode').notNull().default('manual'),
+  syncIntervalMinutes: integer('sync_interval_minutes').notNull().default(15),
+  tallyGatewayUrl: text('tally_gateway_url'), // e.g. http://localhost:9001; null falls back to the agent's local config.toml
+  tallyCompanyName: text('tally_company_name'), // only needed with multiple companies loaded in Tally; null falls back to local config.toml
+  createdAt: text('created_at').notNull(),   // ISO-8601
+  lastSeenAt: text('last_seen_at'),          // ISO-8601, bumped on every authenticated agent request
+  lastSyncAt: text('last_sync_at'),
+  lastSyncStatus: text('last_sync_status'),  // preview_created | auto_committed | no_changes | error
+  lastSyncError: text('last_sync_error'),
+  lastSyncIssues: jsonb('last_sync_issues'), // Issue[] when the sync had warnings/errors, else null
+});
+
+// Tally ledger name -> an existing business unit + line item, so a pushed
+// value can become a ParsedFinancialRecord without guessing. Scoped to one
+// tally_sources row (ledger namespaces don't cross installs). Left unmapped
+// (both null) until an admin assigns it; an incoming record for an unmapped
+// ledger is flagged and skipped rather than dropped silently - see
+// server/tally/sync.ts.
+export const tallyLedgerMappings = pgTable('tally_ledger_mappings', {
+  id: serial('id').primaryKey(),
+  tallySourceId: integer('tally_source_id').notNull().references(() => tallySources.id, { onDelete: 'cascade' }),
+  ledgerName: text('ledger_name').notNull(),
+  groupName: text('group_name'), // Tally's parent group, for the mapping UI's context only - not used in matching
+  businessUnitId: integer('business_unit_id').references(() => businessUnits.id),
+  lineItemId: integer('line_item_id').references(() => lineItems.id),
+  createdAt: text('created_at').notNull(), // ISO-8601
+}, (t) => [
+  uniqueIndex('tally_ledger_mappings_source_ledger').on(t.tallySourceId, t.ledgerName),
+]);
 
 // ── App entities (HR & compliance forms) ─────────────────────────────────────
 export const employees = pgTable('employees', {

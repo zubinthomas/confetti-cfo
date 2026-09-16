@@ -176,6 +176,20 @@
       "when": 1788936286919,
       "tag": "0024_shiny_scarlet_witch",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789273752103,
+      "tag": "0025_medical_taskmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789555694940,
+      "tag": "0026_flashy_invaders",
+      "breakpoints": true
     }
   ]
 }

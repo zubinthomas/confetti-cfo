@@ -15,7 +15,7 @@ import { db, ready, schema } from './client.ts';
 export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
-  'Import', 'SheetSource', 'Integration', 'Settings', 'Invite', 'User', 'Role',
+  'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -28,7 +28,7 @@ export type Perm = { resource: Resource; action: Action };
  *  assertGrantable below. */
 export class PermissionGrantError extends Error {}
 
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'Invite', 'User', 'Role'];
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role'];
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
 const READ_WRITE: Resource[] = ['Integration'];
 

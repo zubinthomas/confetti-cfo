@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { UserCog, Settings, FileSpreadsheet, Users, IdCard, Sun, Moon, Monitor, LogOut } from "lucide-react";
+import { UserCog, Settings, FileSpreadsheet, Cable, Users, IdCard, Sun, Moon, Monitor, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -53,6 +53,11 @@ export default function UserMenu() {
         <DropdownMenuItem asChild>
           <Link to="/data/import"><FileSpreadsheet className="w-4 h-4" /> Import Workbooks</Link>
         </DropdownMenuItem>
+        {can("TallySource", "read") && (
+          <DropdownMenuItem asChild>
+            <Link to="/data/tally"><Cable className="w-4 h-4" /> Tally Integration</Link>
+          </DropdownMenuItem>
+        )}
         {(can("User", "read") || can("Invite", "read") || can("Role", "read")) && (
           <DropdownMenuItem asChild>
             <Link to="/settings/users"><Users className="w-4 h-4" /> Users and Permissions</Link>

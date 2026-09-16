@@ -37,12 +37,14 @@ import RannaghorPage from '@/components/fnb/RannaghorPage';
 // chunk is normally already warm by the time either is clicked into.
 const AIQueriesTab = lazy(() => import('@/components/dashboard/AIQueriesTab'));
 const ImportPage = lazy(() => import('@/components/dashboard/ImportPage'));
+const TallyPage = lazy(() => import('@/components/dashboard/TallyPage'));
 
 export default function DashboardApp() {
   useEffect(() => {
     const prefetch = () => {
       import('@/components/dashboard/AIQueriesTab');
       import('@/components/dashboard/ImportPage');
+      import('@/components/dashboard/TallyPage');
     };
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(prefetch);
@@ -90,6 +92,10 @@ export default function DashboardApp() {
           { resource: 'SheetSource', action: 'read' },
         ]} />}>
           <Route path="data/import" element={<ImportPage />} />
+        </Route>
+
+        <Route element={<RequirePermission requires={[{ resource: 'TallySource', action: 'read' }]} />}>
+          <Route path="data/tally" element={<TallyPage />} />
         </Route>
 
         <Route element={<RequirePermission requires={[{ resource: 'Settings', action: 'read' }]} />}>

@@ -26,7 +26,7 @@ export const batchSummary = (b: typeof schema.importBatches.$inferSelect) => ({
   id: b.id, filename: b.filename, kind: b.kind, status: b.status,
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
   issues: b.issues, stats: b.stats,
-  sourceType: b.sourceType, sheetSourceId: b.sheetSourceId,
+  sourceType: b.sourceType, sheetSourceId: b.sheetSourceId, tallySourceId: b.tallySourceId,
 });
 
 /** POST /api/import/upload - parse + validate a workbook, store a preview batch. */

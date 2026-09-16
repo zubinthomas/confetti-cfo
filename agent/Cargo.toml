@@ -1,0 +1,17 @@
+[package]
+name = "confetti-tally-agent"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+roxmltree = "0.20"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+toml = "0.8"
+log = "0.4"
+env_logger = "0.11"
+
+[dev-dependencies]
+tiny_http = "0.12"

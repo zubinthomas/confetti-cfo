@@ -16,14 +16,15 @@ export type ImportBatchDetails = Record<string, ImportRecordChange[]> | null;
 export interface ImportBatch {
   id: number;
   filename: string;
-  kind: "cepl" | "cafe" | "sienna" | "hr" | "target" | "fnbMonthly" | "fnbWeekly";
+  kind: "cepl" | "cafe" | "sienna" | "hr" | "target" | "fnbMonthly" | "fnbWeekly" | "tally";
   status: "preview" | "committed" | "discarded";
   uploadedAt: string;
   committedAt: string | null;
   issues: ImportIssue[];
   stats: Record<string, ImportTableStats>;
-  sourceType: "upload" | "sheet";
+  sourceType: "upload" | "sheet" | "tally";
   sheetSourceId: number | null;
+  tallySourceId: number | null;
 }
 
 /** A workbook that failed validation: no batch was created on the server. */
