@@ -4,9 +4,11 @@
 //! against a real TallyPrime instance, and the integration plan
 //! (~/.claude/plans - not in this repo) for the wider design.
 //!
-//! Currently a plain long-running process, not yet a Windows Service - see
-//! the README for why that's fine for now and what packaging it as one later
-//! would take.
+//! Two run modes: `run_foreground()` below (a plain loop, used for local
+//! dev/testing on any platform) and, on Windows only, `service::run_as_service()`
+//! (installed as a real Windows Service - see service.rs and "Running as a
+//! Windows Service" in the README). main() below just decides which one to
+//! use based on platform and argv.
 use std::thread;
 use std::time::Duration;
 
@@ -17,14 +19,66 @@ use confetti_tally_agent::server_client::ServerClient;
 use confetti_tally_agent::tally_client::HttpTallyGateway;
 use confetti_tally_agent::types::{PeriodType, TallyRecord};
 
+#[cfg(windows)]
+mod service;
+
 /// Used when the server can't be reached at all, so there's no fetched
 /// interval to honor yet - short enough to recover quickly, long enough not
 /// to hammer a server that's actually down.
 const FALLBACK_RETRY_SECONDS: u64 = 300;
 
+#[cfg(not(windows))]
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    run_foreground();
+}
 
+/// On Windows, argv decides the mode: no args means this was launched by the
+/// Service Control Manager (the way an installed service actually starts),
+/// --install/--uninstall register or remove it (needs an elevated prompt),
+/// --foreground runs the plain loop for testing before installing it as a
+/// service.
+#[cfg(windows)]
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("--install") => {
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            if let Err(e) = service::install_service() {
+                log::error!("could not install service: {e}");
+                std::process::exit(1);
+            }
+            log::info!("service installed - it will start automatically on boot, or start it now from Services.msc");
+        }
+        Some("--uninstall") => {
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            if let Err(e) = service::uninstall_service() {
+                log::error!("could not uninstall service: {e}");
+                std::process::exit(1);
+            }
+            log::info!("service uninstalled");
+        }
+        Some("--foreground") => {
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            run_foreground();
+        }
+        _ => {
+            // No console here if this really was launched by the SCM, so
+            // service::run_as_service() sets up its own file logging before
+            // doing anything else that might need to log.
+            if let Err(e) = service::run_as_service() {
+                eprintln!(
+                    "could not start as a Windows service: {e}\n\
+                     (if you meant to run this interactively, use --foreground; \
+                     to install it as a service first, use --install)"
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+fn run_foreground() {
     let config = match Config::load() {
         Ok(c) => c,
         Err(e) => {

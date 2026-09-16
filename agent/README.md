@@ -17,6 +17,8 @@ repeated here).
   (push), both authenticated with the install's API key.
 - `src/main.rs` - the loop: fetch config -> query Tally -> filter to mapped
   ledgers -> push -> sleep for however long the server said to.
+- `src/service.rs` (Windows only) - wraps that same loop as a real Windows
+  Service. See "Running as a Windows Service" below.
 
 ## Not yet verified against a real Tally instance
 
@@ -38,21 +40,11 @@ on-site:
 
 ## Not yet built
 
-- **Windows Service packaging.** This is a plain long-running process today
-  (`cargo run` / the built exe, left running), not installed as a service -
-  fine for now since it can be developed and tested on any machine, but a
-  real deployment on the client's dedicated machine should wrap this with
-  the `windows-service` crate (or NSSM) so it starts on boot and restarts on
-  crash. Not wired up here since it can't be built or tested outside Windows.
 - **Month/week period pushes.** `PeriodType::Month`/`Week` exist on the wire
   type (the server already handles them) but `main.rs` only ever produces
   `Custom` (point-in-time closing balances) - a monthly P&L pull would need a
   different Tally report request (e.g. a Profit & Loss export), not just a
   ledger collection.
-- **Mapping-table seeding.** This agent assumes ledger mappings already
-  exist on the server; bulk-loading the chart-of-accounts export into
-  `tally_ledger_mappings` is a separate (not yet built) admin-UI workstream.
-
 ## Running it
 
 ```sh
@@ -61,6 +53,60 @@ cargo run
 ```
 
 Logs go to stdout via `env_logger`; set `RUST_LOG=debug` for more detail.
+This is also how to run it interactively on Windows before installing it as
+a service - see below.
+
+## Running as a Windows Service
+
+Built with the `windows-service` crate (`src/service.rs`). Only compiled in
+on Windows (`#[cfg(windows)]` throughout, and a target-gated dependency in
+`Cargo.toml`), so it never affects the Linux dev build above.
+
+**UNVERIFIED beyond compiling.** This was written and cross-compile-checked
+(`cargo build --target x86_64-pc-windows-gnu`) from a Linux dev machine with
+no Windows box available - actually installing the service, confirming the
+Service Control Manager starts/stops it correctly, that logs land where
+expected, and that it survives a reboot has not been done. Treat it the same
+way as the "not yet verified against a real Tally instance" items above:
+confirm on a real Windows machine before relying on it in production.
+
+**Build** (on an actual Windows machine, recommended for a production
+binary - cross-compiling with the `gnu` target from Linux is only useful as
+a compile-smoke-test, not for a binary you'd actually deploy):
+```
+cargo build --release --target x86_64-pc-windows-msvc
+```
+
+**Install** (from an elevated/Administrator command prompt, after copying
+the built `.exe` and a filled-in `config.toml` next to each other):
+```
+confetti-tally-agent.exe --install
+```
+This registers it as a service (`ConfettiTallyAgent`, display name "Confetti
+Tally Agent") set to start automatically on boot. It does not start it
+immediately - start it from `services.msc`, or `sc.exe start
+ConfettiTallyAgent`.
+
+Restart-on-crash isn't configured by the installer (the exact
+`ServiceFailureActions` API wasn't confirmed against a real build - see
+`src/service.rs`). Set it up once, after installing, with:
+```
+sc.exe failure ConfettiTallyAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000
+```
+
+**Logs** go to `agent.log` next to the executable (no console is available
+for an installed service, so `env_logger`'s stdout output isn't visible -
+`service.rs` switches to a file logger instead). No log rotation yet; keep
+an eye on the file's size.
+
+**Uninstall / upgrade** (stop it first - there's no in-place binary swap for
+a running Windows service):
+```
+sc.exe stop ConfettiTallyAgent
+confetti-tally-agent.exe --uninstall
+REM replace the .exe with the new build, then:
+confetti-tally-agent.exe --install
+```
 
 ## Testing
 

@@ -13,5 +13,11 @@ toml = "0.8"
 log = "0.4"
 env_logger = "0.11"
 
+# Windows Service packaging - only needed on Windows, so the Linux dev build
+# (used for everything else in this crate) is unaffected. See src/service.rs.
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8"
+simplelog = "0.12"
+
 [dev-dependencies]
 tiny_http = "0.12"
