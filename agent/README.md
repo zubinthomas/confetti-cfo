@@ -62,13 +62,18 @@ Built with the `windows-service` crate (`src/service.rs`). Only compiled in
 on Windows (`#[cfg(windows)]` throughout, and a target-gated dependency in
 `Cargo.toml`), so it never affects the Linux dev build above.
 
-**UNVERIFIED beyond compiling.** This was written and cross-compile-checked
-(`cargo build --target x86_64-pc-windows-gnu`) from a Linux dev machine with
-no Windows box available - actually installing the service, confirming the
-Service Control Manager starts/stops it correctly, that logs land where
-expected, and that it survives a reboot has not been done. Treat it the same
-way as the "not yet verified against a real Tally instance" items above:
-confirm on a real Windows machine before relying on it in production.
+**Verified on a real Windows 11 VM** (install -> `sc query` shows it
+registered correctly, AUTO_START, LocalSystem -> `sc start` ->
+`agent.log` shows the real poll loop running, including a real network
+round trip to a live confetti-cfo server over the VM's NAT interface and a
+correctly-mapped ledger name fetched from it -> `sc stop` -> `agent.log`
+shows the control handler catching the stop request and shutting down
+cleanly within seconds, not the full sync interval -> `sc query` confirms
+STOPPED -> `--uninstall` -> `sc query` confirms it's gone). One thing this
+pass didn't cover: reboot survival and the `sc.exe failure` restart-on-crash
+action below, since that VM had no real Tally install to generate a crash
+against - lower priority than the install/start/stop path that's now
+confirmed.
 
 **Build** (on an actual Windows machine, recommended for a production
 binary - cross-compiling with the `gnu` target from Linux is only useful as

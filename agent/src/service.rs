@@ -3,11 +3,11 @@
 //! `#[cfg(windows)]`-gated from main.rs, so it never affects the Linux dev
 //! build this crate is otherwise developed and tested against.
 //!
-//! UNVERIFIED beyond compiling for the x86_64-pc-windows-gnu target - there's
-//! no Windows machine available to actually install/start/stop this and
-//! confirm the Service Control Manager integration behaves as expected. See
-//! "Running as a Windows Service" in README.md before trusting this in
-//! production.
+//! Verified end-to-end on a real Windows 11 VM: install, SCM start/stop
+//! (control handler correctly catches Stop and shuts down within seconds),
+//! uninstall, and file logging of a real poll cycle against a live server.
+//! See "Running as a Windows Service" in README.md for what that pass did
+//! and didn't cover (reboot survival and crash-restart weren't tested).
 use std::ffi::OsString;
 use std::sync::mpsc;
 use std::time::Duration;
