@@ -19,14 +19,36 @@ pub struct TallyRecord {
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PeriodType {
-    // Not produced yet - main.rs only ever pushes Custom (point-in-time
-    // closing balances). Kept here because the server's TallyRecordInput
-    // accepts all three; a future month-period P&L pull would use Month.
-    #[allow(dead_code)]
     Month,
-    #[allow(dead_code)]
     Week,
     Custom,
+}
+
+/// Whether a mapped ledger pushes a point-in-time closing balance or a
+/// period-aggregated (P&L) figure. Mirrors the server's `tally_value_mode` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ValueMode {
+    Balance,
+    Period,
+}
+
+/// Only meaningful when `ValueMode::Period`. Mirrors the server's
+/// `tally_period_granularity` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PeriodGranularity {
+    Month,
+    Week,
+}
+
+/// One entry of `AgentConfig.ledgers`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MappedLedger {
+    pub name: String,
+    pub value_mode: ValueMode,
+    pub period_granularity: PeriodGranularity,
 }
 
 /// GET /api/tally-agent/config response.
@@ -35,7 +57,7 @@ pub enum PeriodType {
 pub struct AgentConfig {
     pub sync_interval_minutes: u64,
     pub sync_mode: String, // auto | manual | paused - informational; the server enforces this, the agent just pushes
-    pub ledger_names: Vec<String>,
+    pub ledgers: Vec<MappedLedger>,
     /// Set by an admin in the web UI; None means "use the local config.toml value".
     pub tally_gateway_url: Option<String>,
     pub tally_company_name: Option<String>,
@@ -59,4 +81,12 @@ pub struct LedgerBalance {
     #[allow(dead_code)] // captured for future mapping-seed use, not needed for a sync push
     pub parent: Option<String>,
     pub closing_balance: f64,
+}
+
+/// One ledger's net movement over a period, read back from a Tally period
+/// report (e.g. Profit and Loss) rather than a ledger-collection pull.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeriodLedgerAmount {
+    pub name: String,
+    pub net_amount: f64,
 }

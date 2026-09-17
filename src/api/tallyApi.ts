@@ -24,6 +24,9 @@ export interface TallySource {
   lastSyncIssues: ImportIssue[] | null;
 }
 
+export type TallyValueMode = "balance" | "period";
+export type TallyPeriodGranularity = "month" | "week";
+
 export interface TallyLedgerMapping {
   id: number;
   tallySourceId: number;
@@ -31,6 +34,11 @@ export interface TallyLedgerMapping {
   groupName: string | null;
   businessUnitId: number | null;
   lineItemId: number | null;
+  /** 'balance' pushes today's point-in-time closing balance (default, right
+   *  for cash/bank/liabilities); 'period' pushes a period-aggregated P&L
+   *  figure instead - periodGranularity picks month vs week. */
+  valueMode: TallyValueMode;
+  periodGranularity: TallyPeriodGranularity;
   createdAt: string;
 }
 
@@ -56,7 +64,10 @@ export const listTallyMappings = (sourceId: number) =>
   get<TallyLedgerMapping[]>(`/tally/sources/${sourceId}/mappings`);
 export const updateTallyMapping = (
   id: number,
-  body: { businessUnitId?: number | null; lineItemId?: number | null },
+  body: {
+    businessUnitId?: number | null; lineItemId?: number | null;
+    valueMode?: TallyValueMode; periodGranularity?: TallyPeriodGranularity;
+  },
 ) => patch<TallyLedgerMapping>(`/tally/mappings/${id}`, body);
 
 export interface ImportMappingsResult { imported: number }

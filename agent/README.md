@@ -10,13 +10,18 @@ repeated here).
 
 - `src/config.rs` - loads `config.toml` (server URL, this install's API key,
   the local Tally gateway URL/port).
-- `src/tally_client.rs` - builds a Tally TDL "Collection" request for every
-  ledger's `NAME`/`PARENT`/`CLOSINGBALANCE`, and parses the XML response.
+- `src/tally_client.rs` - two Tally gateway request shapes: a TDL
+  "Collection" request for every ledger's `NAME`/`PARENT`/`CLOSINGBALANCE`
+  (balance-mode ledgers), and a report "Export" request (e.g. Profit and
+  Loss) for a date range (period-mode ledgers) - and parsers for both XML
+  responses.
 - `src/server_client.rs` - the confetti-cfo side: `GET /api/tally-agent/config`
-  (cadence + which ledgers are in scope) and `POST /api/tally-agent/sync`
-  (push), both authenticated with the install's API key.
-- `src/main.rs` - the loop: fetch config -> query Tally -> filter to mapped
-  ledgers -> push -> sleep for however long the server said to.
+  (cadence + which ledgers are in scope, and each one's value mode/period
+  granularity) and `POST /api/tally-agent/sync` (push), both authenticated
+  with the install's API key.
+- `src/main.rs` - the loop: fetch config -> split mapped ledgers into
+  balance/monthly-P&L/weekly-P&L groups -> query Tally per group -> push
+  everything together -> sleep for however long the server said to.
 - `src/service.rs` (Windows only) - wraps that same loop as a real Windows
   Service. See "Running as a Windows Service" below.
 
@@ -37,14 +42,33 @@ on-site:
 - **The gateway port.** This client's is `9001`, not Tally's `9000` default -
   already reflected in `config.example.toml`, but double-check per
   installation.
+- **Period report shape (month/week P&L pushes).** This is the biggest
+  unverified leap in the whole integration. `build_period_report_request`/
+  `parse_period_report` in `tally_client.rs` are inferred from Tally's
+  documented *Trial Balance* export example - no confirmed Profit and Loss
+  example was found. Specifically unconfirmed:
+  - The exact report `<ID>` string Tally expects (using `"Profit and
+    Loss"`, not confirmed exact - Tally's report names are sometimes
+    TDL-internal identifiers that differ from what's shown in the UI).
+  - The `SVFROMDATE`/`SVTODATE` date format (using `D-Mon-YYYY`, e.g.
+    `1-Apr-2026`, per a documented Trial Balance example - a separate
+    search summary claimed `YYYYMMDD` instead).
+  - Whether `EXPLODEFLAG=Yes` returns ledger-level rows for a P&L report
+    the way it does for Trial Balance, or something coarser (group totals
+    only).
+  - The row/tag shape itself - whether a P&L export actually uses
+    `DSPACCINFO`/`DSPACCNAME`/`DSPDISPNAME`/`DSPCLDRAMT(A)`/`DSPCLCRAMT(A)`
+    the same way Trial Balance does.
+  - The debit/credit-to-signed-value convention (`net_amount = credit -
+    debit` is a best guess, same tier of guess as `CLOSINGBALANCE`'s sign
+    above).
 
-## Not yet built
+  Do not trust month/week P&L numbers from this agent until confirmed
+  against a real TallyPrime instance - everything downstream of the Tally
+  gateway call (server routes, merge pipeline, admin UI) has been verified
+  against the live dev server with fixture data, but not against real
+  Tally output.
 
-- **Month/week period pushes.** `PeriodType::Month`/`Week` exist on the wire
-  type (the server already handles them) but `main.rs` only ever produces
-  `Custom` (point-in-time closing balances) - a monthly P&L pull would need a
-  different Tally report request (e.g. a Profit & Loss export), not just a
-  ledger collection.
 ## Running it
 
 ```sh
@@ -55,6 +79,11 @@ cargo run
 Logs go to stdout via `env_logger`; set `RUST_LOG=debug` for more detail.
 This is also how to run it interactively on Windows before installing it as
 a service - see below.
+
+Month/week P&L pushes only ever report on the *current* month/week as of
+each run - a period whose window closed while the agent was down (e.g.
+across a month boundary) is not backfilled. This is a keep-dashboards-fresh
+tool, not a historical importer.
 
 ## Running as a Windows Service
 

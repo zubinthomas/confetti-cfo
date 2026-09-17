@@ -12,12 +12,17 @@
 use std::thread;
 use std::time::Duration;
 
-use chrono::Local;
+use chrono::{Datelike, Local, NaiveDate};
+use chrono::Duration as ChronoDuration;
 
 use confetti_tally_agent::config::Config;
 use confetti_tally_agent::server_client::ServerClient;
 use confetti_tally_agent::tally_client::HttpTallyGateway;
-use confetti_tally_agent::types::{PeriodType, TallyRecord};
+use confetti_tally_agent::types::{MappedLedger, PeriodGranularity, PeriodType, TallyRecord, ValueMode};
+
+/// Report name passed as the Tally gateway request's <ID> for period pulls.
+/// UNVERIFIED against real Tally - see agent/README.md and tally_client.rs.
+const PERIOD_REPORT_NAME: &str = "Profit and Loss";
 
 #[cfg(windows)]
 mod service;
@@ -115,7 +120,7 @@ fn run_cycle(server: &ServerClient, local: &Config) -> u64 {
         log::info!("source is paused on the server - skipping this cycle");
         return sleep_seconds;
     }
-    if agent_config.ledger_names.is_empty() {
+    if agent_config.ledgers.is_empty() {
         log::info!("no ledgers mapped yet on the server - nothing to sync");
         return sleep_seconds;
     }
@@ -132,32 +137,49 @@ fn run_cycle(server: &ServerClient, local: &Config) -> u64 {
         .or_else(|| local.tally_company_name.clone());
     let tally = HttpTallyGateway::new(gateway_url, company_name);
 
-    let balances = match tally.fetch_ledger_balances() {
-        Ok(b) => b,
-        Err(e) => {
-            log::error!("could not fetch ledger balances from Tally: {e}");
-            return sleep_seconds;
-        }
-    };
-
-    let wanted: std::collections::HashSet<&str> =
-        agent_config.ledger_names.iter().map(String::as_str).collect();
-    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
-
-    let records: Vec<TallyRecord> = balances
-        .into_iter()
-        .filter(|b| wanted.contains(b.name.as_str()))
-        .map(|b| TallyRecord {
-            ledger_name: b.name,
-            period_type: PeriodType::Custom,
-            period_start: today.clone(),
-            period_end: today.clone(),
-            value: b.closing_balance,
-        })
+    let balance_ledgers: Vec<&MappedLedger> =
+        agent_config.ledgers.iter().filter(|l| l.value_mode == ValueMode::Balance).collect();
+    let month_ledgers: Vec<&MappedLedger> = agent_config.ledgers.iter()
+        .filter(|l| l.value_mode == ValueMode::Period && l.period_granularity == PeriodGranularity::Month)
+        .collect();
+    let week_ledgers: Vec<&MappedLedger> = agent_config.ledgers.iter()
+        .filter(|l| l.value_mode == ValueMode::Period && l.period_granularity == PeriodGranularity::Week)
         .collect();
 
+    let today = Local::now().date_naive();
+    let today_str = today.format("%Y-%m-%d").to_string();
+    let mut records: Vec<TallyRecord> = Vec::new();
+
+    if !balance_ledgers.is_empty() {
+        let wanted: std::collections::HashSet<&str> = balance_ledgers.iter().map(|l| l.name.as_str()).collect();
+        match tally.fetch_ledger_balances() {
+            Ok(balances) => {
+                records.extend(balances.into_iter().filter(|b| wanted.contains(b.name.as_str())).map(|b| TallyRecord {
+                    ledger_name: b.name,
+                    period_type: PeriodType::Custom,
+                    period_start: today_str.clone(),
+                    period_end: today_str.clone(),
+                    value: b.closing_balance,
+                }));
+            }
+            Err(e) => log::error!("could not fetch ledger balances from Tally: {e}"),
+        }
+    }
+
+    if !month_ledgers.is_empty() {
+        let from = today.with_day(1).unwrap_or(today);
+        records.extend(fetch_period_records(&tally, &month_ledgers, PeriodType::Month, from, today, today));
+    }
+
+    if !week_ledgers.is_empty() {
+        let monday = today - ChronoDuration::days(today.weekday().num_days_from_monday() as i64);
+        let sunday = monday + ChronoDuration::days(6);
+        let query_to = today.min(sunday);
+        records.extend(fetch_period_records(&tally, &week_ledgers, PeriodType::Week, monday, query_to, sunday));
+    }
+
     if records.is_empty() {
-        log::info!("none of the {} mapped ledger(s) were found in Tally's response", wanted.len());
+        log::info!("none of the {} mapped ledger(s) produced a value to push this cycle", agent_config.ledgers.len());
         return sleep_seconds;
     }
 
@@ -175,4 +197,50 @@ fn run_cycle(server: &ServerClient, local: &Config) -> u64 {
     }
 
     sleep_seconds
+}
+
+/// Fetches Tally's period report for `[period_start, query_to]`, filters to
+/// `ledgers`, and builds one TallyRecord per match - `period_end` is what
+/// gets sent to the server (load-bearing for `Week`, since the server
+/// doesn't recompute it the way it does for `Month`), which may differ from
+/// `query_to` (the actual date asked of Tally, capped at today).
+fn fetch_period_records(
+    tally: &HttpTallyGateway,
+    ledgers: &[&MappedLedger],
+    period_type: PeriodType,
+    period_start: NaiveDate,
+    query_to: NaiveDate,
+    period_end: NaiveDate,
+) -> Vec<TallyRecord> {
+    let wanted: std::collections::HashSet<&str> = ledgers.iter().map(|l| l.name.as_str()).collect();
+    let amounts = match tally.fetch_period_report(
+        PERIOD_REPORT_NAME,
+        &format_tally_date(period_start),
+        &format_tally_date(query_to),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("could not fetch period report ({period_type:?}) from Tally: {e}");
+            return Vec::new();
+        }
+    };
+    let period_start_str = period_start.format("%Y-%m-%d").to_string();
+    let period_end_str = period_end.format("%Y-%m-%d").to_string();
+    amounts
+        .into_iter()
+        .filter(|a| wanted.contains(a.name.as_str()))
+        .map(|a| TallyRecord {
+            ledger_name: a.name,
+            period_type,
+            period_start: period_start_str.clone(),
+            period_end: period_end_str.clone(),
+            value: a.net_amount,
+        })
+        .collect()
+}
+
+/// Formats a date the way Tally's gateway expects for SVFROMDATE/SVTODATE
+/// (`D-Mon-YYYY`, e.g. "1-Apr-2026") - UNVERIFIED, see tally_client.rs.
+fn format_tally_date(d: NaiveDate) -> String {
+    format!("{}-{}", d.day(), d.format("%b-%Y"))
 }

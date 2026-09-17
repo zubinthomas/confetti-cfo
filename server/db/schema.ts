@@ -309,6 +309,8 @@ export const importBatches = pgTable('import_batches', {
 // lifecycle (own enum, not a shared one: a different external-source kind
 // with its own independent evolution). ────────────────────────────────────
 export const tallySyncModeEnum = pgEnum('tally_sync_mode', ['auto', 'manual', 'paused']);
+export const tallyValueModeEnum = pgEnum('tally_value_mode', ['balance', 'period']);
+export const tallyPeriodGranularityEnum = pgEnum('tally_period_granularity', ['month', 'week']);
 
 export const tallySources = pgTable('tally_sources', {
   id: serial('id').primaryKey(),
@@ -339,6 +341,12 @@ export const tallyLedgerMappings = pgTable('tally_ledger_mappings', {
   groupName: text('group_name'), // Tally's parent group, for the mapping UI's context only - not used in matching
   businessUnitId: integer('business_unit_id').references(() => businessUnits.id),
   lineItemId: integer('line_item_id').references(() => lineItems.id),
+  // 'balance': push today's point-in-time closing balance (default, right for
+  // cash/bank/liabilities). 'period': push a period-aggregated P&L figure
+  // instead - periodGranularity picks month vs week, meaningless when
+  // valueMode is 'balance'. See agent/README.md for what's unverified here.
+  valueMode: tallyValueModeEnum('value_mode').notNull().default('balance'),
+  periodGranularity: tallyPeriodGranularityEnum('period_granularity').notNull().default('month'),
   createdAt: text('created_at').notNull(), // ISO-8601
 }, (t) => [
   uniqueIndex('tally_ledger_mappings_source_ledger').on(t.tallySourceId, t.ledgerName),

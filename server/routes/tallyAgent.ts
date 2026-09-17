@@ -13,18 +13,27 @@ import { batchSummary } from './import.ts';
 const router = Router();
 router.use(tallyAgentAuth);
 
-/** GET /api/tally-agent/config - cadence and which ledgers are in scope, so
- *  an admin can retune either from the UI without touching the agent. */
+/** GET /api/tally-agent/config - cadence and which ledgers are in scope
+ *  (and, per ledger, whether it wants a point-in-time balance or a
+ *  period-aggregated P&L figure), so an admin can retune any of this from
+ *  the UI without touching the agent. */
 router.get('/config', async (req: TallyAgentRequest, res) => {
   await ready();
   const source = req.tallySource!;
-  const mappings = await db.select({ ledgerName: schema.tallyLedgerMappings.ledgerName })
-    .from(schema.tallyLedgerMappings)
+  const mappings = await db.select({
+    ledgerName: schema.tallyLedgerMappings.ledgerName,
+    valueMode: schema.tallyLedgerMappings.valueMode,
+    periodGranularity: schema.tallyLedgerMappings.periodGranularity,
+  }).from(schema.tallyLedgerMappings)
     .where(eq(schema.tallyLedgerMappings.tallySourceId, source.id));
   res.json({
     syncIntervalMinutes: source.syncIntervalMinutes,
     syncMode: source.syncMode,
-    ledgerNames: mappings.map((m) => m.ledgerName),
+    ledgers: mappings.map((m) => ({
+      name: m.ledgerName,
+      valueMode: m.valueMode,
+      periodGranularity: m.periodGranularity,
+    })),
     tallyGatewayUrl: source.tallyGatewayUrl,
     tallyCompanyName: source.tallyCompanyName,
   });

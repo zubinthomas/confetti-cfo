@@ -13,7 +13,7 @@
 //! itself never logs in as a human, only ServerClient (API-key auth) is the
 //! code actually under test here.
 use confetti_tally_agent::server_client::ServerClient;
-use confetti_tally_agent::types::{PeriodType, TallyRecord};
+use confetti_tally_agent::types::{MappedLedger, PeriodGranularity, PeriodType, TallyRecord, ValueMode};
 
 const SERVER_URL: &str = "http://localhost:3001";
 const E2E_EMAIL: &str = "e2e@confetti.test";
@@ -72,7 +72,11 @@ fn config_and_push_round_trip_against_real_server() {
     let agent = ServerClient::new(SERVER_URL, &api_key);
 
     let config = agent.fetch_config().expect("fetch_config should succeed with a valid API key");
-    assert_eq!(config.ledger_names, vec!["Integration Test Ledger".to_string()]);
+    assert_eq!(config.ledgers, vec![MappedLedger {
+        name: "Integration Test Ledger".to_string(),
+        value_mode: ValueMode::Balance,
+        period_granularity: PeriodGranularity::Month,
+    }]);
     assert_eq!(config.tally_gateway_url.as_deref(), Some("http://localhost:9001"));
     assert_eq!(config.tally_company_name.as_deref(), Some("Integration Test Co"));
 

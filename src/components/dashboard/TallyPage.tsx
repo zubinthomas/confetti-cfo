@@ -356,7 +356,10 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
     }
   };
 
-  const onAssign = async (mapping: TallyLedgerMapping, patch: { businessUnitId?: number | null; lineItemId?: number | null }) => {
+  const onAssign = async (mapping: TallyLedgerMapping, patch: {
+    businessUnitId?: number | null; lineItemId?: number | null;
+    valueMode?: TallyLedgerMapping["valueMode"]; periodGranularity?: TallyLedgerMapping["periodGranularity"];
+  }) => {
     setBusyId(mapping.id);
     try {
       const updated = await updateTallyMapping(mapping.id, patch);
@@ -453,6 +456,7 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
                   <th className="py-2 px-2.5 font-medium">Tally group</th>
                   <th className="py-2 px-2.5 font-medium">Business unit</th>
                   <th className="py-2 px-2.5 font-medium">Line item</th>
+                  <th className="py-2 px-2.5 font-medium">Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -497,6 +501,22 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
                           {scopedLineItems.map((li) => (
                             <option key={li.id} value={li.id}>{li.name}</option>
                           ))}
+                        </select>
+                      </td>
+                      <td className="py-1.5 px-2.5">
+                        <select
+                          value={m.valueMode === "period" ? `period-${m.periodGranularity}` : "balance"}
+                          disabled={!canWrite || busyId === m.id}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "balance") onAssign(m, { valueMode: "balance" });
+                            else onAssign(m, { valueMode: "period", periodGranularity: v === "period-week" ? "week" : "month" });
+                          }}
+                          className="px-1.5 py-1 rounded border border-border bg-background text-xs disabled:opacity-50 min-w-[130px]"
+                        >
+                          <option value="balance">Balance</option>
+                          <option value="period-month">Monthly P&amp;L</option>
+                          <option value="period-week">Weekly P&amp;L</option>
                         </select>
                       </td>
                     </tr>

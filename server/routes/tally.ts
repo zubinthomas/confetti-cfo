@@ -196,15 +196,35 @@ router.post('/sources/:id/mappings', requirePermission('TallySource', 'write'), 
   res.status(201).json(row);
 });
 
-/** PATCH /api/tally/mappings/:id { businessUnitId?, lineItemId? } - assigns
- *  (or clears, with null) where a ledger's pushed values should land. */
+const VALUE_MODES = ['balance', 'period'] as const;
+const PERIOD_GRANULARITIES = ['month', 'week'] as const;
+
+/** PATCH /api/tally/mappings/:id { businessUnitId?, lineItemId?, valueMode?,
+ *  periodGranularity? } - assigns (or clears, with null) where a ledger's
+ *  pushed values should land, and whether it pushes a point-in-time balance
+ *  or a period-aggregated (P&L) figure. */
 router.patch('/mappings/:id', requirePermission('TallySource', 'write'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
-  const { businessUnitId, lineItemId } = req.body as { businessUnitId?: number | null; lineItemId?: number | null };
+  const { businessUnitId, lineItemId, valueMode, periodGranularity } = req.body as {
+    businessUnitId?: number | null; lineItemId?: number | null;
+    valueMode?: string; periodGranularity?: string;
+  };
   const patch: Partial<typeof schema.tallyLedgerMappings.$inferInsert> = {};
   if (businessUnitId !== undefined) patch.businessUnitId = businessUnitId;
   if (lineItemId !== undefined) patch.lineItemId = lineItemId;
+  if (valueMode !== undefined) {
+    if (!VALUE_MODES.includes(valueMode as typeof VALUE_MODES[number])) {
+      return res.status(400).json({ message: `valueMode must be one of: ${VALUE_MODES.join(', ')}` });
+    }
+    patch.valueMode = valueMode as typeof VALUE_MODES[number];
+  }
+  if (periodGranularity !== undefined) {
+    if (!PERIOD_GRANULARITIES.includes(periodGranularity as typeof PERIOD_GRANULARITIES[number])) {
+      return res.status(400).json({ message: `periodGranularity must be one of: ${PERIOD_GRANULARITIES.join(', ')}` });
+    }
+    patch.periodGranularity = periodGranularity as typeof PERIOD_GRANULARITIES[number];
+  }
   if (Object.keys(patch).length === 0) return res.status(400).json({ message: 'Nothing to update' });
   const [updated] = await db.update(schema.tallyLedgerMappings).set(patch)
     .where(eq(schema.tallyLedgerMappings.id, id)).returning();
