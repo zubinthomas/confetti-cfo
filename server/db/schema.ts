@@ -562,6 +562,12 @@ export const inventoryItems = pgTable('inventory_items', {
   reorderThreshold: doublePrecision('reorder_threshold'),
   unitCost: doublePrecision('unit_cost'),
   notes: text('notes'),
+  // Opts this item into batch/expiry tracking (see inventoryBatches below) -
+  // most items leave this false and keep working exactly as before, since a
+  // single expiryDate column on the item itself would be wrong once the same
+  // SKU has multiple batches with different expiry dates (the normal case
+  // for F&B stock).
+  tracksExpiry: boolean('tracks_expiry').notNull().default(false),
 });
 
 export const inventoryTransactionTypeEnum = pgEnum('inventory_transaction_type', ['in', 'out']);
@@ -577,6 +583,53 @@ export const inventoryTransactions = pgTable('inventory_transactions', {
   quantity: doublePrecision('quantity').notNull(),
   note: text('note'),
   recordedByUserId: integer('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Set when this transaction is against a specific batch (an expiry-
+  // tracked item's "in" creates one, an "out" against one debits it) -
+  // nullable so a non-expiry-tracked item's transactions are unaffected.
+  batchId: text('batch_id').references(() => inventoryBatches.id, { onDelete: 'set null' }),
+});
+
+// One row per received batch/lot of an expiry-tracked item - a purchase
+// order line item's receipt (see purchaseOrderItems below) creates one when
+// the item tracksExpiry; a plain "in" transaction recorded directly against
+// an expiry-tracked item can also create one (see server/db/inventoryLedger.ts).
+// quantityRemaining is a cached running balance for this batch specifically,
+// kept in sync the same way inventoryItems.quantityOnHand is for the item as
+// a whole - inventory_transactions.batch_id is still the source of truth.
+export const inventoryBatches = pgTable('inventory_batches', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  itemId: text('item_id').notNull().references(() => inventoryItems.id, { onDelete: 'cascade' }),
+  receivedDate: text('received_date').notNull(),
+  expiryDate: text('expiry_date'),
+  quantityReceived: doublePrecision('quantity_received').notNull(),
+  quantityRemaining: doublePrecision('quantity_remaining').notNull(),
+  unitCost: doublePrecision('unit_cost'),
+});
+
+export const purchaseOrderStatusEnum = pgEnum('purchase_order_status', ['draft', 'ordered', 'received']);
+
+// A purchase order's own line items (purchaseOrderItems) track ordered vs.
+// received quantity separately - receiving a line item (server/db/
+// purchaseOrders.ts) creates an inventoryBatches row (if the item tracks
+// expiry) or a plain inventoryTransactions "in" row otherwise, either way
+// through recordTransaction() so the item's cached balance stays correct.
+export const purchaseOrders = pgTable('purchase_orders', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  division: text('division'),
+  vendorName: text('vendor_name'),
+  orderDate: text('order_date'),
+  status: purchaseOrderStatusEnum('status').notNull().default('draft'),
+});
+
+export const purchaseOrderItems = pgTable('purchase_order_items', {
+  id: text('id').primaryKey(),
+  purchaseOrderId: text('purchase_order_id').notNull().references(() => purchaseOrders.id, { onDelete: 'cascade' }),
+  itemId: text('item_id').notNull().references(() => inventoryItems.id, { onDelete: 'cascade' }),
+  quantityOrdered: doublePrecision('quantity_ordered').notNull(),
+  unitCost: doublePrecision('unit_cost'),
+  quantityReceived: doublePrecision('quantity_received').notNull().default(0),
 });
 
 // ── Reservations (Cafe/Restaurant table booking with real capacity/overlap

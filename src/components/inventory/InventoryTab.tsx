@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Inventory } from "@/api/entities";
-import { listTransactions, recordTransaction, type InventoryTransaction, type TransactionType } from "@/api/inventoryApi";
-import { Plus, X, Loader2, ArrowDownCircle, ArrowUpCircle, AlertTriangle } from "lucide-react";
+import { listTransactions, recordTransaction, listBatches, type InventoryTransaction, type InventoryBatch, type TransactionType } from "@/api/inventoryApi";
+import {
+  listPurchaseOrders, createPurchaseOrder, receivePurchaseOrderItem,
+  type PurchaseOrder,
+} from "@/api/purchaseOrdersApi";
+import { Plus, X, Loader2, ArrowDownCircle, ArrowUpCircle, AlertTriangle, PackageCheck } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
+import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "@/components/hr/FormField";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
@@ -16,7 +21,7 @@ const divisionColors: Record<string, string> = {
 };
 const DEFAULT_DIVISION_COLOR = "#888";
 
-const EMPTY = { name: "", sku: "", division: "", category: "", unit: "", quantity_on_hand: "0", reorder_threshold: "", unit_cost: "", notes: "" };
+const EMPTY = { name: "", sku: "", division: "", category: "", unit: "", quantity_on_hand: "0", reorder_threshold: "", unit_cost: "", notes: "", tracks_expiry: false };
 
 const CATEGORIES = ["Raw Material", "Finished Good", "Packaging", "Trading Item", "Other"];
 const UNITS = ["kg", "g", "pieces", "meters", "liters", "boxes", "rolls"];
@@ -27,25 +32,38 @@ const isLowStock = (item: any) => item.reorder_threshold != null && item.quantit
 // transaction" (see server/db/inventoryLedger.ts for why).
 function LedgerSection({ item, canWrite, onRecorded }: { item: any; canWrite: boolean; onRecorded: () => void }) {
   const [transactions, setTransactions] = useState<InventoryTransaction[] | null>(null);
+  const [batches, setBatches] = useState<InventoryBatch[]>([]);
   const [type, setType] = useState<TransactionType>("in");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [batchId, setBatchId] = useState("");
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState("");
 
   const load = () => { listTransactions(item.id).then(setTransactions).catch((err: Error) => setError(err.message)); };
-  useEffect(() => { load(); }, [item.id]);
+  const loadBatches = () => {
+    if (item.tracks_expiry) listBatches(item.id).then((b) => { setBatches(b); setBatchId((cur) => cur || b.find((x) => x.quantityRemaining > 0)?.id || ""); });
+  };
+  useEffect(() => { load(); loadBatches(); }, [item.id]);
 
   const record = async () => {
     setError("");
     const qty = Number(quantity);
     if (!qty || qty <= 0) { setError("Enter a positive quantity"); return; }
+    if (item.tracks_expiry && type === "out" && !batchId) { setError("Select a batch to remove stock from"); return; }
     setRecording(true);
     try {
-      await recordTransaction(item.id, { type, quantity: qty, note: note.trim() || undefined });
+      await recordTransaction(item.id, {
+        type, quantity: qty, note: note.trim() || undefined,
+        expiryDate: item.tracks_expiry && type === "in" ? (expiryDate || null) : undefined,
+        batchId: item.tracks_expiry && type === "out" ? batchId : undefined,
+      });
       setQuantity("");
       setNote("");
+      setExpiryDate("");
       load();
+      loadBatches();
       onRecorded();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record transaction");
@@ -94,6 +112,31 @@ function LedgerSection({ item, canWrite, onRecorded }: { item: any; canWrite: bo
               className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground w-24"
             />
           </div>
+          {item.tracks_expiry && type === "in" && (
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Expiry Date (optional)</label>
+              <input
+                type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)}
+                className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+              />
+            </div>
+          )}
+          {item.tracks_expiry && type === "out" && (
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Batch (earliest expiry first)</label>
+              <select
+                value={batchId} onChange={(e) => setBatchId(e.target.value)}
+                className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground max-w-[220px]"
+              >
+                <option value="">Select a batch…</option>
+                {batches.filter((b) => b.quantityRemaining > 0).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.quantityRemaining} {item.unit || ""} left{b.expiryDate ? ` · exp ${b.expiryDate}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1 flex-1 min-w-[140px]">
             <label className="text-xs text-muted-foreground">Note (optional)</label>
             <input
@@ -111,6 +154,232 @@ function LedgerSection({ item, canWrite, onRecorded }: { item: any; canWrite: bo
       )}
       {error && <p className="text-xs text-destructive mt-2">{error}</p>}
     </div>
+  );
+}
+
+const poStatusMap: Record<string, "green" | "amber" | "red"> = { received: "green", ordered: "amber", draft: "red" };
+
+function ReceiveLineItem({ po, item, itemName, canWrite, onReceived }: {
+  po: PurchaseOrder; item: PurchaseOrder["items"][number]; itemName: string; canWrite: boolean; onReceived: () => void;
+}) {
+  const [quantity, setQuantity] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [receiving, setReceiving] = useState(false);
+  const [error, setError] = useState("");
+  const remaining = item.quantityOrdered - item.quantityReceived;
+
+  const receive = async () => {
+    setError("");
+    const qty = Number(quantity);
+    if (!qty || qty <= 0) { setError("Enter a positive quantity"); return; }
+    setReceiving(true);
+    try {
+      await receivePurchaseOrderItem(po.id, item.id, { quantity: qty, expiryDate: expiryDate || null });
+      setQuantity("");
+      setExpiryDate("");
+      onReceived();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to receive item");
+    } finally {
+      setReceiving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 py-2 border-b border-border last:border-b-0 text-sm">
+      <div className="min-w-[140px] flex-1">
+        <p className="font-medium text-foreground">{itemName}</p>
+        <p className="text-xs text-muted-foreground">{item.quantityReceived} / {item.quantityOrdered} received</p>
+      </div>
+      {canWrite && remaining > 0 && (
+        <>
+          <input
+            type="number" placeholder="Qty" value={quantity} onChange={(e) => setQuantity(e.target.value)}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground w-20"
+          />
+          <input
+            type="date" title="Expiry date (optional)" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+          />
+          <button
+            onClick={receive} disabled={receiving}
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-1"
+          >
+            {receiving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Receive
+          </button>
+        </>
+      )}
+      {error && <p className="text-xs text-destructive w-full">{error}</p>}
+    </div>
+  );
+}
+
+function PurchaseOrdersSection({ items, divisionOptions, canWrite }: { items: any[]; divisionOptions: readonly string[]; canWrite: boolean }) {
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState<PurchaseOrder | null>(null);
+  const [form, setForm] = useState<{ division: string; vendor_name: string; order_date: string; lines: { item_id: string; quantity_ordered: string; unit_cost: string }[] }>(
+    { division: divisionOptions[0] ?? "", vendor_name: "", order_date: "", lines: [{ item_id: "", quantity_ordered: "", unit_cost: "" }] },
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = () => {
+    setLoading(true);
+    listPurchaseOrders().then((data) => {
+      setOrders(data);
+      setSelected((sel) => (sel ? data.find((o) => o.id === sel.id) ?? null : null));
+    }).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const itemName = (itemId: string) => items.find((i) => i.id === itemId)?.name || "Unknown item";
+
+  const updateLine = (idx: number, patch: Partial<{ item_id: string; quantity_ordered: string; unit_cost: string }>) => {
+    setForm((f) => ({ ...f, lines: f.lines.map((l, i) => (i === idx ? { ...l, ...patch } : l)) }));
+  };
+  const addLine = () => setForm((f) => ({ ...f, lines: [...f.lines, { item_id: "", quantity_ordered: "", unit_cost: "" }] }));
+  const removeLine = (idx: number) => setForm((f) => ({ ...f, lines: f.lines.filter((_, i) => i !== idx) }));
+
+  const save = async () => {
+    setError("");
+    const lines = form.lines.filter((l) => l.item_id && Number(l.quantity_ordered) > 0);
+    if (lines.length === 0) { setError("Add at least one line item with a quantity"); return; }
+    setSaving(true);
+    try {
+      await createPurchaseOrder({
+        division: form.division,
+        vendorName: form.vendor_name || undefined,
+        orderDate: form.order_date || undefined,
+        items: lines.map((l) => ({ itemId: l.item_id, quantityOrdered: Number(l.quantity_ordered), unitCost: l.unit_cost ? Number(l.unit_cost) : null })),
+      });
+      setShowForm(false);
+      setForm({ division: divisionOptions[0] ?? "", vendor_name: "", order_date: "", lines: [{ item_id: "", quantity_ordered: "", unit_cost: "" }] });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create purchase order");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <DashCard title="Purchase Orders">
+      {canWrite && (
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition"
+          >
+            <Plus className="w-4 h-4" /> New Purchase Order
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : orders.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">No purchase orders yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs text-muted-foreground">
+                <th className="text-left py-2 pr-4 font-medium">Vendor</th>
+                <th className="text-left py-2 pr-4 font-medium">Department</th>
+                <th className="text-left py-2 pr-4 font-medium">Order Date</th>
+                <th className="text-left py-2 pr-4 font-medium">Items</th>
+                <th className="text-left py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((po) => (
+                <tr key={po.id} className="border-b border-border last:border-b-0 hover:bg-muted/30">
+                  <td className="py-2.5 pr-4">
+                    <button onClick={() => setSelected(po)} className="font-medium text-foreground hover:text-primary text-left">{po.vendorName || "-"}</button>
+                  </td>
+                  <td className="py-2.5 pr-4 text-muted-foreground">{po.division}</td>
+                  <td className="py-2.5 pr-4 text-muted-foreground">{po.orderDate || "-"}</td>
+                  <td className="py-2.5 pr-4 text-muted-foreground">{po.items.length}</td>
+                  <td className="py-2.5"><StatusBadge status={poStatusMap[po.status]}>{po.status}</StatusBadge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-foreground">New Purchase Order</h2>
+              <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <FormField label="Department *" name="division" options={divisionOptions} value={form.division} onChange={(_, v) => setForm((f) => ({ ...f, division: v }))} />
+                <FormField label="Vendor" name="vendor_name" value={form.vendor_name} onChange={(_, v) => setForm((f) => ({ ...f, vendor_name: v }))} />
+                <FormField label="Order Date" name="order_date" type="date" value={form.order_date} onChange={(_, v) => setForm((f) => ({ ...f, order_date: v }))} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Line Items</p>
+                {form.lines.map((line, idx) => (
+                  <div key={idx} className="flex gap-2 items-end">
+                    <select
+                      value={line.item_id} onChange={(e) => updateLine(idx, { item_id: e.target.value })}
+                      className="flex-1 text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+                    >
+                      <option value="">Select item…</option>
+                      {items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select>
+                    <input
+                      type="number" placeholder="Qty" value={line.quantity_ordered} onChange={(e) => updateLine(idx, { quantity_ordered: e.target.value })}
+                      className="w-20 text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+                    />
+                    <input
+                      type="number" placeholder="Unit ₹" value={line.unit_cost} onChange={(e) => updateLine(idx, { unit_cost: e.target.value })}
+                      className="w-24 text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
+                    />
+                    {form.lines.length > 1 && (
+                      <button onClick={() => removeLine(idx)} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addLine} className="text-xs text-primary hover:underline">+ Add line item</button>
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </div>
+            <div className="px-6 pb-6 flex justify-end gap-3">
+              <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+              <button onClick={save} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-foreground flex items-center gap-2"><PackageCheck className="w-4 h-4" /> {selected.vendorName || "Purchase Order"}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{selected.division} · <StatusBadge status={poStatusMap[selected.status]}>{selected.status}</StatusBadge></p>
+              </div>
+              <button onClick={() => setSelected(null)}><X className="w-5 h-5 text-muted-foreground" /></button>
+            </div>
+            <div className="p-6">
+              {selected.items.map((it) => (
+                <ReceiveLineItem key={it.id} po={selected} item={it} itemName={itemName(it.itemId)} canWrite={canWrite} onReceived={load} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </DashCard>
   );
 }
 
@@ -264,6 +533,8 @@ export default function InventoryTab() {
         )}
       </DashCard>
 
+      <PurchaseOrdersSection items={items} divisionOptions={divisionOptions} canWrite={canWrite} />
+
       {/* Add Item Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -281,6 +552,13 @@ export default function InventoryTab() {
               <FormField label="Opening Quantity" name="quantity_on_hand" type="number" value={form.quantity_on_hand ?? ""} onChange={updateField} />
               <FormField label="Reorder Threshold" name="reorder_threshold" type="number" value={form.reorder_threshold ?? ""} onChange={updateField} />
               <FormField label="Unit Cost (₹)" name="unit_cost" type="number" value={form.unit_cost ?? ""} onChange={updateField} />
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <input
+                  type="checkbox" id="tracks_expiry" checked={!!form.tracks_expiry}
+                  onChange={(e) => setForm((f) => ({ ...f, tracks_expiry: e.target.checked }))}
+                />
+                <label htmlFor="tracks_expiry" className="text-sm text-foreground">Track expiry dates (batch/lot mode)</label>
+              </div>
               <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
             <div className="px-6 pb-6 flex justify-end gap-3">

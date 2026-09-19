@@ -15,8 +15,28 @@ export interface InventoryTransaction {
   recordedByEmail: string | null;
 }
 
+export interface InventoryBatch {
+  id: string;
+  createdDate: string;
+  itemId: string;
+  receivedDate: string;
+  expiryDate: string | null;
+  quantityReceived: number;
+  quantityRemaining: number;
+  unitCost: number | null;
+}
+
 export const listTransactions = (itemId: string) =>
   get<InventoryTransaction[]>(`/inventory/items/${itemId}/transactions`);
 
-export const recordTransaction = (itemId: string, data: { type: TransactionType; quantity: number; note?: string }) =>
+export const listBatches = (itemId: string) =>
+  get<InventoryBatch[]>(`/inventory/items/${itemId}/batches`);
+
+// expiryDate/unitCost only matter for an "in" against an expiry-tracked
+// item (creates a batch); batchId only matters for an "out" against one
+// (debits that batch) - see server/db/inventoryLedger.ts.
+export const recordTransaction = (itemId: string, data: {
+  type: TransactionType; quantity: number; note?: string;
+  expiryDate?: string | null; batchId?: string | null; unitCost?: number | null;
+}) =>
   post<InventoryTransaction>(`/inventory/items/${itemId}/transactions`, data);

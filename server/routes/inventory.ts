@@ -6,7 +6,7 @@
 // is applied router-wide, matching users.ts's/settings.ts's convention.
 import { Router } from 'express';
 import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
-import { listTransactions, recordTransaction, InventoryError } from '../db/inventoryLedger.ts';
+import { listTransactions, recordTransaction, listBatches, InventoryError } from '../db/inventoryLedger.ts';
 
 const router = Router();
 router.use(authMiddleware);
@@ -22,13 +22,21 @@ router.get('/items/:id/transactions', requirePermission('Inventory', 'read'), as
   }
 });
 
+router.get('/items/:id/batches', requirePermission('Inventory', 'read'), async (req: AuthedRequest, res) => {
+  try {
+    res.json(await listBatches(req.user!.id, req.params.id));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
 router.post('/items/:id/transactions', requirePermission('Inventory', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { type, quantity, note } = req.body ?? {};
+    const { type, quantity, note, expiryDate, batchId, unitCost } = req.body ?? {};
     if (type !== 'in' && type !== 'out') return res.status(400).json({ message: 'type must be "in" or "out"' });
     if (typeof quantity !== 'number') return res.status(400).json({ message: 'quantity must be a number' });
     if (note !== undefined && typeof note !== 'string') return res.status(400).json({ message: 'note must be a string' });
-    const row = await recordTransaction(req.user!.id, req.params.id, { type, quantity, note });
+    const row = await recordTransaction(req.user!.id, req.params.id, { type, quantity, note, expiryDate, batchId, unitCost });
     res.status(201).json(row);
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
