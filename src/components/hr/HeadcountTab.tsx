@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Employee, PayrollRecord, EmployeeExit } from "@/api/entities";
 import { createInvite } from "@/api/invitesApi";
 import { uploadFile } from "@/api/integrations";
-import { offboardEmployee, approveOffboarding, rejectOffboarding, finalizeOffboarding, type OffboardInput } from "@/api/hrApi";
+import { offboardEmployee, approveOffboarding, rejectOffboarding, finalizeOffboarding, listOnboarding, setOnboardingStage, type OffboardInput, type OnboardingRecord } from "@/api/hrApi";
 import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
 import { Plus, X, Loader2, Copy, Check, ImagePlus, IdCard, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, UserMinus } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
@@ -344,6 +344,66 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
   );
 }
 
+const ONBOARDING_STAGES: { field: string; label: string }[] = [
+  { field: "offer_accepted", label: "Offer Accepted" },
+  { field: "documents_collected", label: "Documents Collected" },
+  { field: "account_created", label: "Account Created" },
+  { field: "id_card_issued", label: "ID Card Issued" },
+  { field: "orientation_complete", label: "Orientation Complete" },
+];
+const ONBOARDING_STAGE_COLUMN: Record<string, keyof OnboardingRecord> = {
+  offer_accepted: "offerAcceptedAt",
+  documents_collected: "documentsCollectedAt",
+  account_created: "accountCreatedAt",
+  id_card_issued: "idCardIssuedAt",
+  orientation_complete: "orientationCompleteAt",
+};
+
+// A best-guess default stage sequence, not a confirmed client requirement -
+// see server/db/employeeOnboarding.ts. Completing the last stage flips the
+// employee to Active server-side.
+function OnboardingPanel({ employeeId, record, canWrite, onChanged }: {
+  employeeId: string; record: OnboardingRecord | undefined; canWrite: boolean; onChanged: () => void;
+}) {
+  const [pendingField, setPendingField] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const toggle = async (field: string, completed: boolean) => {
+    setError("");
+    setPendingField(field);
+    try {
+      await setOnboardingStage(employeeId, field, completed);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update onboarding stage");
+    } finally {
+      setPendingField(null);
+    }
+  };
+
+  return (
+    <div className="px-6 pb-6 pt-3 border-t border-border">
+      <p className="text-xs font-medium text-muted-foreground mb-2">Onboarding{record?.stage ? ` · ${record.stage}` : ""}</p>
+      <div className="space-y-1.5">
+        {ONBOARDING_STAGES.map((s) => {
+          const done = !!(record && record[ONBOARDING_STAGE_COLUMN[s.field]]);
+          return (
+            <label key={s.field} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox" checked={done} disabled={!canWrite || pendingField === s.field}
+                onChange={(e) => toggle(s.field, e.target.checked)}
+              />
+              <span className={done ? "text-foreground" : "text-muted-foreground"}>{s.label}</span>
+              {pendingField === s.field && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+            </label>
+          );
+        })}
+      </div>
+      {error && <p className="text-xs text-destructive mt-2">{error}</p>}
+    </div>
+  );
+}
+
 export default function HeadcountTab() {
   const { user, can } = useAuth();
   const canWrite = can("Employee", "write");
@@ -362,6 +422,7 @@ export default function HeadcountTab() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<any[]>([]);
   const [exits, setExits] = useState<any[]>([]);
+  const [onboardingRecords, setOnboardingRecords] = useState<OnboardingRecord[]>([]);
   const [offboardTarget, setOffboardTarget] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -380,14 +441,16 @@ export default function HeadcountTab() {
 
   const load = async () => {
     setLoading(true);
-    const [empData, payrollData, exitData] = await Promise.all([
+    const [empData, payrollData, exitData, onboardingData] = await Promise.all([
       Employee.list(),
       canPayrollRead ? PayrollRecord.list() : Promise.resolve([]),
       canExitRead ? EmployeeExit.list() : Promise.resolve([]),
+      listOnboarding().catch((): OnboardingRecord[] => []),
     ]);
     setEmployees(empData);
     setPayrollRecords(payrollData);
     setExits(exitData);
+    setOnboardingRecords(onboardingData);
     setLoading(false);
     // Keep an open detail modal showing live data (e.g. right after a
     // document upload) instead of the stale snapshot it was opened with.
@@ -733,6 +796,13 @@ export default function HeadcountTab() {
             <div className="px-6 pb-6 pt-3 border-t border-border">
               <EmployeeDocumentsPanel employee={selected} canWrite={canWrite} onChange={load} />
             </div>
+
+            <OnboardingPanel
+              employeeId={selected.id}
+              record={onboardingRecords.find((r) => r.employeeId === selected.id)}
+              canWrite={canWrite}
+              onChanged={load}
+            />
 
             {(canExitRead || canOffboard) && (() => {
               const exitRecords = exits.filter((e) => e.employee_id === selected.id);

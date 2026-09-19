@@ -218,6 +218,13 @@
       "when": 1789800475454,
       "tag": "0030_fixed_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789800896132,
+      "tag": "0031_magical_wraith",
+      "breakpoints": true
     }
   ]
 }

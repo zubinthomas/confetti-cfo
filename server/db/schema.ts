@@ -492,6 +492,31 @@ export const employeeExits = pgTable('employee_exits', {
   previousStatus: text('previous_status'),
 });
 
+// One row per employee's onboarding cycle (unique on employeeId - a new
+// hire gets exactly one). Stage completion is 5 independent checkboxes
+// (per-stage timestamp, nullable = not done), not a strict linear gate -
+// per the client's own notes.md framing that some stages are "just
+// checkboxes." `stage` is a denormalized label of the furthest stage
+// reached, purely for a quick-glance display/sort - the *_at columns are
+// the source of truth. This default 5-stage sequence
+// (server/db/employeeOnboarding.ts has the exact list) is a best-guess
+// default, not a confirmed client requirement - expect to revise it once
+// the client answers notes.md's own open sequencing questions.
+export const employeeOnboarding = pgTable('employee_onboarding', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  employeeId: text('employee_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  division: text('division'),
+  stage: text('stage'),
+  offerAcceptedAt: text('offer_accepted_at'),
+  documentsCollectedAt: text('documents_collected_at'),
+  accountCreatedAt: text('account_created_at'),
+  idCardIssuedAt: text('id_card_issued_at'),
+  orientationCompleteAt: text('orientation_complete_at'),
+}, (t) => [
+  uniqueIndex('employee_onboarding_employee_id').on(t.employeeId),
+]);
+
 export const licences = pgTable('licences', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),

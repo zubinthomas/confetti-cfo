@@ -2,7 +2,7 @@
 // (server/routes/recruitmentHire.ts) and offboarding an employee
 // (server/routes/offboarding.ts). Both create/update two entities in one
 // transaction server-side.
-import { post } from "./http";
+import { get, post, patch } from "./http";
 import type { EntityRecord } from "./entities";
 
 export const hireApplicant = (recruitmentId: string, employee: Record<string, unknown>) =>
@@ -35,3 +35,26 @@ export const rejectOffboarding = (exitId: string) =>
 
 export const finalizeOffboarding = (exitId: string) =>
   post<{ exit: EntityRecord; employee: EntityRecord }>(`/employees/exits/${exitId}/finalize`, {});
+
+// Onboarding stage tracking (server/routes/onboarding.ts) - camelCase, like
+// the inventory ledger endpoints, since these are plain drizzle rows rather
+// than routed through the generic entity CRUD's snake_case mapping.
+export interface OnboardingRecord {
+  id: string;
+  createdDate: string;
+  employeeId: string;
+  division: string | null;
+  stage: string | null;
+  offerAcceptedAt: string | null;
+  documentsCollectedAt: string | null;
+  accountCreatedAt: string | null;
+  idCardIssuedAt: string | null;
+  orientationCompleteAt: string | null;
+}
+
+export const listOnboarding = () => get<OnboardingRecord[]>(`/employees/onboarding`);
+
+export const getOnboarding = (employeeId: string) => get<OnboardingRecord>(`/employees/${employeeId}/onboarding`);
+
+export const setOnboardingStage = (employeeId: string, field: string, completed: boolean) =>
+  patch<OnboardingRecord>(`/employees/${employeeId}/onboarding`, { field, completed });
