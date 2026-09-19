@@ -457,12 +457,18 @@ export const payrollRecords = pgTable('payroll_records', {
 ]);
 
 export const employeeExitTypeEnum = pgEnum('employee_exit_type', ['resignation', 'termination', 'end_of_contract']);
+export const employeeExitApprovalStatusEnum = pgEnum('employee_exit_approval_status', ['pending', 'approved', 'rejected']);
 
-// One row per offboarding event, created atomically with employees.status
-// flipping to 'Terminated' by POST /api/employees/:id/offboard (see
-// server/routes/entities.ts) - never by the generic entity CRUD directly,
-// since that side effect has to happen in the same transaction. Otherwise a
-// plain generic entity (server/db.ts's TABLES map), same as payrollRecords.
+// One row per offboarding event. Submitting one (POST /api/employees/:id/
+// offboard, server/routes/offboarding.ts) moves employees.status to
+// 'Notice Period' and this row to approvalStatus 'pending' - the employee's
+// manager (or above, or Admin - see server/db/managerScope.ts) then
+// approves or rejects it, and only an approved request can be finalized
+// (which sets the terminal status and deactivates the linked user account,
+// see server/db/employeeOffboard.ts). Never touched by the generic entity
+// CRUD directly, since these are multi-table transactional side effects -
+// otherwise a plain generic entity (server/db.ts's TABLES map), same as
+// payrollRecords.
 export const employeeExits = pgTable('employee_exits', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
@@ -476,6 +482,14 @@ export const employeeExits = pgTable('employee_exits', {
   assetsReturned: boolean('assets_returned').notNull().default(false),
   fullSettlementDone: boolean('full_settlement_done').notNull().default(false),
   rehireEligible: boolean('rehire_eligible').notNull().default(true),
+  // A real figure, independent of fullSettlementDone (which just tracks
+  // whether it's been paid out).
+  settlementAmount: doublePrecision('settlement_amount'),
+  approvalStatus: employeeExitApprovalStatusEnum('approval_status').notNull().default('pending'),
+  approvedByUserId: integer('approved_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: text('approved_at'),
+  // employees.status at submission time, so a rejection can restore it.
+  previousStatus: text('previous_status'),
 });
 
 export const licences = pgTable('licences', {

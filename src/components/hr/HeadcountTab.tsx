@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Employee, PayrollRecord, EmployeeExit } from "@/api/entities";
 import { createInvite } from "@/api/invitesApi";
 import { uploadFile } from "@/api/integrations";
-import { offboardEmployee, type OffboardInput } from "@/api/hrApi";
+import { offboardEmployee, approveOffboarding, rejectOffboarding, finalizeOffboarding, type OffboardInput } from "@/api/hrApi";
 import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
 import { Plus, X, Loader2, Copy, Check, ImagePlus, IdCard, ArrowUp, ArrowDown, ArrowUpDown, RotateCcw, UserMinus } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
@@ -21,7 +21,7 @@ const divisionColors: Record<string, string> = {
 const DEFAULT_DIVISION_COLOR = "#888";
 
 const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Contract", "Intern"];
-const STATUSES = ["Active", "On Leave", "Terminated", "Probation"];
+const STATUSES = ["Active", "On Leave", "Terminated", "Probation", "Notice Period", "Resigned"];
 type SortKey = "full_name" | "division" | "role" | "employment_type" | "status" | "monthly_salary";
 
 const EMPTY = { full_name: "", employee_id: "", division: "", role: "", employment_type: "Full-time", status: "Active", joining_date: "", monthly_salary: "", phone: "", email: "", aadhar_number: "", pan_number: "", blood_group: "", emergency_contact_name: "", emergency_contact_phone: "", address: "", notes: "", photo_url: "", manager_id: "" };
@@ -250,7 +250,7 @@ const EXIT_TYPES = ["resignation", "termination", "end_of_contract"] as const;
 const exitTypeLabel: Record<string, string> = { resignation: "Resignation", termination: "Termination", end_of_contract: "End of Contract" };
 
 function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onClose: () => void; onOffboarded: () => void }) {
-  const [form, setForm] = useState<OffboardInput>({
+  const [form, setForm] = useState<Omit<OffboardInput, "settlement_amount">>({
     exit_type: "resignation",
     notice_date: "",
     last_working_date: "",
@@ -260,6 +260,7 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
     full_settlement_done: false,
     rehire_eligible: true,
   });
+  const [settlementAmount, setSettlementAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -267,11 +268,11 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
     setError("");
     setSaving(true);
     try {
-      await offboardEmployee(employee.id, form);
+      await offboardEmployee(employee.id, { ...form, settlement_amount: settlementAmount ? Number(settlementAmount) : null });
       onOffboarded();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to offboard employee");
+      setError(err instanceof Error ? err.message : "Failed to submit offboarding");
     } finally {
       setSaving(false);
     }
@@ -281,7 +282,10 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-card rounded-2xl border border-border w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">Offboard {employee.full_name}</h2>
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Offboard {employee.full_name}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Submits for manager approval - the employee moves to Notice Period until finalized.</p>
+          </div>
           <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
         <div className="p-6 space-y-4">
@@ -312,6 +316,10 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
             <label className="text-xs text-muted-foreground block">Exit Interview Notes</label>
             <textarea value={form.exit_interview_notes} onChange={(e) => setForm((f) => ({ ...f, exit_interview_notes: e.target.value }))} rows={2} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground" />
           </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground block">Settlement Amount (₹)</label>
+            <input type="number" value={settlementAmount} onChange={(e) => setSettlementAmount(e.target.value)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground" />
+          </div>
           <div className="flex flex-wrap gap-4 text-sm">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={form.assets_returned} onChange={(e) => setForm((f) => ({ ...f, assets_returned: e.target.checked }))} /> Assets returned
@@ -328,7 +336,7 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
         <div className="px-6 pb-6 flex justify-end gap-3">
           <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
           <button onClick={submit} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Confirm Offboarding
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Submit for Approval
           </button>
         </div>
       </div>
@@ -363,6 +371,7 @@ export default function HeadcountTab() {
   const [selected, setSelected] = useState(null);
   const [inviteTarget, setInviteTarget] = useState<any | null>(null);
   const [generatingCard, setGeneratingCard] = useState(false);
+  const [decidingExitId, setDecidingExitId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({ division: "", role: "", employment_type: "", status: "" });
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
@@ -412,6 +421,20 @@ export default function HeadcountTab() {
     }
   };
 
+  const decideExit = async (exitId: string, action: "approve" | "reject" | "finalize") => {
+    setError("");
+    setDecidingExitId(exitId);
+    try {
+      const fn = action === "approve" ? approveOffboarding : action === "reject" ? rejectOffboarding : finalizeOffboarding;
+      await fn(exitId);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} offboarding`);
+    } finally {
+      setDecidingExitId(null);
+    }
+  };
+
   const uploadPhoto = async (file: File) => {
     setError("");
     setPhotoUploading(true);
@@ -444,7 +467,7 @@ export default function HeadcountTab() {
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
-  const statusColor: Record<string, string> = { Active: "text-emerald-600", "On Leave": "text-amber-600", Terminated: "text-red-600", Probation: "text-blue-600" };
+  const statusColor: Record<string, string> = { Active: "text-emerald-600", "On Leave": "text-amber-600", Terminated: "text-red-600", Probation: "text-blue-600", "Notice Period": "text-amber-600", Resigned: "text-red-600" };
 
   const roleOptions = Array.from(new Set(employees.map(e => e.role).filter(Boolean))).sort();
   const hasActiveFilters = Object.values(filters).some(Boolean);
@@ -713,15 +736,49 @@ export default function HeadcountTab() {
 
             {(canExitRead || canOffboard) && (() => {
               const exitRecords = exits.filter((e) => e.employee_id === selected.id);
+              const offboardable = !["Notice Period", "Terminated", "Resigned"].includes(selected.status);
               return (
                 <div className="px-6 pb-3 space-y-2">
-                  {exitRecords.map((e) => (
-                    <div key={e.id} className="text-xs bg-muted/40 rounded-lg p-3 space-y-1">
-                      <p className="font-medium text-foreground">{exitTypeLabel[e.exit_type] || e.exit_type}{e.last_working_date ? ` · Last day ${e.last_working_date}` : ""}</p>
-                      {e.reason && <p className="text-muted-foreground">{e.reason}</p>}
-                    </div>
-                  ))}
-                  {canOffboard && selected.status !== "Terminated" && (
+                  {exitRecords.map((e) => {
+                    const deciding = decidingExitId === e.id;
+                    const pendingInFlight = selected.status === "Notice Period" && e.approval_status === "pending";
+                    const approvedAwaitingFinalize = selected.status === "Notice Period" && e.approval_status === "approved";
+                    return (
+                      <div key={e.id} className="text-xs bg-muted/40 rounded-lg p-3 space-y-2">
+                        <div>
+                          <p className="font-medium text-foreground">{exitTypeLabel[e.exit_type] || e.exit_type}{e.last_working_date ? ` · Last day ${e.last_working_date}` : ""}</p>
+                          {e.reason && <p className="text-muted-foreground">{e.reason}</p>}
+                          {e.settlement_amount != null && <p className="text-muted-foreground">Settlement: ₹{Number(e.settlement_amount).toLocaleString()}</p>}
+                          <p className="text-muted-foreground capitalize">Approval: {e.approval_status}</p>
+                        </div>
+                        {canOffboard && pendingInFlight && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => decideExit(e.id, "approve")} disabled={deciding}
+                              className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-50"
+                            >
+                              {deciding && <Loader2 className="w-3 h-3 animate-spin" />} Approve
+                            </button>
+                            <button
+                              onClick={() => decideExit(e.id, "reject")} disabled={deciding}
+                              className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                            >
+                              {deciding && <Loader2 className="w-3 h-3 animate-spin" />} Reject
+                            </button>
+                          </div>
+                        )}
+                        {canOffboard && approvedAwaitingFinalize && (
+                          <button
+                            onClick={() => decideExit(e.id, "finalize")} disabled={deciding}
+                            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                          >
+                            {deciding && <Loader2 className="w-3 h-3 animate-spin" />} Finalize Offboarding
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {canOffboard && offboardable && (
                     <button
                       onClick={() => setOffboardTarget(selected)}
                       className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10"
