@@ -26,6 +26,7 @@ import recruitmentHireRoutes from './routes/recruitmentHire.ts';
 import offboardingRoutes from './routes/offboarding.ts';
 import onboardingRoutes from './routes/onboarding.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
+import { startCalendarScheduler } from './calendar/scheduler.ts';
 import { config } from 'dotenv';
 
 config()
@@ -72,6 +73,7 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 const server = app.listen(PORT, () => {
   console.log(`✅ Express server running on http://localhost:${PORT}`);
   startSheetsScheduler();
+  startCalendarScheduler();
 });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
