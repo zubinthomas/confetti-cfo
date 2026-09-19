@@ -524,4 +524,5 @@ export async function deleteReservation(id: string) {
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
   await db.delete(schema.reservations).where(eq(schema.reservations.id, id));
   await releaseMergeForTable(existing.tableId);
+  return existing;
 }

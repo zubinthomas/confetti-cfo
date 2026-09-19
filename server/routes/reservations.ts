@@ -11,6 +11,24 @@ import {
   extendReservation, rescheduleReservation, endReservationEarly,
 } from '../db/reservations.ts';
 import { TableMergeError, listActiveMerges, createMerge, releaseMerge } from '../db/tableMerges.ts';
+import { pushReservationEvent, deleteReservationEvent, claimAppAuthority } from '../calendar/sync.ts';
+import type { schema } from '../db/client.ts';
+
+type ReservationRow = typeof schema.reservations.$inferSelect;
+
+// Push after any in-app mutation. Reservations pulled in from Calendar
+// start Calendar-authoritative (see schema.ts) - the first in-app edit
+// claims app authority before pushing, per the conflict rule in
+// server/calendar/sync.ts. Never blocks the response: pushReservationEvent
+// itself never throws.
+async function syncAfterMutation(row: ReservationRow): Promise<ReservationRow> {
+  if (row.calendarAuthoritative) {
+    await claimAppAuthority(row.id);
+    row = { ...row, calendarAuthoritative: false };
+  }
+  await pushReservationEvent(row);
+  return row;
+}
 
 const router = Router();
 router.use(authMiddleware);
@@ -177,6 +195,7 @@ router.post('/', requirePermission('Reservation', 'write'), async (req: AuthedRe
     const row = await createReservation(req.user!.id, {
       tableId, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes,
     });
+    await pushReservationEvent(row);
     res.status(201).json(row);
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
@@ -187,7 +206,7 @@ router.patch('/:id/status', requirePermission('Reservation', 'write'), async (re
   try {
     const { status: newStatus } = req.body ?? {};
     if (typeof newStatus !== 'string') return res.status(400).json({ message: 'status is required' });
-    res.json(await updateReservationStatus(req.params.id, newStatus));
+    res.json(await syncAfterMutation(await updateReservationStatus(req.params.id, newStatus)));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -197,7 +216,7 @@ router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (re
   try {
     const { durationMinutes } = req.body ?? {};
     if (typeof durationMinutes !== 'number') return res.status(400).json({ message: 'durationMinutes must be a number' });
-    res.json(await extendReservation(req.params.id, { durationMinutes }));
+    res.json(await syncAfterMutation(await extendReservation(req.params.id, { durationMinutes })));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -209,7 +228,7 @@ router.patch('/:id/reschedule', requirePermission('Reservation', 'write'), async
     if (durationMinutes !== undefined && typeof durationMinutes !== 'number') {
       return res.status(400).json({ message: 'durationMinutes must be a number' });
     }
-    res.json(await rescheduleReservation(req.params.id, { date, time, durationMinutes }));
+    res.json(await syncAfterMutation(await rescheduleReservation(req.params.id, { date, time, durationMinutes })));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -217,7 +236,7 @@ router.patch('/:id/reschedule', requirePermission('Reservation', 'write'), async
 
 router.patch('/:id/end-early', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    res.json(await endReservationEarly(req.params.id));
+    res.json(await syncAfterMutation(await endReservationEarly(req.params.id)));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -225,7 +244,8 @@ router.patch('/:id/end-early', requirePermission('Reservation', 'write'), async 
 
 router.delete('/:id', requirePermission('Reservation', 'delete'), async (req: AuthedRequest, res) => {
   try {
-    await deleteReservation(req.params.id);
+    const deleted = await deleteReservation(req.params.id);
+    if (deleted) await deleteReservationEvent(deleted);
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });

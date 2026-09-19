@@ -258,7 +258,7 @@ export const passwordResetTokens = pgTable('password_reset_tokens', {
 // server/routes/settings.ts. Doesn't drive runtime config yet, process.env
 // still does; this is a display/audit copy populated by db/seed-settings.ts) ─
 export const settingCategoryEnum = pgEnum('setting_category', [
-  'server', 'security', 'llm', 'google_oauth', 'google_sheets', 'email',
+  'server', 'security', 'llm', 'google_oauth', 'google_sheets', 'email', 'google_calendar',
 ]);
 
 export const settings = pgTable('settings', {
@@ -745,6 +745,19 @@ export const reservations = pgTable('reservations', {
   seatedAt: text('seated_at'),      // ISO-8601, set when the party is actually seated
   departedAt: text('departed_at'),  // ISO-8601, set by endReservationEarly / Free table
   createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Google Calendar sync (server/calendar/) - the linked event's id, if any.
+  // Null for a reservation that's never been pushed (Calendar not
+  // configured, or the push itself failed - sync is best-effort and never
+  // blocks a reservation mutation, see server/calendar/sync.ts).
+  googleEventId: text('google_event_id'),
+  // true only for a reservation that was pulled in from an externally-
+  // created Calendar event and has not yet been touched by any in-app
+  // mutation - while true, a later edit to that Calendar event overwrites
+  // this row on the next pull (Calendar-authoritative). Any in-app mutation
+  // route flips this to false, after which the row is app-authoritative
+  // like any other reservation and pushes overwrite Calendar instead. See
+  // the plan's conflict rule in server/calendar/sync.ts.
+  calendarAuthoritative: boolean('calendar_authoritative').notNull().default(false),
 });
 
 // ── Guest sign-in register (Sienna front-of-house) ────────────────────────

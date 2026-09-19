@@ -38,6 +38,10 @@ export const SETTINGS_CATALOG: SettingDef[] = [
   { key: 'SHEETS_SYNC_INTERVAL_MINUTES', category: 'google_sheets', label: 'Sync interval (minutes)', description: 'Minutes between automatic syncs of enabled sheet sources. 0 disables.' },
   { key: 'SHEETS_EXPORT_BASE_URL', category: 'google_sheets', label: 'Export base URL override', description: 'Test hook - points sheet export requests at a local fixture server.' },
 
+  { key: 'GOOGLE_CALENDAR_ID', category: 'google_calendar', label: 'Calendar ID', description: 'Which Google Calendar to sync reservations with (e.g. a calendar ID or "primary"). Reuses the same service account credentials as Google Sheets.' },
+  { key: 'GOOGLE_CALENDAR_DEFAULT_TABLE_ID', category: 'google_calendar', label: 'Default table for pulled events', description: 'A Calendar event pulled in with no recognizable table gets booked onto this table.' },
+  { key: 'CALENDAR_SYNC_INTERVAL_MINUTES', category: 'google_calendar', label: 'Pull interval (minutes)', description: 'Minutes between automatic pulls of new/changed Calendar events. 0 disables.' },
+
   { key: 'SMTP_HOST', category: 'email', label: 'SMTP host' },
   { key: 'SMTP_PORT', category: 'email', label: 'SMTP port' },
   { key: 'SMTP_USER', category: 'email', label: 'SMTP user' },
