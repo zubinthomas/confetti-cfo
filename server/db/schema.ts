@@ -242,6 +242,18 @@ export const invitePermissions = pgTable('invite_permissions', {
   uniqueIndex('invite_permissions_invite_permission').on(t.inviteId, t.permissionId),
 ]);
 
+// ── Password reset tokens (forgot-password flow - see routes/auth.ts) ──────
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: text('token').notNull(),
+  createdAt: text('created_at').notNull(),  // ISO-8601
+  expiresAt: text('expires_at').notNull(),  // ISO-8601
+  usedAt: text('used_at'),
+}, (t) => [
+  uniqueIndex('password_reset_tokens_token').on(t.token),
+]);
+
 // ── Settings (mirrors server/.env; read-only via the API for now - see
 // server/routes/settings.ts. Doesn't drive runtime config yet, process.env
 // still does; this is a display/audit copy populated by db/seed-settings.ts) ─
