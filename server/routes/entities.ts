@@ -11,6 +11,7 @@ import { getManagedEmployeeIds } from '../db/managerScope.ts';
 const MANAGER_SCOPE_FIELD: Record<string, string> = {
   Employee: 'id',
   PayrollRecord: 'employee_id',
+  LeaveRequest: 'employee_id',
 };
 
 const router = Router();

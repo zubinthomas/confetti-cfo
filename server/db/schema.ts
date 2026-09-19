@@ -560,6 +560,11 @@ export const leaveRequests = pgTable('leave_requests', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
   employeeName: text('employee_name'),
+  // Real FK counterpart to employeeName (nullable so existing free-text rows
+  // keep working) - lets this table be registered for manager-scoping
+  // (server/db.ts's MANAGER_SCOPE_COLUMN) so only an employee's own manager
+  // chain, or Admin, can approve/reject their leave request.
+  employeeId: text('employee_id').references(() => employees.id, { onDelete: 'set null' }),
   division: text('division'),
   leaveType: text('leave_type'),
   fromDate: text('from_date'),

@@ -68,6 +68,7 @@ function toApiShape(table: AnyPgTable, row: Record<string, unknown>) {
 const MANAGER_SCOPE_COLUMN: Record<string, string> = {
   Employee: 'id',
   PayrollRecord: 'employeeId',
+  LeaveRequest: 'employeeId',
 };
 
 /** `divisionScope` and `managedIds`, each independently and when non-empty,

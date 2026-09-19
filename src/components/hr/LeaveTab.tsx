@@ -7,7 +7,7 @@ import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "./FormField";
 import SearchableSelect from "@/components/SearchableSelect";
 
-const EMPTY = { employee_name: "", division: "", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
+const EMPTY = { employee_id: "", employee_name: "", division: "", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
 
 const statusMap: Record<string, "green" | "amber" | "red"> = { Approved: "green", Pending: "amber", Rejected: "red" };
 
@@ -72,12 +72,12 @@ export default function LeaveTab() {
 
   const updateField = (name: string, value: string) => setForm(f => ({ ...f, [name]: value }));
 
-  // Selecting an employee auto-fills their division - no manual entry needed.
-  // Matched by full_name (LeaveRequest stores plain employee_name/division
-  // strings, not a foreign key) - two employees sharing an exact full name
-  // would be ambiguous here; a real id-based link would need a schema change.
+  // Selecting an employee auto-fills their division and sets employee_id
+  // (the real FK) alongside the display employee_name - employee_id is what
+  // gates approve/reject/edit to the employee's own manager chain server-side
+  // (see server/routes/entities.ts's MANAGER_SCOPE_FIELD).
   const handleEmployeeChange = (value: string, emp: any | undefined) => {
-    setForm(f => ({ ...f, employee_name: value, division: emp?.division ?? "" }));
+    setForm(f => ({ ...f, employee_name: value, employee_id: emp?.id ?? "", division: emp?.division ?? "" }));
   };
 
   const pending = leaves.filter(l => l.status === "Pending").length;
