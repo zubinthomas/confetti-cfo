@@ -16,6 +16,7 @@ import PageNotFound from '@/lib/PageNotFound';
 import RequirePermission from '@/components/RequirePermission';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import OverviewTab from '@/components/dashboard/OverviewTab';
+import RoadmapPage from '@/components/dashboard/RoadmapPage';
 import SiennaTab from '@/components/dashboard/SiennaTab';
 import StoreTab from '@/components/dashboard/StoreTab';
 import CashFlowTab from '@/components/dashboard/CashFlowTab';
@@ -112,6 +113,9 @@ export default function DashboardApp() {
 
         {/* No backend resource is read on this page - open to any authenticated user */}
         <Route path="settings/user" element={<UserSettingsPage />} />
+
+        {/* Roadmap is not RBAC-gated yet - open to any authenticated user, see server/routes/roadmap.ts */}
+        <Route path="roadmap" element={<RoadmapPage />} />
 
         <Route element={<RequirePermission requires={[{ resource: 'Operations', action: 'read' }]} />}>
           <Route path="ops/:section" element={<OpsPage />} />

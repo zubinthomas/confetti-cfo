@@ -1,0 +1,103 @@
+{
+  "items": [
+    {
+      "id": "password-reset-emails",
+      "title": "Forgot / reset password emails",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Requesting a reset creates a short-lived token and emails a real reset link via SMTP; completing it validates and consumes the token."
+    },
+    {
+      "id": "offboarding-approval-workflow",
+      "title": "Offboarding approval workflow",
+      "area": "HR",
+      "status": "completed",
+      "description": "Submit -> manager approval/rejection -> finalize, with a real settlement amount and auto-deactivation of the linked login on finalize."
+    },
+    {
+      "id": "leave-manager-scope",
+      "title": "Manager-approval scoping for leave requests",
+      "area": "HR",
+      "status": "completed",
+      "description": "Leave requests carry a real employee link, so only a requester's own manager chain (or an unscoped HR/Admin account) can approve or edit one."
+    },
+    {
+      "id": "onboarding-stage-tracking",
+      "title": "Onboarding stage tracking",
+      "area": "HR",
+      "status": "completed",
+      "description": "A 5-stage checklist per new hire; completing the final stage activates the employee automatically."
+    },
+    {
+      "id": "inventory-expiry-batches-po",
+      "title": "Inventory expiry/batch tracking + purchase orders",
+      "area": "Inventory",
+      "status": "completed",
+      "description": "Items can opt into batch/lot tracking with per-batch expiry dates, and purchase orders can be created and received line-by-line."
+    },
+    {
+      "id": "google-calendar-sync",
+      "title": "Google Calendar sync for reservations",
+      "area": "Reservations",
+      "status": "in_progress",
+      "description": "Bidirectional push/pull between reservations and Google Calendar, with app-created bookings always taking priority over Calendar-side edits.",
+      "reason": "Code complete but idle - GOOGLE_CALENDAR_ID isn't set yet, and it hasn't been verified against a real Google Calendar."
+    },
+    {
+      "id": "petpooja-pos-integration",
+      "title": "Reservations <-> petpooja POS integration",
+      "area": "Reservations",
+      "status": "blocked",
+      "description": "A live table-status feed from petpooja's POS, replacing the current manual/derived table-free status.",
+      "reason": "Blocked on petpooja granting API access."
+    },
+    {
+      "id": "district-pos-integration",
+      "title": "Reservations <-> District integration",
+      "area": "Reservations",
+      "status": "blocked",
+      "description": "A second third-party reservations/POS integration, similar in shape to petpooja.",
+      "reason": "Blocked on District granting API access; explicitly lower priority than petpooja."
+    },
+    {
+      "id": "inventory-qr-codes",
+      "title": "Inventory QR codes",
+      "area": "Inventory",
+      "status": "blocked",
+      "description": "QR-code generation/scanning for inventory items.",
+      "reason": "Not yet scoped or scheduled."
+    },
+    {
+      "id": "hrms-biometric-integration",
+      "title": "HRMS biometric attendance integration",
+      "area": "HR",
+      "status": "blocked",
+      "description": "Pulling attendance/punch data from the client's biometric system into the HR module.",
+      "reason": "Blocked on the client sharing the biometric sheet/system details."
+    },
+    {
+      "id": "org-chart",
+      "title": "Org chart visualization",
+      "area": "HR",
+      "status": "blocked",
+      "description": "A visual org chart built from the existing manager-hierarchy data.",
+      "reason": "Blocked on the client sharing the org chart to validate against."
+    },
+    {
+      "id": "factory-cctv",
+      "title": "Factory visibility (CCTV / facial recognition)",
+      "area": "Operations",
+      "status": "blocked",
+      "description": "Camera-based production/attendance tracking for the factory floor.",
+      "reason": "Blocked on the client deciding camera counts and plans."
+    },
+    {
+      "id": "riko-integration",
+      "title": "Riko chat/workflows integration",
+      "area": "Operations",
+      "status": "blocked",
+      "description": "Connecting Riko's chat/workflow product into the dashboard.",
+      "reason": "Blocked on Riko replying about API access."
+    }
+  ]
+}

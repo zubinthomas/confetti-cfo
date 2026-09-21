@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
-  MenuIcon, X, Plus,
+  MenuIcon, X, Plus, Map,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
 import { useAuth } from "@/lib/AuthContext";
@@ -23,7 +23,10 @@ const EXTRA_TITLES: Record<string, string> = {
 const NAV_SECTIONS = [
   {
     title: null,
-    items: [{ to: "/", label: "Overview", icon: LayoutDashboard, end: true }],
+    items: [
+      { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+      { to: "/roadmap", label: "Roadmap", icon: Map, end: true },
+    ],
   },
   {
     title: "F&B",
