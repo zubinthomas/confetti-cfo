@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
-  MenuIcon, X, Plus, Map,
+  MenuIcon, X, Plus,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
 import { useAuth } from "@/lib/AuthContext";
@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/AuthContext";
 // Routes not shown in NAV_SECTIONS (relocated into the header/user menu) but
 // that still need a header title/subtitle.
 const EXTRA_TITLES: Record<string, string> = {
+  "/roadmap": "Roadmap",
   "/data/import": "Import Workbooks",
   "/data/tally": "Tally Integration",
   "/settings": "General Settings",
@@ -25,7 +26,6 @@ const NAV_SECTIONS = [
     title: null,
     items: [
       { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-      { to: "/roadmap", label: "Roadmap", icon: Map, end: true },
     ],
   },
   {
