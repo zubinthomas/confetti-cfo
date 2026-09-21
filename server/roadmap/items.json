@@ -4,8 +4,9 @@
       "id": "password-reset-emails",
       "title": "Forgot / reset password emails",
       "area": "Admin",
-      "status": "completed",
-      "description": "Requesting a reset creates a short-lived token and emails a real reset link via SMTP; completing it validates and consumes the token."
+      "status": "blocked",
+      "description": "Requesting a reset creates a short-lived token and emails a real reset link via SMTP; completing it validates and consumes the token.",
+      "reason": "Code complete but idle - no SMTP account is configured (SMTP_HOST/PORT/USER/PASS), so reset requests are silently logged instead of emailed."
     },
     {
       "id": "offboarding-approval-workflow",
@@ -98,6 +99,169 @@
       "status": "blocked",
       "description": "Connecting Riko's chat/workflow product into the dashboard.",
       "reason": "Blocked on Riko replying about API access."
+    },
+    {
+      "id": "rejection-qc",
+      "title": "Rejection & QC",
+      "area": "Operations",
+      "status": "blocked",
+      "description": "Rejection percentage by department and batch, defect-reason Pareto, and department-wise defect counts over time.",
+      "reason": "No QC/rejection data exists in any imported source yet - blocked on that data being captured somewhere (spreadsheet or direct entry)."
+    },
+    {
+      "id": "orders-dispatch",
+      "title": "Orders & Dispatch",
+      "area": "Operations",
+      "status": "blocked",
+      "description": "Open client order status, delayed SKUs and days overdue, and ready stock available for dispatch.",
+      "reason": "No order/dispatch data exists in any imported source yet - blocked on that data being captured somewhere (spreadsheet or direct entry)."
+    },
+    {
+      "id": "fy-selectors-across-dashboards",
+      "title": "Fiscal-year selectors across dashboard pages",
+      "area": "Finance",
+      "status": "completed",
+      "description": "Store, F&B, Cash Flow, Crafts and Overview pages each get a fiscal-year chiclet selector in place of a fixed year, including a self-upgrading selector on Overview; the old static FY in the sidebar was removed."
+    },
+    {
+      "id": "cafe-weekly-pnl-events",
+      "title": "Cafe P&L at weekly granularity, with event sales",
+      "area": "Finance",
+      "status": "completed",
+      "description": "The pre-split Cafe P&L moved from monthly to weekly granularity, whole-cafe weekly event sales were added to the Events page, the Cafe parser's Total-column reconciliation was extended to match, and e2e fidelity tests cover the new granularity."
+    },
+    {
+      "id": "fy-targets-and-revenue-history",
+      "title": "FY26-27 targets vs. projection, with multi-year revenue history",
+      "area": "Finance",
+      "status": "completed",
+      "description": "FY Target Plan as an import kind, a Target vs Projection view and multi-year revenue comparison on Store and F&B, a combined Store + F&B targets tab on Overview, and FY-total figures promoted to KPI cards."
+    },
+    {
+      "id": "fnb-pnl-imports",
+      "title": "F&B P&L imports: weekly and monthly",
+      "area": "Finance",
+      "status": "completed",
+      "description": "F&B Weekly P&L import with venue/item drill-down on /fnb, and Monthly F&B P&L as a second import kind."
+    },
+    {
+      "id": "tally-integration",
+      "title": "Tally integration: automated P&L sync",
+      "area": "Finance",
+      "status": "completed",
+      "description": "A Rust agent pushes month and week period P&L values from Tally into the dashboard automatically; packaged as a Windows Service and verified running on real hardware."
+    },
+    {
+      "id": "excel-importer",
+      "title": "In-app Excel importer",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Upload a workbook, preview its validation results, and commit the import transactionally, without a manual database step."
+    },
+    {
+      "id": "google-sheets-sync",
+      "title": "Google Sheets sync",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Connect a Google Sheet from a Drive picker or a pasted URL; saved sources re-sync automatically into review batches."
+    },
+    {
+      "id": "import-review-tooling",
+      "title": "Import review and batch management",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Sync modes (auto-commit, manual review, paused), a sync-mode selector with batch filters/pagination/hiding discarded batches, flagging unlabeled hand-typed values as errors, and a full change-details modal per batch."
+    },
+    {
+      "id": "rbac",
+      "title": "Role-based access control",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Roles and granular permissions gate every page, including the Operations pages; a standalone Roles page was later merged into Users and Permissions, and role rank was inverted so the lowest number wins a conflict."
+    },
+    {
+      "id": "user-invites-and-management",
+      "title": "User invites and account management",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Invite-based account creation, a user-management UI to deactivate/live-revoke/edit roles and permissions, invited users merged into the Users page, and a CLI to create, list, and reset accounts now that open registration is disabled."
+    },
+    {
+      "id": "settings-and-llm-provider",
+      "title": "Settings page and configurable LLM provider",
+      "area": "Admin",
+      "status": "completed",
+      "description": "A read-only settings page backed by a settings table, and an OpenRouter LLM provider option with configurable MAX_TOKENS for AI Queries."
+    },
+    {
+      "id": "dark-theme-nav-redesign",
+      "title": "Dark theme and navigation redesign",
+      "area": "Admin",
+      "status": "completed",
+      "description": "Dark theme, a user menu, and a restructured header/sidebar navigation."
+    },
+    {
+      "id": "employee-self-service",
+      "title": "Employee self-service portal",
+      "area": "HR",
+      "status": "completed",
+      "description": "Employees log in to see their own department roster and generate their salary slips and ID cards."
+    },
+    {
+      "id": "manager-scoped-employee-mgmt",
+      "title": "Manager-scoped employee management and real department structure",
+      "area": "HR",
+      "status": "completed",
+      "description": "Department heads manage only their own division's employees, division-scoped and later re-based on the real department taxonomy in place of the earlier 4-value division field."
+    },
+    {
+      "id": "applicant-hire-and-payslip",
+      "title": "Applicant-to-employee hire flow and payslip detail",
+      "area": "HR",
+      "status": "completed",
+      "description": "Convert a job applicant directly into an employee record, and view full payslip detail per employee."
+    },
+    {
+      "id": "hr-document-slots",
+      "title": "HR document slots",
+      "area": "HR",
+      "status": "completed",
+      "description": "Aadhar, PAN, Offer Letter, and internal document upload slots on the employee record."
+    },
+    {
+      "id": "hr-mastersheet-and-headcount",
+      "title": "HR Mastersheet import and headcount tools",
+      "area": "HR",
+      "status": "completed",
+      "description": "The HR Mastersheet as an Excel-import kind, with filtering and sorting on the Headcount tab."
+    },
+    {
+      "id": "dept-scoped-inventory",
+      "title": "Department-scoped inventory management",
+      "area": "Inventory",
+      "status": "completed",
+      "description": "Inventory items and stock scoped per department."
+    },
+    {
+      "id": "reservations-foundation",
+      "title": "Reservation management for the Cafe and Restaurant",
+      "area": "Reservations",
+      "status": "completed",
+      "description": "Table and seat reservations for the Cafe and Restaurant - the foundation the guest register and table-merging work below builds on."
+    },
+    {
+      "id": "guest-register-and-table-merging",
+      "title": "Guest register, editable bookings, and table merging",
+      "area": "Reservations",
+      "status": "completed",
+      "description": "A guest register (open by default), editable bookings, and table merging with per-table merge targets and a free-merge flag, refined for clarity and to keep the day view in sync after seating."
+    },
+    {
+      "id": "ops-dashboard",
+      "title": "Operations dashboard: production, kiln & energy, and labour",
+      "area": "Operations",
+      "status": "completed",
+      "description": "Daily production, kiln & energy, and labour efficiency views built on newly imported production-log and shift-roster data, each scoped to a fiscal year."
     }
   ]
 }
