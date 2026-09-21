@@ -10,6 +10,7 @@ import { db, ready, schema } from './client.ts';
 export interface DailyStageOutput { date: string; stage: string; qty: number }
 export interface DailyKilnLoad { date: string; kiln: string }
 export interface DailyFiringType { date: string; firingType: string }
+export interface DailyProductOutput { date: string; stage: string; productName: string; qty: number }
 export interface ProductionKpis {
   totalPieces: number;
   daysCovered: number;
@@ -86,6 +87,25 @@ export async function dailyFiringTypes(): Promise<DailyFiringType[]> {
   for (const r of rows) {
     if (r.stage !== 'firing' || !r.firingType || !r.date) continue;
     result.push({ date: r.date, firingType: r.firingType });
+  }
+  return result.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** One row per production_log record with a product name, date-tagged so
+ *  the frontend can scope to a fiscal year and group by item. Uses the same
+ *  per-row qty rule as dailyProductionByStage (throwing sums throwingQty +
+ *  turningQty, every other stage uses qty) - a piece that passes through
+ *  multiple logged stages contributes at each one, same as the Production
+ *  page's "Total Pieces" KPI. Product names are free text; normalizing
+ *  near-duplicates (case/whitespace) for grouping is left to the frontend. */
+export async function dailyProductionByItem(): Promise<DailyProductOutput[]> {
+  await ready();
+  const rows = await db.select().from(schema.productionLog);
+  const result: DailyProductOutput[] = [];
+  for (const r of rows) {
+    if (!r.date || !r.productName) continue;
+    const qty = r.stage === 'throwing' ? (r.throwingQty ?? 0) + (r.turningQty ?? 0) : (r.qty ?? 0);
+    result.push({ date: r.date, stage: r.stage, productName: r.productName, qty });
   }
   return result.sort((a, b) => a.date.localeCompare(b.date));
 }

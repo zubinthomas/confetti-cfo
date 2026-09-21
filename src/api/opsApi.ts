@@ -16,6 +16,9 @@ export interface DailyKilnLoad { date: string; kiln: string }
 export interface DailyFiringType { date: string; firingType: string }
 export interface KilnSummary { kilnLoads: DailyKilnLoad[]; firingTypes: DailyFiringType[] }
 
+export interface DailyProductOutput { date: string; stage: string; productName: string; qty: number }
+export interface ItemsSummary { items: DailyProductOutput[] }
+
 export interface CoverageByArea { date: string; functionalArea: string; count: number }
 export interface WeeklyOffCount { weeklyOffDay: string; count: number }
 export interface LabourSummary {
@@ -27,4 +30,5 @@ export interface LabourSummary {
 
 export const getProductionSummary = () => get<ProductionSummary>("/ops/production-summary");
 export const getKilnSummary = () => get<KilnSummary>("/ops/kiln-summary");
+export const getItemsSummary = () => get<ItemsSummary>("/ops/items-summary");
 export const getLabourSummary = (week?: string) => get<LabourSummary>(`/ops/labour-summary${week ? `?week=${encodeURIComponent(week)}` : ""}`);

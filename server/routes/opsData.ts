@@ -4,7 +4,7 @@
 // to feed them, not a general-purpose data surface.
 import { Router } from 'express';
 import { authMiddleware, requirePermission } from '../middleware/auth.ts';
-import { dailyProductionByStage, productionKpis, dailyKilnLoads, dailyFiringTypes } from '../db/productionLog.ts';
+import { dailyProductionByStage, productionKpis, dailyKilnLoads, dailyFiringTypes, dailyProductionByItem } from '../db/productionLog.ts';
 import { coverageByFunctionalArea, weeklyOffDistribution, availableWeeks } from '../db/shiftRoster.ts';
 
 const router = Router();
@@ -21,6 +21,11 @@ router.get('/production-summary', async (_req, res) => {
 router.get('/kiln-summary', async (_req, res) => {
   const [kilnLoads, firingTypes] = await Promise.all([dailyKilnLoads(), dailyFiringTypes()]);
   res.json({ kilnLoads, firingTypes });
+});
+
+/** GET /api/ops/items-summary */
+router.get('/items-summary', async (_req, res) => {
+  res.json({ items: await dailyProductionByItem() });
 });
 
 /** GET /api/ops/labour-summary?week=YYYY-MM-DD */

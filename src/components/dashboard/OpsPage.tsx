@@ -4,7 +4,8 @@ import DashCard from "./DashCard";
 import ProductionOpsSection from "./ops/ProductionOpsSection";
 import KilnEnergyOpsSection from "./ops/KilnEnergyOpsSection";
 import LabourOpsSection from "./ops/LabourOpsSection";
-import { ClipboardList, ShieldAlert, Flame, HardHat, Truck, Database } from "lucide-react";
+import ItemsProducedSection from "./ops/ItemsProducedSection";
+import { ClipboardList, ShieldAlert, Flame, HardHat, Truck, Database, Package } from "lucide-react";
 
 // The five manager views from the "Manager Dashboard Format" brief.
 // production/kiln-energy/labour are backed by the imported production log +
@@ -23,6 +24,7 @@ interface OpsSection {
 
 const SECTIONS: Record<string, OpsSection> = {
   production: { icon: ClipboardList, title: "Daily Production" },
+  items: { icon: Package, title: "Items Produced" },
   quality: {
     icon: ShieldAlert,
     title: "Rejection & QC",
@@ -49,6 +51,7 @@ const SECTIONS: Record<string, OpsSection> = {
 
 const REAL_SECTIONS: Record<string, React.ComponentType> = {
   production: ProductionOpsSection,
+  items: ItemsProducedSection,
   "kiln-energy": KilnEnergyOpsSection,
   labour: LabourOpsSection,
 };

@@ -66,6 +66,7 @@ const NAV_SECTIONS = [
     title: "Operations",
     items: [
       { to: "/ops/production", label: "Daily Production", icon: ClipboardList },
+      { to: "/ops/items", label: "Items Produced", icon: Package },
       { to: "/ops/quality", label: "Rejection & QC", icon: ShieldAlert },
       { to: "/ops/kiln-energy", label: "Kiln & Energy", icon: Flame },
       { to: "/ops/labour", label: "Labour Efficiency", icon: HardHat },
