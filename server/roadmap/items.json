@@ -40,9 +40,9 @@
       "id": "google-calendar-sync",
       "title": "Google Calendar sync for reservations",
       "area": "Reservations",
-      "status": "in_progress",
+      "status": "blocked",
       "description": "Bidirectional push/pull between reservations and Google Calendar, with app-created bookings always taking priority over Calendar-side edits.",
-      "reason": "Code complete but idle - GOOGLE_CALENDAR_ID isn't set yet, and it hasn't been verified against a real Google Calendar."
+      "reason": "Code complete but idle. The Calendar API is enabled and the service account authenticates fine, but it currently has access to zero calendars - blocked on a calendar being shared with cep-sync@confetti-exports.iam.gserviceaccount.com (Calendar sharing settings, \"Make changes to events\" access), after which GOOGLE_CALENDAR_ID can be set."
     },
     {
       "id": "petpooja-pos-integration",
