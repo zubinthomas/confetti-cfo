@@ -1,30 +1,28 @@
 import React from "react";
 import { useParams, Navigate } from "react-router-dom";
 import DashCard from "./DashCard";
+import ProductionOpsSection from "./ops/ProductionOpsSection";
+import KilnEnergyOpsSection from "./ops/KilnEnergyOpsSection";
+import LabourOpsSection from "./ops/LabourOpsSection";
 import { ClipboardList, ShieldAlert, Flame, HardHat, Truck, Database } from "lucide-react";
 
-// The five manager views from the "Manager Dashboard Format" brief. No data
-// source is connected for these yet (the current extracts cover P&L and store
-// sales only), so each page documents what it will show once production /
-// QC / dispatch data is captured.
+// The five manager views from the "Manager Dashboard Format" brief.
+// production/kiln-energy/labour are backed by the imported production log +
+// shift roster (server/routes/opsData.ts) - see REAL_SECTIONS below.
+// quality/orders have no data source at all yet (no QC/dispatch data exists
+// in any imported source), so they stay the placeholder card.
 interface OpsSection {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
-  shows: string;
-  metrics: string[];
+  // Only the still-placeholder sections (quality/orders) render these -
+  // production/kiln-energy/labour have their own real components (see
+  // REAL_SECTIONS below) with their own "available now" copy instead.
+  shows?: string;
+  metrics?: string[];
 }
 
 const SECTIONS: Record<string, OpsSection> = {
-  production: {
-    icon: ClipboardList,
-    title: "Daily Production",
-    shows: "Target vs actual output by department",
-    metrics: [
-      "Daily production target per department (Pottery, Batik, Stitching)",
-      "Actual pieces produced vs target",
-      "Variance trend by week and department",
-    ],
-  },
+  production: { icon: ClipboardList, title: "Daily Production" },
   quality: {
     icon: ShieldAlert,
     title: "Rejection & QC",
@@ -35,26 +33,8 @@ const SECTIONS: Record<string, OpsSection> = {
       "Department-wise defect counts over time",
     ],
   },
-  "kiln-energy": {
-    icon: Flame,
-    title: "Kiln & Energy",
-    shows: "Kiln loads, firing success, electricity/gas per piece",
-    metrics: [
-      "Kiln loads per day and utilisation",
-      "Firing success rate",
-      "Electricity & gas consumption per piece",
-    ],
-  },
-  labour: {
-    icon: HardHat,
-    title: "Labour Efficiency",
-    shows: "Output per person per day, absenteeism, training needs",
-    metrics: [
-      "Output per person per day by department",
-      "Absenteeism rate (ties into the HR module)",
-      "Training needs flagged by supervisors",
-    ],
-  },
+  "kiln-energy": { icon: Flame, title: "Kiln & Energy" },
+  labour: { icon: HardHat, title: "Labour Efficiency" },
   orders: {
     icon: Truck,
     title: "Orders & Dispatch",
@@ -67,11 +47,29 @@ const SECTIONS: Record<string, OpsSection> = {
   },
 };
 
+const REAL_SECTIONS: Record<string, React.ComponentType> = {
+  production: ProductionOpsSection,
+  "kiln-energy": KilnEnergyOpsSection,
+  labour: LabourOpsSection,
+};
+
 export default function OpsPage() {
   const { section } = useParams();
   const cfg = section ? SECTIONS[section] : undefined;
   if (!cfg) return <Navigate to="/" replace />;
   const Icon = cfg.icon;
+
+  const RealSection = section ? REAL_SECTIONS[section] : undefined;
+  if (RealSection) {
+    return (
+      <div className="space-y-6">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Operations - Manager Dashboard · {cfg.title}
+        </p>
+        <RealSection />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -95,7 +93,7 @@ export default function OpsPage() {
 
       <DashCard title="This view will show">
         <ul className="space-y-2">
-          {cfg.metrics.map((m: string) => (
+          {(cfg.metrics ?? []).map((m: string) => (
             <li key={m} className="flex items-start gap-2 text-sm text-muted-foreground">
               <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
               {m}
@@ -105,9 +103,9 @@ export default function OpsPage() {
       </DashCard>
 
       <p className="text-xs text-muted-foreground">
-        The current data extracts cover the P&L workbooks and store sales analysis. Once daily
-        production, QC, kiln and dispatch logs are captured (spreadsheet or direct entry), this page
-        can be wired up the same way as the finance views.
+        The current data extracts cover the P&L workbooks and store sales analysis. Once QC and
+        dispatch logs are captured (spreadsheet or direct entry), this page can be wired up the
+        same way as the finance views.
       </p>
     </div>
   );

@@ -17,6 +17,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.ts';
+import { normalizeName } from './nameMatch.ts';
 import type { ParsedEmployeeRecord, RecordChange } from './types.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
@@ -27,7 +28,6 @@ export interface EmployeeMergePlan {
   ops: ((tx: Tx) => Promise<void>)[];
 }
 
-const normalizeName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 const blankToNull = (s: string) => (s ? s : null);
 
 // The sheet-owned columns, in both directions: read off a parsed record to

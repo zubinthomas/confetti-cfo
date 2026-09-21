@@ -838,3 +838,71 @@ export const tableMergeLinks = pgTable('table_merge_links', {
 }, (t) => [
   primaryKey({ columns: [t.tableAId, t.tableBId] }),
 ]);
+
+// ── Production log (Pottery factory floor - see server/import/parseProduction.ts) ──
+// One unified table across all four stages rather than one table per sheet:
+// the dashboard's own queries ("qty by stage/department/date") need the same
+// shape regardless of stage, and the stage-specific columns below are sparse/
+// nullable the same way payrollRecords' optional breakdown columns are.
+// potterName/finisherName are deliberately plain free text, no employee FK -
+// this is a one-off historical load of messier handwritten names, and a wrong
+// match (misattributing production to the wrong person) is worse than an
+// unmatched name; the dashboard only needs department/day aggregates here.
+export const productionStageEnum = pgEnum('production_stage', ['throwing', 'finishing', 'glazing', 'firing']);
+
+export const productionLog = pgTable('production_log', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  stage: productionStageEnum('stage').notNull(),
+  date: text('date').notNull(), // 'YYYY-MM-DD'
+  division: text('division'), // constant 'Pottery' - plugs into existing division scoping
+  orderName: text('order_name'),
+  productName: text('product_name'), // also covers "Finishing of work"
+  qty: doublePrecision('qty'), // finishing/glazing/firing
+  qtyRaw: text('qty_raw'), // preserves unparseable text like "4 pcs"
+  throwingQty: doublePrecision('throwing_qty'), // throwing stage only
+  turningQty: doublePrecision('turning_qty'), // throwing stage only
+  potterName: text('potter_name'), // throwing only
+  finisherName: text('finisher_name'), // finishing only
+  glazeType: text('glaze_type'), // glazing only - normalized {Glaze, Engobe}
+  kiln: text('kiln'), // firing only - normalized {EK1, EK2, EK3, GK1, GK2}
+  firingType: text('firing_type'), // firing only - normalized {Bisque, Glaze, Decal}
+  remarks: text('remarks'),
+  // Which sheet/row this row came from, and the idempotent re-import key -
+  // re-uploading a corrected file updates only the fields that changed.
+  sourceSheet: text('source_sheet').notNull(),
+  sourceRow: integer('source_row').notNull(),
+}, (t) => [
+  uniqueIndex('production_log_source').on(t.sourceSheet, t.sourceRow),
+]);
+
+// ── Shift roster (Pottery/Batik/Admin weekly staffing plan - see
+// server/import/parseRoster.ts) ─────────────────────────────────────────────
+// Tall format (one row per employee per day), matching the reservations/
+// payrollRecords day-level precedent - this is what lets a recurring weekly
+// upload have a clean natural key (employeeName, date) to upsert on, instead
+// of re-parsing and clobbering the source's wide per-week row shape. This is
+// a PLANNED schedule, not an attendance/actuals record.
+export const shiftRoster = pgTable('shift_roster', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  employeeName: text('employee_name').notNull(),
+  // Best-effort normalized-name match against employees, kept alongside the
+  // free-text name so unmatched rows still work - same pattern as
+  // leaveRequests.employeeName/employeeId.
+  employeeId: text('employee_id').references(() => employees.id, { onDelete: 'set null' }),
+  division: text('division'),
+  functionalArea: text('functional_area'),
+  designation: text('designation'),
+  gender: text('gender'),
+  date: text('date').notNull(), // 'YYYY-MM-DD'
+  weekStart: text('week_start').notNull(), // 'YYYY-MM-DD', the Monday from the sheet's title row
+  shiftRaw: text('shift_raw'), // raw cell, e.g. '09:00-17:00' or 'OFF'
+  isOff: boolean('is_off').notNull().default(false),
+  shiftStart: text('shift_start'), // 'HH:MM'
+  shiftEnd: text('shift_end'), // 'HH:MM'
+  breakSlot: text('break_slot'), // denormalized from the employee's per-week constant column
+  weeklyOffDay: text('weekly_off_day'), // denormalized from the employee's per-week constant column
+}, (t) => [
+  uniqueIndex('shift_roster_natural_key').on(t.employeeName, t.date),
+]);

@@ -17,11 +17,11 @@ export interface KpiData {
 
 export default function KpiCard({ label, value, sub = null, status = null }: KpiData) {
   return (
-    <div className="bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-shadow">
+    <div className="min-w-0 bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-shadow">
       <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase mb-1.5">
         {label}
       </p>
-      <p className="text-2xl font-semibold font-heading text-card-foreground leading-tight">
+      <p className="text-2xl font-semibold font-heading text-card-foreground leading-tight break-words">
         {value}
       </p>
       {sub && (

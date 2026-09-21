@@ -44,7 +44,8 @@ export function parseTarget(wb: ExcelJS.Workbook): ParsedWorkbook {
     issues.push({ level: 'error', sheet: '(workbook)', message: 'No "FY<yy>-<yy> Target Plan" sheet found.' });
     return {
       kind: 'target', businessName: '', periods: [], financialRecords: [],
-      salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [], issues,
+      salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
+      productionLogRecords: [], shiftRosterRecords: [], issues,
     };
   }
 
@@ -69,7 +70,8 @@ export function parseTarget(wb: ExcelJS.Workbook): ParsedWorkbook {
     });
     return {
       kind: 'target', businessName: '', periods: [], financialRecords: [],
-      salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [], issues,
+      salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
+      productionLogRecords: [], shiftRosterRecords: [], issues,
     };
   }
 
@@ -116,6 +118,8 @@ export function parseTarget(wb: ExcelJS.Workbook): ParsedWorkbook {
     consignmentRecords: [],
     employeeRecords: [],
     targetRecords: records,
+    productionLogRecords: [],
+    shiftRosterRecords: [],
     issues,
   };
 }

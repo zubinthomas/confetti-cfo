@@ -26,6 +26,8 @@ const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   fnbMonthly: "Monthly F&B P&L",
   fnbWeekly: "Weekly F&B P&L",
   tally: "Tally sync",
+  potteryProduction: "Pottery Production Log",
+  shiftRoster: "Weekly Shift Roster",
 };
 
 const STATUS_STYLE: Record<ImportBatch["status"], string> = {

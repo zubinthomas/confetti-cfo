@@ -49,3 +49,50 @@ export function iso(d: Date): string {
   // exceljs date cells are UTC-based
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
+
+/** Parses a 'DD.MM.YYYY' or 'DD.MM.YY' text cell into 'YYYY-MM-DD', else null.
+ *  Some workbooks (parseProduction/parseRoster's sources) hold dates as plain
+ *  text rather than real Excel date cells, so dateVal/iso don't apply - this
+ *  tries dateVal first in case the cell really is a date, then falls back to
+ *  parsing the string. A few cells in the real Daily Report.xlsx were typed
+ *  as "21.082026" with no thousands/date formatting applied, so Excel stored
+ *  them as the plain number 21.082026 (day 21, then MMYYYY packed into the
+ *  fractional part) rather than text - handled as a third fallback. */
+export function dmy(v: ExcelJS.CellValue): string | null {
+  const d = dateVal(v);
+  if (d) return iso(d);
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const day = Math.trunc(v);
+    const frac = Math.round((v - day) * 1e6);
+    const month = Math.trunc(frac / 10000);
+    const year = frac % 10000;
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1950 && year <= 2100) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    return null;
+  }
+  const s = str(v);
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  let year = Number(m[3]);
+  if (year < 100) year += 2000;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** A per-column forward-fill closure: remembers the last non-null value seen
+ *  and returns it when the current cell is blank. Instantiate one per column
+ *  that actually repeats-down-until-next-value in its source sheet - not
+ *  every column does (see parseProduction.ts's Green Production Order Name,
+ *  which must NOT be filled), so this is opt-in per column rather than a
+ *  blanket "fill everything" pass. */
+export function makeForwardFill<T>(): (v: T | null) => T | null {
+  let last: T | null = null;
+  return (v: T | null) => {
+    if (v !== null) last = v;
+    return last;
+  };
+}

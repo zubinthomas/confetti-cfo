@@ -113,8 +113,54 @@ export interface ParsedTargetRecord {
   amount: number;
 }
 
+// One row of the pottery factory's production log (server/import/
+// parseProduction.ts), across all four stages of Green Production (throwing,
+// finishing) / Glaze Application / Kiln Firing. Matched against existing
+// `production_log` rows by (sourceSheet, sourceRow) - see
+// server/import/mergeProductionLog.ts. Stage-specific fields are null when
+// not applicable to that row's stage.
+export interface ParsedProductionLogRecord {
+  stage: 'throwing' | 'finishing' | 'glazing' | 'firing';
+  date: string | null; // YYYY-MM-DD
+  orderName: string | null;
+  productName: string | null;
+  qty: number | null;
+  qtyRaw: string | null; // preserves unparseable text like "4 pcs"
+  throwingQty: number | null;
+  turningQty: number | null;
+  potterName: string | null;
+  finisherName: string | null;
+  glazeType: string | null;
+  kiln: string | null;
+  firingType: string | null;
+  remarks: string | null;
+  sourceSheet: string;
+  sourceRow: number;
+}
+
+// One employee/day of a weekly shift roster (server/import/parseRoster.ts).
+// One record is emitted per day per employee row in the source (Mon-Sun),
+// matched against existing `shift_roster` rows by (employeeName, date) - see
+// server/import/mergeShiftRoster.ts. This is a planned schedule, not an
+// attendance/actuals record.
+export interface ParsedShiftRosterRecord {
+  employeeName: string;
+  division: string | null;
+  functionalArea: string | null;
+  designation: string | null;
+  gender: string | null;
+  date: string; // YYYY-MM-DD
+  weekStart: string; // YYYY-MM-DD, the Monday from the sheet's title row
+  shiftRaw: string | null;
+  isOff: boolean;
+  shiftStart: string | null; // HH:MM
+  shiftEnd: string | null; // HH:MM
+  breakSlot: string | null;
+  weeklyOffDay: string | null;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
@@ -122,6 +168,8 @@ export interface ParsedWorkbook {
   consignmentRecords: ParsedConsignmentRecord[];
   employeeRecords: ParsedEmployeeRecord[];
   targetRecords: ParsedTargetRecord[];
+  productionLogRecords: ParsedProductionLogRecord[];
+  shiftRosterRecords: ParsedShiftRosterRecord[];
   issues: Issue[];
 }
 

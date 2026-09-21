@@ -204,6 +204,7 @@ export function parseFnbMonthly(wb: ExcelJS.Workbook): ParsedWorkbook {
     periods: [...periods.values()],
     financialRecords: records,
     salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
+    productionLogRecords: [], shiftRosterRecords: [],
     issues,
   };
 }

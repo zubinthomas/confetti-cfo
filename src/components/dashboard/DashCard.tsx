@@ -11,13 +11,13 @@ export default function DashCard({ title = null, action = null, children, classN
   return (
     <div className={`bg-card rounded-xl border border-border p-5 ${className}`}>
       {(title || action) && (
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 mb-4">
           {title && (
             <h3 className="text-sm font-semibold font-heading text-card-foreground">
               {title}
             </h3>
           )}
-          {action && <div className="flex items-center gap-1">{action}</div>}
+          {action && <div className="flex items-center flex-wrap gap-1">{action}</div>}
         </div>
       )}
       {children}

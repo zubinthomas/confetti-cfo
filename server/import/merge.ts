@@ -12,6 +12,8 @@ import { eq, sql } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { classifyLineItem, type ParsedWorkbook, type RecordChange } from './types.ts';
 import { buildEmployeeMergePlan } from './mergeEmployees.ts';
+import { buildProductionLogMergePlan } from './mergeProductionLog.ts';
+import { buildShiftRosterMergePlan } from './mergeShiftRoster.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -32,6 +34,17 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   // alloc() counters), so it gets its own small matcher instead.
   if (parsed.kind === 'hr') {
     const plan = await buildEmployeeMergePlan(parsed.employeeRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // Same reasoning as the 'hr' branch above: neither of these belongs to any
+  // business/unit/period, so each gets its own small matcher instead of the
+  // financial-entity graph below.
+  if (parsed.kind === 'potteryProduction') {
+    const plan = await buildProductionLogMergePlan(parsed.productionLogRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  if (parsed.kind === 'shiftRoster') {
+    const plan = await buildShiftRosterMergePlan(parsed.shiftRosterRecords);
     return { stats: plan.stats, details: plan.details, ops: plan.ops };
   }
   const stats: Record<string, TableStats> = {

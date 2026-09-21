@@ -21,17 +21,8 @@
 // protects.
 import type ExcelJS from 'exceljs';
 import { str, num, dateVal, iso } from './xlsx.ts';
+import { DEPARTMENTS_BY_LOWER } from './departments.ts';
 import type { Issue, ParsedEmployeeRecord, ParsedWorkbook } from './types.ts';
-
-// Duplicated from src/lib/hrDivisions.ts, not imported - server/ has no
-// existing precedent or tsconfig path back into src/ (confirmed before
-// writing this). Keep in sync by hand if the department list changes.
-const DEPARTMENTS = [
-  'Accounts', 'Admin', 'Batik Unit', 'Culinary', 'Driver', 'F&B Services',
-  'Jewellery', 'Legal', 'Marketing', 'Partner', 'Pottery',
-  'Quality Control', 'Retail', 'Tailor', 'Utility',
-];
-const DEPARTMENTS_BY_LOWER = new Map(DEPARTMENTS.map((d) => [d.toLowerCase(), d]));
 
 const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Intern'];
 const EMPLOYMENT_TYPES_BY_LOWER = new Map(EMPLOYMENT_TYPES.map((t) => [t.toLowerCase(), t]));
@@ -110,7 +101,7 @@ export function parseHr(wb: ExcelJS.Workbook): ParsedWorkbook {
   const ws = wb.worksheets.find((w) => findHeaderRow(w) !== null);
   if (!ws) {
     issues.push({ level: 'error', sheet: wb.worksheets[0]?.name ?? '(none)', message: 'no HR Mastersheet header row found' });
-    return { kind: 'hr', businessName: '', periods: [], financialRecords: [], salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [], issues };
+    return { kind: 'hr', businessName: '', periods: [], financialRecords: [], salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], issues };
   }
   const cols = findHeaderRow(ws)!;
   const at = (row: ExcelJS.Row, h: Header) => (cols.has(h) ? row.getCell(cols.get(h)!).value : null);
@@ -203,6 +194,8 @@ export function parseHr(wb: ExcelJS.Workbook): ParsedWorkbook {
     consignmentRecords: [],
     employeeRecords: records,
     targetRecords: [],
+    productionLogRecords: [],
+    shiftRosterRecords: [],
     issues,
   };
 }
