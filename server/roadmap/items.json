@@ -104,17 +104,25 @@
       "id": "rejection-qc",
       "title": "Rejection & QC",
       "area": "Operations",
-      "status": "blocked",
+      "status": "in_progress",
       "description": "Rejection percentage by department and batch, defect-reason Pareto, and department-wise defect counts over time.",
-      "reason": "No QC/rejection data exists in any imported source yet - blocked on that data being captured somewhere (spreadsheet or direct entry)."
+      "reason": "No QC/rejection data exists in any imported source yet, but other sheets that may contain it are currently being reviewed."
     },
     {
       "id": "orders-dispatch",
       "title": "Orders & Dispatch",
       "area": "Operations",
-      "status": "blocked",
+      "status": "in_progress",
       "description": "Open client order status, delayed SKUs and days overdue, and ready stock available for dispatch.",
-      "reason": "No order/dispatch data exists in any imported source yet - blocked on that data being captured somewhere (spreadsheet or direct entry)."
+      "reason": "No order/dispatch data exists in any imported source yet, but other sheets that may contain it are currently being reviewed."
+    },
+    {
+      "id": "daily-report-additional-sheets",
+      "title": "Surface the remaining Daily Report sheets",
+      "area": "Operations",
+      "status": "in_progress",
+      "description": "The Daily Report workbook has two more sheets beyond Kiln Firing, Glaze Application, and Green Production (the three already feeding Daily Production, Items Produced, and Kiln & Energy) that aren't ingested or shown anywhere yet.",
+      "reason": "The two sheets are still being reviewed - what they contain, and which existing view (or a new one) they best fit, isn't decided yet."
     },
     {
       "id": "fy-selectors-across-dashboards",
