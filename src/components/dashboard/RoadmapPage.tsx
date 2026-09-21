@@ -26,9 +26,22 @@ function RoadmapCard({ item }: { item: RoadmapItem }) {
   );
 }
 
+function RoadmapColumnBody({ items }: { items: RoadmapItem[] }) {
+  return (
+    <div className="space-y-3">
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nothing here.</p>
+      ) : (
+        items.map((item) => <RoadmapCard key={item.id} item={item} />)
+      )}
+    </div>
+  );
+}
+
 export default function RoadmapPage() {
   const [items, setItems] = useState<RoadmapItem[] | null>(null);
   const [error, setError] = useState("");
+  const [activeStatus, setActiveStatus] = useState<RoadmapStatus>("completed");
 
   useEffect(() => {
     listRoadmap()
@@ -49,25 +62,45 @@ export default function RoadmapPage() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {COLUMNS.map((col) => {
-        const colItems = items.filter((i) => i.status === col.status);
-        return (
-          <div key={col.status}>
-            <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-sm font-semibold font-heading text-foreground">{col.label}</h3>
-              <StatusBadge status={col.badge}>{colItems.length}</StatusBadge>
+    <>
+      {/* Below md, three side-by-side columns don't fit - swap to a chiclet
+          selector over a single column instead of stacking all three. */}
+      <div className="md:hidden space-y-4">
+        <div className="flex gap-1.5">
+          {COLUMNS.map((col) => {
+            const count = items.filter((i) => i.status === col.status).length;
+            return (
+              <button
+                key={col.status}
+                onClick={() => setActiveStatus(col.status)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  col.status === activeStatus
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {col.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+        <RoadmapColumnBody items={items.filter((i) => i.status === activeStatus)} />
+      </div>
+
+      <div className="hidden md:grid md:grid-cols-3 gap-4">
+        {COLUMNS.map((col) => {
+          const colItems = items.filter((i) => i.status === col.status);
+          return (
+            <div key={col.status}>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold font-heading text-foreground">{col.label}</h3>
+                <StatusBadge status={col.badge}>{colItems.length}</StatusBadge>
+              </div>
+              <RoadmapColumnBody items={colItems} />
             </div>
-            <div className="space-y-3">
-              {colItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nothing here.</p>
-              ) : (
-                colItems.map((item) => <RoadmapCard key={item.id} item={item} />)
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
