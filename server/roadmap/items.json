@@ -1,6 +1,14 @@
 {
   "items": [
     {
+      "id": "tally-integration",
+      "title": "Tally integration: automated P&L sync",
+      "area": "Finance",
+      "status": "blocked",
+      "description": "A Rust agent pushes month and week period P&L values from Tally into the dashboard automatically, packaged as a Windows Service.",
+      "reason": "Built but not tested or deployed - waiting on authorization before it's tried against a real Tally installation."
+    },
+    {
       "id": "password-reset-emails",
       "title": "Forgot / reset password emails",
       "area": "Admin",
@@ -151,13 +159,6 @@
       "area": "Finance",
       "status": "completed",
       "description": "F&B Weekly P&L import with venue/item drill-down on /fnb, and Monthly F&B P&L as a second import kind."
-    },
-    {
-      "id": "tally-integration",
-      "title": "Tally integration: automated P&L sync",
-      "area": "Finance",
-      "status": "completed",
-      "description": "A Rust agent pushes month and week period P&L values from Tally into the dashboard automatically; packaged as a Windows Service and verified running on real hardware."
     },
     {
       "id": "excel-importer",
