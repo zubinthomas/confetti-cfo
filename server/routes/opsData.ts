@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 import { dailyProductionByStage, productionKpis, dailyKilnLoads, dailyFiringTypes, dailyProductionByItem } from '../db/productionLog.ts';
 import { coverageByFunctionalArea, weeklyOffDistribution, availableWeeks } from '../db/shiftRoster.ts';
+import { allOrderLines } from '../db/orderLines.ts';
 
 const router = Router();
 router.use(authMiddleware);
@@ -37,6 +38,11 @@ router.get('/labour-summary', async (req, res) => {
     availableWeeks(),
   ]);
   res.json({ coverage, weeklyOffs, weeks, week: weekStart ?? weeks.at(-1) ?? null });
+});
+
+/** GET /api/ops/orders-summary */
+router.get('/orders-summary', async (_req, res) => {
+  res.json({ orders: await allOrderLines() });
 });
 
 export default router;

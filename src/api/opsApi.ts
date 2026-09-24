@@ -28,7 +28,27 @@ export interface LabourSummary {
   week: string | null;
 }
 
+export interface OrderLine {
+  id: string;
+  client: string;
+  itemName: string;
+  size: string | null;
+  colour: string | null;
+  orderQty: number | null;
+  greenQty: number | null;
+  drawingQty: number | null;
+  bisqueQty: number | null;
+  glazeAppQty: number | null;
+  glazeFiringQty: number | null;
+  readyQty: number | null;
+  dispatchDate: string | null;
+  sampleStatus: string | null;
+  remarks: string | null;
+}
+export interface OrdersSummary { orders: OrderLine[] }
+
 export const getProductionSummary = () => get<ProductionSummary>("/ops/production-summary");
 export const getKilnSummary = () => get<KilnSummary>("/ops/kiln-summary");
 export const getItemsSummary = () => get<ItemsSummary>("/ops/items-summary");
 export const getLabourSummary = (week?: string) => get<LabourSummary>(`/ops/labour-summary${week ? `?week=${encodeURIComponent(week)}` : ""}`);
+export const getOrdersSummary = () => get<OrdersSummary>("/ops/orders-summary");

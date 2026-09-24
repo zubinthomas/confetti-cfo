@@ -5,13 +5,14 @@ import ProductionOpsSection from "./ops/ProductionOpsSection";
 import KilnEnergyOpsSection from "./ops/KilnEnergyOpsSection";
 import LabourOpsSection from "./ops/LabourOpsSection";
 import ItemsProducedSection from "./ops/ItemsProducedSection";
+import OrdersDispatchSection from "./ops/OrdersDispatchSection";
 import { ClipboardList, ShieldAlert, Flame, HardHat, Truck, Database, Package } from "lucide-react";
 
 // The five manager views from the "Manager Dashboard Format" brief.
-// production/kiln-energy/labour are backed by the imported production log +
-// shift roster (server/routes/opsData.ts) - see REAL_SECTIONS below.
-// quality/orders have no data source at all yet (no QC/dispatch data exists
-// in any imported source), so they stay the placeholder card.
+// production/kiln-energy/labour/orders are backed by imported data
+// (server/routes/opsData.ts) - see REAL_SECTIONS below. quality has no data
+// source at all yet (no QC/rejection data exists in any imported source),
+// so it stays the placeholder card.
 interface OpsSection {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -54,6 +55,7 @@ const REAL_SECTIONS: Record<string, React.ComponentType> = {
   items: ItemsProducedSection,
   "kiln-energy": KilnEnergyOpsSection,
   labour: LabourOpsSection,
+  orders: OrdersDispatchSection,
 };
 
 export default function OpsPage() {
