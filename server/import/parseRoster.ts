@@ -62,7 +62,7 @@ export function parseRoster(wb: ExcelJS.Workbook): ParsedWorkbook {
   const records: ParsedShiftRosterRecord[] = [];
   const result = (): ParsedWorkbook => ({
     kind: 'shiftRoster', businessName: '', periods: [], financialRecords: [], salesRecords: [],
-    consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: records, issues,
+    consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: records, orderRecords: [], issues,
   });
 
   const ws = findRosterSheet(wb);

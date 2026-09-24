@@ -14,6 +14,7 @@ import { classifyLineItem, type ParsedWorkbook, type RecordChange } from './type
 import { buildEmployeeMergePlan } from './mergeEmployees.ts';
 import { buildProductionLogMergePlan } from './mergeProductionLog.ts';
 import { buildShiftRosterMergePlan } from './mergeShiftRoster.ts';
+import { buildOrdersMergePlan } from './mergeOrders.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -45,6 +46,10 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   }
   if (parsed.kind === 'shiftRoster') {
     const plan = await buildShiftRosterMergePlan(parsed.shiftRosterRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  if (parsed.kind === 'orders') {
+    const plan = await buildOrdersMergePlan(parsed.orderRecords);
     return { stats: plan.stats, details: plan.details, ops: plan.ops };
   }
   const stats: Record<string, TableStats> = {

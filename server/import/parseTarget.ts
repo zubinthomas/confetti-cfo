@@ -45,7 +45,7 @@ export function parseTarget(wb: ExcelJS.Workbook): ParsedWorkbook {
     return {
       kind: 'target', businessName: '', periods: [], financialRecords: [],
       salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
-      productionLogRecords: [], shiftRosterRecords: [], issues,
+      productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], issues,
     };
   }
 
@@ -71,7 +71,7 @@ export function parseTarget(wb: ExcelJS.Workbook): ParsedWorkbook {
     return {
       kind: 'target', businessName: '', periods: [], financialRecords: [],
       salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
-      productionLogRecords: [], shiftRosterRecords: [], issues,
+      productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], issues,
     };
   }
 
@@ -119,7 +119,7 @@ export function parseTarget(wb: ExcelJS.Workbook): ParsedWorkbook {
     employeeRecords: [],
     targetRecords: records,
     productionLogRecords: [],
-    shiftRosterRecords: [],
+    shiftRosterRecords: [], orderRecords: [],
     issues,
   };
 }

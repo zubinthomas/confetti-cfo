@@ -13,6 +13,7 @@ import { parseHr } from './parseHr.ts';
 import { parseTarget } from './parseTarget.ts';
 import { parseFnbMonthly } from './parseFnbMonthly.ts';
 import { parseFnbWeekly } from './parseFnbWeekly.ts';
+import { parseOrders } from './parseOrders.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -270,6 +271,55 @@ for (const [businessName, file, parser] of SOURCES) {
       bad++;
     }
     console.log(`  [CEPL 2026-27] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
+    total += bad;
+  }
+}
+
+// The four client Order Status workbooks have no extracted_data.json-style
+// oracle either - spot-check instead: detected client, row count, zero
+// parse errors, and one known value per file (Rannaghor's "Galaxy plate":
+// bisqueQty 40, dispatchDate 2026-09-14, every other stage qty null).
+{
+  const ORDERS_FILES: [string, string, string][] = [
+    ['Rannaghor', path.join(ROOT, 'data-sources', 'Orders', 'Rannaghor order Line sheet (1).xlsx'), 'Rannaghor'],
+    ['Buco', path.join(ROOT, 'data-sources', 'Orders', 'Sienna X Buco order status.xlsx'), 'Sienna x Buco'],
+    ['Dubai', path.join(ROOT, 'data-sources', 'Orders', 'Sienna X Dubai order status.xlsx'), 'Sienna x Dubai'],
+    ['WOV', path.join(ROOT, 'data-sources', 'Orders', 'Sienna_X_WOV_Order_Status (1).xlsx'), 'Sienna x WOV'],
+  ];
+  // WOV: 27 raw rows minus 3 - four rows (WOV-08..11) share the same item
+  // name/size with no colour column to distinguish them, so only the first
+  // is kept (see parseOrders.ts's matchKey dedup) and the other three are
+  // warned about instead of crashing the DB's unique index.
+  const EXPECTED_ROWS: Record<string, number> = { Rannaghor: 19, Buco: 6, Dubai: 2, WOV: 24 };
+
+  for (const [label, file, expectedClient] of ORDERS_FILES) {
+    if (!fs.existsSync(file)) { console.log(`skipping Orders/${label} (no ${file})`); continue; }
+    const pw = parseOrders(await loadWorkbook(file));
+    const errors = pw.issues.filter((i) => i.level === 'error').length;
+    const warnings = pw.issues.filter((i) => i.level === 'warning').length;
+    console.log(`== Orders/${label} - issues: ${errors} error(s), ${warnings} warning(s)`);
+    let bad = 0;
+    if (pw.orderRecords.length !== EXPECTED_ROWS[label]) {
+      console.error(`  [Orders/${label}] expected ${EXPECTED_ROWS[label]} order lines, got ${pw.orderRecords.length}`);
+      bad++;
+    }
+    if (errors > 0) {
+      console.error(`  [Orders/${label}] expected 0 parse errors, got ${errors}`);
+      bad++;
+    }
+    if (pw.orderRecords[0]?.client !== expectedClient) {
+      console.error(`  [Orders/${label}] expected client "${expectedClient}", got "${pw.orderRecords[0]?.client}"`);
+      bad++;
+    }
+    if (label === 'Rannaghor') {
+      const galaxy = pw.orderRecords.find((r) => r.itemName === 'Galaxy plate');
+      if (!galaxy || galaxy.bisqueQty !== 40 || galaxy.dispatchDate !== '2026-09-14'
+        || galaxy.greenQty != null || galaxy.glazeAppQty != null || galaxy.glazeFiringQty != null || galaxy.readyQty != null) {
+        console.error(`  [Orders/Rannaghor] "Galaxy plate" spot-check didn't match: ${JSON.stringify(galaxy)}`);
+        bad++;
+      }
+    }
+    console.log(`  [Orders/${label}] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
     total += bad;
   }
 }

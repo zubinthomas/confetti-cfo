@@ -10,6 +10,7 @@ import { parseFnbMonthly, findFnbMonthlySheets } from './parseFnbMonthly.ts';
 import { parseFnbWeekly, findFnbWeeklySheets } from './parseFnbWeekly.ts';
 import { parseProduction, findProductionSheets } from './parseProduction.ts';
 import { parseRoster, findRosterSheet } from './parseRoster.ts';
+import { parseOrders, findOrdersSheet } from './parseOrders.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 export type WorkbookKind = ParsedWorkbook['kind'];
@@ -41,6 +42,7 @@ export function detectKind(wb: ExcelJS.Workbook): WorkbookKind | null {
   if (findFnbWeeklySheets(wb).length) return 'fnbWeekly';
   if (findProductionSheets(wb)) return 'potteryProduction';
   if (findRosterSheet(wb)) return 'shiftRoster';
+  if (findOrdersSheet(wb)) return 'orders';
   if (looksLikeHrMastersheet(wb)) return 'hr';
   return null;
 }
@@ -55,4 +57,5 @@ export const PARSERS: Record<WorkbookKind, (wb: ExcelJS.Workbook) => ParsedWorkb
   fnbWeekly: parseFnbWeekly,
   potteryProduction: parseProduction,
   shiftRoster: parseRoster,
+  orders: parseOrders,
 };

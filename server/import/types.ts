@@ -159,8 +159,35 @@ export interface ParsedShiftRosterRecord {
   weeklyOffDay: string | null;
 }
 
+// One client order-status row (server/import/parseOrders.ts) - a
+// current-state snapshot of a single SKU's progress through the shared
+// production pipeline (Green -> Drawing[Dubai only] -> Bisque -> Glaze
+// Application -> Glaze Firing -> Ready), not a time series. Matched against
+// existing `order_lines` rows by client + normalized item name/size/colour
+// (row position isn't stable across re-uploads) - see
+// server/import/mergeOrders.ts. Dispatch date reads as a planned/target
+// date, not a confirmed-actual one.
+export interface ParsedOrderRecord {
+  client: string;
+  itemName: string;
+  size: string | null;
+  colour: string | null;
+  orderQty: number | null;
+  greenQty: number | null;
+  drawingQty: number | null;
+  bisqueQty: number | null;
+  glazeAppQty: number | null;
+  glazeFiringQty: number | null;
+  readyQty: number | null;
+  dispatchDate: string | null; // YYYY-MM-DD
+  sampleStatus: string | null;
+  remarks: string | null;
+  sourceSheet: string;
+  sourceRow: number;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
@@ -170,6 +197,7 @@ export interface ParsedWorkbook {
   targetRecords: ParsedTargetRecord[];
   productionLogRecords: ParsedProductionLogRecord[];
   shiftRosterRecords: ParsedShiftRosterRecord[];
+  orderRecords: ParsedOrderRecord[];
   issues: Issue[];
 }
 

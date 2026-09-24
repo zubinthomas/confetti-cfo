@@ -906,3 +906,39 @@ export const shiftRoster = pgTable('shift_roster', {
 }, (t) => [
   uniqueIndex('shift_roster_natural_key').on(t.employeeName, t.date),
 ]);
+
+// ── Order lines (client order/dispatch status - see
+// server/import/parseOrders.ts) ─────────────────────────────────────────────
+// Current-state snapshot, not a time series: one row per SKU per client,
+// tracking how much of the order is presently sitting at each production
+// stage (Green -> Drawing[Dubai only] -> Bisque -> Glaze Application ->
+// Glaze Firing -> Ready) plus a planned dispatch date. Re-uploads never
+// delete rows that disappear from the source sheet - they just keep their
+// last-known state; the UI filters out dispatched rows by default instead.
+// matchKey is a stored, normalized (trim/lowercase/whitespace-collapsed)
+// column with its own unique index - unlike shiftRoster's raw-column
+// composite key above, order items need case/whitespace-insensitive
+// matching across re-uploads since row numbering isn't stable client-side.
+export const orderLines = pgTable('order_lines', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  client: text('client').notNull(), // 'Rannaghor' | 'Sienna x Buco' | 'Sienna x Dubai' | 'Sienna x WOV' | 'Unknown'
+  itemName: text('item_name').notNull(),
+  size: text('size'),
+  colour: text('colour'), // null where the client sheet has no colour column
+  orderQty: doublePrecision('order_qty'),
+  greenQty: doublePrecision('green_qty'),
+  drawingQty: doublePrecision('drawing_qty'), // Dubai-only stage
+  bisqueQty: doublePrecision('bisque_qty'),
+  glazeAppQty: doublePrecision('glaze_app_qty'),
+  glazeFiringQty: doublePrecision('glaze_firing_qty'),
+  readyQty: doublePrecision('ready_qty'),
+  dispatchDate: text('dispatch_date'), // 'YYYY-MM-DD', planned/target, not confirmed-actual
+  sampleStatus: text('sample_status'), // WOV only ('Pending'/'Done')
+  remarks: text('remarks'),
+  sourceSheet: text('source_sheet').notNull(),
+  sourceRow: integer('source_row').notNull(),
+  matchKey: text('match_key').notNull(),
+}, (t) => [
+  uniqueIndex('order_lines_match_key').on(t.matchKey),
+]);
