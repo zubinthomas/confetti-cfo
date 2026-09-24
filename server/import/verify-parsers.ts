@@ -234,6 +234,46 @@ for (const [businessName, file, parser] of SOURCES) {
   }
 }
 
+// The 2026-27 CEPL workbook has no extracted_data.json-style oracle either,
+// and it's a newer, differently-shaped edition of the same recurring report
+// (upper-case sheet names, no F&B/Overview sheets) - spot-check instead:
+// detected as 'cepl', F&B/Overview absence downgraded to warnings (not
+// errors), and April's known Store sales figure (cross-checked against the
+// sheet's own "Retails Sales Report" row). The workbook has one genuine
+// source data-entry gap (Trading Items row 31, a hand-typed January value
+// with no row label) that should keep producing exactly one error - it's a
+// real issue in the source, not something the parser should swallow.
+{
+  const CEPL_2627_FILE = path.join(ROOT, 'data-sources', 'P&L', 'CEPL Combined P&L 2026-27.xlsx');
+  if (!fs.existsSync(CEPL_2627_FILE)) {
+    console.log(`skipping CEPL 2026-27 (no ${CEPL_2627_FILE})`);
+  } else {
+    const wb = await loadWorkbook(CEPL_2627_FILE);
+    const pw = parseCepl(wb);
+    const errors = pw.issues.filter((i) => i.level === 'error').length;
+    const warnings = pw.issues.filter((i) => i.level === 'warning').length;
+    console.log(`== CEPL 2026-27 - issues: ${errors} error(s), ${warnings} warning(s)`);
+    for (const i of pw.issues) console.log(`    [${i.level}] ${i.sheet}: ${i.message}`);
+    let bad = 0;
+    if (errors !== 1) {
+      console.error(`  [CEPL 2026-27] expected 1 parse error (Trading Items row 31 unlabeled), got ${errors}`);
+      bad++;
+    }
+    if (!pw.issues.some((i) => i.level === 'warning' && i.sheet === 'F&B')) {
+      console.error('  [CEPL 2026-27] expected a warning for the missing F&B sheet');
+      bad++;
+    }
+    const storeApril = pw.financialRecords.find(
+      (r) => r.unitName === 'Store' && r.periodStart === '2026-04-01' && r.lineItemName === 'Retails Sales Report');
+    if (!storeApril || storeApril.value !== 2273728) {
+      console.error(`  [CEPL 2026-27] Store April sales expected 2,273,728, got ${storeApril?.value}`);
+      bad++;
+    }
+    console.log(`  [CEPL 2026-27] ${bad === 0 ? 'spot-checks passed' : `${bad} spot-check failure(s)`}`);
+    total += bad;
+  }
+}
+
 if (total) { console.error(`PARSER CHECK FAILED - ${total} difference(s)`); process.exit(1); }
 console.log('PARSER CHECK OK - parsers reproduce the verified extraction exactly');
 process.exit(0);

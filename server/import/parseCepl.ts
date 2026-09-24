@@ -22,7 +22,37 @@ import {
 } from './types.ts';
 
 const BUSINESS = 'CEPL';
-const DEPT_SHEETS = ['F&B', 'Store', 'Trading Items', 'Pottery', 'Batik', 'Stitching'];
+// F&B used to live in this workbook too, but it's now tracked through its
+// own dedicated import (parseFnbMonthly/parseFnbWeekly) - kept here as
+// optional rather than required, in case a future year's file still
+// includes it.
+const REQUIRED_DEPT_SHEETS = ['Store', 'Trading Items', 'Pottery', 'Batik', 'Stitching'];
+const OPTIONAL_DEPT_SHEETS = ['F&B'];
+const DEPT_SHEETS = [...REQUIRED_DEPT_SHEETS, ...OPTIONAL_DEPT_SHEETS];
+
+function findSheetCI(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet | undefined {
+  const target = name.trim().toLowerCase();
+  return wb.worksheets.find((w) => w.name.trim().toLowerCase() === target);
+}
+
+/** Whether wb has every required CEPL department sheet - sheet names are
+ *  matched case/whitespace-insensitively since the source workbook has
+ *  varied between exact title-case ("Store") and all-caps ("STORE") across
+ *  years. Used both to detect the workbook kind and, once detected, to
+ *  resolve the actual sheets to parse. */
+export function findCeplSheets(wb: ExcelJS.Workbook): Record<string, ExcelJS.Worksheet> | null {
+  const found: Record<string, ExcelJS.Worksheet> = {};
+  for (const name of REQUIRED_DEPT_SHEETS) {
+    const ws = findSheetCI(wb, name);
+    if (!ws) return null;
+    found[name] = ws;
+  }
+  for (const name of OPTIONAL_DEPT_SHEETS) {
+    const ws = findSheetCI(wb, name);
+    if (ws) found[name] = ws;
+  }
+  return found;
+}
 
 const TOTAL_SALES_LABELS = ['Total F&B Sales Monthwise', 'Retails Sales Report', 'Total Sales'];
 const TOTAL_EXPENSE_LABELS = ['Total F&B Expenses', 'Total Expenses'];
@@ -66,10 +96,14 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
   const periods = new Map<string, ParsedPeriod>();
   const deptFYs = new Set<string>();
 
+  const deptSheets = findCeplSheets(wb);
   for (const sheetName of DEPT_SHEETS) {
-    const ws = wb.getWorksheet(sheetName);
+    const ws = deptSheets?.[sheetName];
     if (!ws) {
-      issues.push({ level: 'error', sheet: sheetName, message: 'sheet missing from workbook' });
+      issues.push({
+        level: REQUIRED_DEPT_SHEETS.includes(sheetName) ? 'error' : 'warning',
+        sheet: sheetName, message: 'sheet missing from workbook',
+      });
       continue;
     }
     const months = headerMonths(ws, issues);
@@ -138,7 +172,7 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
   }
 
   // ── Overview sheet: historical fiscal years ────────────────────────────────
-  const ov = wb.getWorksheet('Overview');
+  const ov = findSheetCI(wb, 'Overview');
   if (!ov) {
     issues.push({ level: 'warning', sheet: 'Overview', message: 'sheet missing - historical years not imported' });
   } else {

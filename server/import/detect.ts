@@ -1,7 +1,7 @@
 // Detect which of the known workbook types an upload is, by its sheets.
 import type ExcelJS from 'exceljs';
 import { str } from './xlsx.ts';
-import { parseCepl } from './parseCepl.ts';
+import { parseCepl, findCeplSheets } from './parseCepl.ts';
 import { parseCafe } from './parseCafe.ts';
 import { parseSienna } from './parseSienna.ts';
 import { parseHr } from './parseHr.ts';
@@ -33,7 +33,7 @@ function looksLikeHrMastersheet(wb: ExcelJS.Workbook): boolean {
 
 export function detectKind(wb: ExcelJS.Workbook): WorkbookKind | null {
   const names = new Set(wb.worksheets.map((w) => w.name));
-  if (names.has('Overview') && names.has('F&B')) return 'cepl';
+  if (findCeplSheets(wb)) return 'cepl';
   if (names.has('Overall sales')) return 'sienna';
   if ([...names].some((n) => /^\d{2}-\d{2}-\d{4} to \d{2}-\d{2}-\d{4}$/.test(n))) return 'cafe';
   if (findTargetSheet(wb)) return 'target';
