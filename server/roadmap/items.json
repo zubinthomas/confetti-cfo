@@ -120,9 +120,8 @@
       "id": "orders-dispatch",
       "title": "Orders & Dispatch",
       "area": "Operations",
-      "status": "in_progress",
-      "description": "Open client order status, delayed SKUs and days overdue, and ready stock available for dispatch.",
-      "reason": "No order/dispatch data exists in any imported source yet, but other sheets that may contain it are currently being reviewed."
+      "status": "completed",
+      "description": "Open client order status, delayed SKUs and days overdue, and ready stock available for dispatch, imported from four client order-status workbooks (Rannaghor, Sienna x Buco, Sienna x Dubai, Sienna x WOV)."
     },
     {
       "id": "daily-report-additional-sheets",
