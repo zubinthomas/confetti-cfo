@@ -71,7 +71,7 @@ export default function ItemsProducedSection() {
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           Items produced
         </p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {availableFys.map((y) => (
             <button
               key={y}

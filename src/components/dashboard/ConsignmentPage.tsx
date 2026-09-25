@@ -30,7 +30,7 @@ export default function ConsignmentPage() {
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           Store - Consignment & Partner Brands
         </p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {CONSIGNMENT.map((y, i) => (
             <button
               key={y.fy}

@@ -66,7 +66,7 @@ export default function RoadmapPage() {
       {/* Below md, three side-by-side columns don't fit - swap to a chiclet
           selector over a single column instead of stacking all three. */}
       <div className="md:hidden space-y-4">
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {COLUMNS.map((col) => {
             const count = items.filter((i) => i.status === col.status).length;
             return (

@@ -92,7 +92,7 @@ export default function StoreTab() {
   );
 
   const fyChipRow = (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5 flex-wrap">
       {STORE_FY_CHIPS.map((y) => (
         <button
           key={y}

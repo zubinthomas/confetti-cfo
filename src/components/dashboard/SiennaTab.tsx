@@ -105,7 +105,7 @@ export default function SiennaTab() {
 
   const fyChips = [...realFys!, "2026-2027"];
   const fyChipRow = (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5 flex-wrap">
       {fyChips.map((y) => (
         <button
           key={y}

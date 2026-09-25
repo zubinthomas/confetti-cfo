@@ -45,7 +45,7 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           {heading} · {label}
         </p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {fys.map((y) => (
             <button
               key={y}

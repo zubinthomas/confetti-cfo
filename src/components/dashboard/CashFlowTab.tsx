@@ -31,7 +31,7 @@ export default function CashFlowTab() {
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           Group Money In / Money Out · {CUR.label} (P&L basis)
         </p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {fys.map((y) => (
             <button
               key={y}

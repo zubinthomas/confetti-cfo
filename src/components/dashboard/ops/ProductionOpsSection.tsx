@@ -166,7 +166,7 @@ export default function ProductionOpsSection() {
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           Daily production
         </p>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {availableFys.map((y) => (
             <button
               key={y}
