@@ -331,7 +331,8 @@ export const tallySources = pgTable('tally_sources', {
   syncMode: tallySyncModeEnum('sync_mode').notNull().default('manual'),
   syncIntervalMinutes: integer('sync_interval_minutes').notNull().default(15),
   tallyGatewayUrl: text('tally_gateway_url'), // e.g. http://localhost:9001; null falls back to the agent's local config.toml
-  tallyCompanyName: text('tally_company_name'), // only needed with multiple companies loaded in Tally; null falls back to local config.toml
+  tallyCompanyName: text('tally_company_name'), // Tally's company selector string, exactly as shown, incl. the "- (from D-Mon-YY)" suffix; null falls back to local config.toml
+  tallyPeriodReportName: text('tally_period_report_name'), // Tally report ID for P&L pulls; null uses the agent's built-in default
   createdAt: text('created_at').notNull(),   // ISO-8601
   lastSeenAt: text('last_seen_at'),          // ISO-8601, bumped on every authenticated agent request
   lastSyncAt: text('last_sync_at'),

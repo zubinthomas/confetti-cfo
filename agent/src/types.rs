@@ -61,6 +61,9 @@ pub struct AgentConfig {
     /// Set by an admin in the web UI; None means "use the local config.toml value".
     pub tally_gateway_url: Option<String>,
     pub tally_company_name: Option<String>,
+    /// Set by an admin in the web UI; None means the agent's built-in default
+    /// ("Profit and Loss").
+    pub tally_period_report_name: Option<String>,
 }
 
 /// POST /api/tally-agent/sync response.
@@ -81,6 +84,16 @@ pub struct LedgerBalance {
     #[allow(dead_code)] // captured for future mapping-seed use, not needed for a sync push
     pub parent: Option<String>,
     pub closing_balance: f64,
+}
+
+/// One ledger's opening and closing balance over a date range, from Tally's
+/// ledger collection with SVFROMDATE/SVTODATE. Net movement is closing - opening.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LedgerRange {
+    pub name: String,
+    pub parent: Option<String>,
+    pub opening: f64,
+    pub closing: f64,
 }
 
 /// One ledger's net movement over a period, read back from a Tally period

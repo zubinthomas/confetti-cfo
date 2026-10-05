@@ -16,6 +16,7 @@ export interface TallySource {
   /** Overrides the agent's local config.toml when set; null falls back to it. */
   tallyGatewayUrl: string | null;
   tallyCompanyName: string | null;
+  tallyPeriodReportName: string | null;
   createdAt: string;
   lastSeenAt: string | null;
   lastSyncAt: string | null;
@@ -53,7 +54,7 @@ export const updateTallySource = (
   id: number,
   body: {
     label?: string; syncMode?: TallySyncMode; syncIntervalMinutes?: number;
-    tallyGatewayUrl?: string | null; tallyCompanyName?: string | null;
+    tallyGatewayUrl?: string | null; tallyCompanyName?: string | null; tallyPeriodReportName?: string | null;
   },
 ) => patch<TallySource>(`/tally/sources/${id}`, body);
 export const rotateTallySourceKey = (id: number) =>

@@ -36,6 +36,7 @@ router.get('/config', async (req: TallyAgentRequest, res) => {
     })),
     tallyGatewayUrl: source.tallyGatewayUrl,
     tallyCompanyName: source.tallyCompanyName,
+    tallyPeriodReportName: source.tallyPeriodReportName,
   });
 });
 

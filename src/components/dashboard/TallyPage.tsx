@@ -73,12 +73,14 @@ function AgentConfigFields({
 }: {
   source: TallySource;
   disabled: boolean;
-  onSave: (patch: { tallyGatewayUrl?: string | null; tallyCompanyName?: string | null }) => void;
+  onSave: (patch: { tallyGatewayUrl?: string | null; tallyCompanyName?: string | null; tallyPeriodReportName?: string | null }) => void;
 }) {
   const [gatewayUrl, setGatewayUrl] = useState(source.tallyGatewayUrl ?? "");
   const [companyName, setCompanyName] = useState(source.tallyCompanyName ?? "");
+  const [reportName, setReportName] = useState(source.tallyPeriodReportName ?? "");
   useEffect(() => { setGatewayUrl(source.tallyGatewayUrl ?? ""); }, [source.tallyGatewayUrl]);
   useEffect(() => { setCompanyName(source.tallyCompanyName ?? ""); }, [source.tallyCompanyName]);
+  useEffect(() => { setReportName(source.tallyPeriodReportName ?? ""); }, [source.tallyPeriodReportName]);
 
   return (
     <div className="flex flex-wrap items-center gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
@@ -102,9 +104,21 @@ function AgentConfigFields({
             onSave({ tallyCompanyName: companyName.trim() || null });
           }
         }}
-        placeholder="Company name (optional)"
-        title="Only needed with more than one company loaded in Tally"
-        className="px-2 py-1 rounded-lg border border-border bg-background text-xs w-48 disabled:opacity-50"
+        placeholder="Tally company selector name"
+        title="Must match Tally's company selector exactly, including the '- (from D-Mon-YY)' suffix, e.g. CONFETTI EXPORTS PVT. LTD - (from 1-Apr-25). Update it when the financial year changes."
+        className="px-2 py-1 rounded-lg border border-border bg-background text-xs w-80 max-w-full disabled:opacity-50"
+      />
+      <input
+        type="text" value={reportName} disabled={disabled}
+        onChange={(e) => setReportName(e.target.value)}
+        onBlur={() => {
+          if (reportName.trim() !== (source.tallyPeriodReportName ?? "")) {
+            onSave({ tallyPeriodReportName: reportName.trim() || null });
+          }
+        }}
+        placeholder="P&L report name (default: Profit and Loss)"
+        title="The Tally report ID used for revenue/expense pulls. Leave blank for the default. Pulls are only pushed after they reconcile with raw ledger balances."
+        className="px-2 py-1 rounded-lg border border-border bg-background text-xs w-64 max-w-full disabled:opacity-50"
       />
     </div>
   );
@@ -171,7 +185,7 @@ function SourcesCard({
 
   const onAgentConfigSave = async (
     s: TallySource,
-    patch: { tallyGatewayUrl?: string | null; tallyCompanyName?: string | null },
+    patch: { tallyGatewayUrl?: string | null; tallyCompanyName?: string | null; tallyPeriodReportName?: string | null },
   ) => {
     setBusyId(s.id);
     try { await updateTallySource(s.id, patch); refresh(); } finally { setBusyId(null); }

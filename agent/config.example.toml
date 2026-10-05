@@ -16,6 +16,8 @@ api_key = "REPLACE_ME"
 # you'd rather manage it locally.
 tally_gateway_url = "http://localhost:9001"
 
-# Only needed if more than one company is loaded in Tally on this machine.
-# Optional, same fallback rule as tally_gateway_url above.
-# tally_company_name = "CONFETTI EXPORTS PVT. LTD"
+# Tally's company selector string, exactly as shown in Tally, including the
+# "- (from D-Mon-YY)" suffix. Required: the gateway silently returns empty data
+# for a wrong name. Set it in the web UI on the source (takes precedence); this
+# is only the fallback. Update it when the financial year changes.
+# tally_company_name = "CONFETTI EXPORTS PVT. LTD - (from 1-Apr-25)"

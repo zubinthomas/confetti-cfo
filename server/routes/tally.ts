@@ -62,9 +62,9 @@ const SYNC_MODES = ['auto', 'manual', 'paused'] as const;
 router.patch('/sources/:id', requirePermission('TallySource', 'write'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
-  const { label, syncMode, syncIntervalMinutes, tallyGatewayUrl, tallyCompanyName } = req.body as {
+  const { label, syncMode, syncIntervalMinutes, tallyGatewayUrl, tallyCompanyName, tallyPeriodReportName } = req.body as {
     label?: string; syncMode?: string; syncIntervalMinutes?: number;
-    tallyGatewayUrl?: string | null; tallyCompanyName?: string | null;
+    tallyGatewayUrl?: string | null; tallyCompanyName?: string | null; tallyPeriodReportName?: string | null;
   };
   const patch: Partial<typeof schema.tallySources.$inferInsert> = {};
   if (typeof label === 'string' && label.trim()) patch.label = label.trim();
@@ -85,6 +85,7 @@ router.patch('/sources/:id', requirePermission('TallySource', 'write'), async (r
   // non-empty-string requirement.
   if (tallyGatewayUrl !== undefined) patch.tallyGatewayUrl = tallyGatewayUrl?.trim() || null;
   if (tallyCompanyName !== undefined) patch.tallyCompanyName = tallyCompanyName?.trim() || null;
+  if (tallyPeriodReportName !== undefined) patch.tallyPeriodReportName = tallyPeriodReportName?.trim() || null;
   if (Object.keys(patch).length === 0) return res.status(400).json({ message: 'Nothing to update' });
   const [updated] = await db.update(schema.tallySources).set(patch)
     .where(eq(schema.tallySources.id, id)).returning();

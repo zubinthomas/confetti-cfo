@@ -1,0 +1,1 @@
+ALTER TABLE "tally_sources" ADD COLUMN "tally_period_report_name" text;

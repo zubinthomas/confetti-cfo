@@ -25,49 +25,130 @@ repeated here).
 - `src/service.rs` (Windows only) - wraps that same loop as a real Windows
   Service. See "Running as a Windows Service" below.
 
+## Confirmed on-site (2026-10-01)
+
+Live-tested against the client's real TallyPrime install (company
+`CONFETTI EXPORTS PVT. LTD`, gateway on port `9001`):
+
+- **Gateway port confirmed:** `9001`.
+- **`SVCURRENTCOMPANY` must match the full string shown in Tally's company
+  selector, including the trailing `- (from D-Mon-YY)` period suffix.**
+  `CONFETTI EXPORTS PVT. LTD` alone (no suffix) fails with an explicit
+  `<LINEERROR>Could not set 'SVCurrentCompany' to '...'</LINEERROR>` on a
+  `TYPE=Data` report request; the full string
+  `CONFETTI EXPORTS PVT. LTD - (from 1-Apr-25)` works. `config.rs`/
+  `config.example.toml` need updating to store the full selector string,
+  not just the company name, and that string will change every financial
+  year - this needs a real plan (re-derive it per FY, or make it
+  reconfigurable without a rebuild) before this ships, not just a hardcoded
+  constant.
+- **The ledger-balances Collection request's field declaration was wrong,
+  and is fixed** (`<FETCH>...</FETCH>` isn't valid for a custom Collection;
+  `<NATIVEMETHOD>` per field is). This was a real bug, but it was not the
+  cause of the empty-stub responses seen while debugging on-site - see
+  below.
+- **Collection-type requests silently swallow a bad `SVCurrentCompany`**
+  instead of erroring, unlike `TYPE=Data` report requests. A wrong company
+  string produces the exact same generic object-browser stub (`CMPINFO`
+  with every count at `0`, `<COLLECTION ISMSTDEPTYPE="Yes" MSTDEPTYPE="8">`
+  with no children) regardless of what the Collection body actually says -
+  this is what made the `FETCH`/`NATIVEMETHOD` bug above look like the
+  cause when the real blocker was the company string the whole time. The
+  ledger-balances Collection request itself has not yet been re-tested
+  against the gateway now that the right company string is known - do that
+  before trusting real balance data from it.
+- **Period report shape - confirmed against a real Trial Balance export**
+  (group-level, no `EXPLODEFLAG`; `TYPE=Data`, `ID=Trial Balance`, no
+  `SUBTYPE`/`TDL` needed for a built-in report). The response has no
+  `HEADER`/`BODY` wrapper at all - just `<ENVELOPE>` directly containing
+  alternating `<DSPACCNAME>`/`<DSPACCINFO>` **siblings**, paired
+  positionally, not `DSPACCNAME` nested inside `DSPACCINFO` as originally
+  assumed. Amount tags are two levels deep
+  (`<DSPACCINFO><DSPCLDRAMT><DSPCLDRAMTA>`), and the unused side of a row
+  is an empty string, not `"0"`. Sign convention confirmed: `DSPCLDRAMTA`
+  (debit) comes back already negative, `DSPCLCRAMTA` (credit) positive, so
+  `net_amount = credit + debit` (a plain sum - fixed from the previous
+  `credit - debit`, which would have double-signed every debit row).
+  This Trial Balance shape is no longer parsed by the agent; the P&L parser
+  below replaced it, since the agent only pulls P&L.
+- **Profit and Loss report (`EXPLODEFLAG=Yes`) - confirmed shape** (2026-10-04).
+  It is not the Trial Balance shape. Group headings are `DSPACCNAME` followed
+  by `PLAMT` (group total). Ledger rows are `BSNAME` (name in
+  `DSPACCNAME/DSPDISPNAME`) followed by `BSAMT`, with the signed amount in
+  `BSSUBAMT`. Everything is a flat list of siblings under `ENVELOPE`. Debit is
+  negative and credit positive. The group totals match the sum of their
+  ledger rows to the paisa, which confirms the sign convention. Cost of Sales
+  and the stock groups (Opening, Purchase, Closing Stock) have no ledger rows,
+  so they cannot be checked against ledger data. `parse_period_report` reads
+  only the ledger rows.
+- **Ledger-balances Collection request - confirmed working end to end**
+  (2026-10-02), now that `SVCURRENTCOMPANY` carries the full selector
+  string. The real response returned 2727 `<LEDGER>` rows. Shape matches
+  what `parse_ledger_balances` already assumed: `NAME` is an attribute,
+  `PARENT`/`CLOSINGBALANCE` are direct (single-level, not nested) children
+  - no code change was needed here, unlike `parse_period_report`. A
+  ledger with a true zero/unposted balance can render
+  `<CLOSINGBALANCE TYPE="Amount"></CLOSINGBALANCE>` (empty) rather than
+  `0.00` - about a third of the 2727 rows in the real export were empty
+  this way - and `parse_ledger_balances` already skips those (logged at
+  `warn`), which means a mapped ledger sitting at exactly zero drops out
+  of a sync cycle instead of pushing an explicit 0. Current behavior, not
+  yet flagged as a bug - revisit if a client mapping ever needs a hard
+  zero distinguished from "Tally reported nothing."
+- **`CLOSINGBALANCE` sign convention - confirmed, same convention as the
+  Trial Balance report.** Debit-nature (asset) ledgers come back negative,
+  credit-nature (liability) ledgers come back positive. Real examples from
+  the same export: a Bank Accounts ledger (HDFC Bank, Jodhpur Park) at
+  `-1813.57`; an Unsecured Loans ledger (a shareholder loan) at
+  `18135769.00`. `Duties & Taxes` ledgers for GST payable (CGST/SGST/IGST)
+  were also positive, consistent with a liability. `tally_client.rs`'s
+  tests now include a real-data case for this.
+- **Ledger name escaping/encoding - confirmed, no extra handling needed.**
+  Real ledger names do come back with standard XML entities (`&amp;`,
+  `&apos;` were both seen across the 2727-row export, e.g. `"Adhikary
+  Plywood &amp; Glass"`) - `roxmltree`'s own entity decoding handles this
+  on the read side with no custom unescaping required. `xml_escape` in
+  `tally_client.rs` is only used for building outgoing requests
+  (`SVCURRENTCOMPANY`, ledger names in a Data export ID) and remains
+  correct for that direction.
+
 ## Not yet verified against a real Tally instance
 
-Written and tested against the *documented* shape of Tally's gateway XML
-(the TDL Collection request/response format) - no real TallyPrime instance
-was available while building this. Before trusting a real push, confirm
-on-site:
+- **The P&L figures are not yet reconciled to raw ledger data.** The P&L
+  shape above is confirmed and internally consistent, but the comparison
+  against the ledger range Collection (`OPENINGBALANCE`/`CLOSINGBALANCE`)
+  has not run on-site yet.
+- **`SVFROMDATE`/`SVTODATE` format.** The agent now sends `YYYYMMDD`, taken
+  from the reference Tally MCP implementation (ShrutiSaagar/tally-prime-mcp,
+  `tallyDate()` in `src/tally/xml.ts`). It is not yet confirmed against the
+  real gateway. The earlier `D-Mon-YYYY` format was unverified and is gone.
+- **The ledger range Collection** (`ID=ConfettiLedgerRange`, with
+  `OPENINGBALANCE`/`CLOSINGBALANCE` over `SVFROMDATE`/`SVTODATE`). Its shape
+  is taken from the reference implementation. The parser treats an empty
+  amount as zero and a missing element as an error.
 
-- **Sign convention.** Whether `CLOSINGBALANCE` comes back debit-positive or
-  credit-positive for the ledgers that matter (cash/bank vs. liabilities)
-  isn't something a schema doc alone settles reliably.
-- **Ledger name escaping/encoding.** Real ledger names have been seen with
-  `&`, parentheses, and non-ASCII characters (see the client's actual
-  chart-of-accounts export) - `xml_escape` in `tally_client.rs` handles the
-  basics, but only real responses will show what Tally actually sends back.
-- **The gateway port.** This client's is `9001`, not Tally's `9000` default -
-  already reflected in `config.example.toml`, but double-check per
-  installation.
-- **Period report shape (month/week P&L pushes).** This is the biggest
-  unverified leap in the whole integration. `build_period_report_request`/
-  `parse_period_report` in `tally_client.rs` are inferred from Tally's
-  documented *Trial Balance* export example - no confirmed Profit and Loss
-  example was found. Specifically unconfirmed:
-  - The exact report `<ID>` string Tally expects (using `"Profit and
-    Loss"`, not confirmed exact - Tally's report names are sometimes
-    TDL-internal identifiers that differ from what's shown in the UI).
-  - The `SVFROMDATE`/`SVTODATE` date format (using `D-Mon-YYYY`, e.g.
-    `1-Apr-2026`, per a documented Trial Balance example - a separate
-    search summary claimed `YYYYMMDD` instead).
-  - Whether `EXPLODEFLAG=Yes` returns ledger-level rows for a P&L report
-    the way it does for Trial Balance, or something coarser (group totals
-    only).
-  - The row/tag shape itself - whether a P&L export actually uses
-    `DSPACCINFO`/`DSPACCNAME`/`DSPDISPNAME`/`DSPCLDRAMT(A)`/`DSPCLCRAMT(A)`
-    the same way Trial Balance does.
-  - The debit/credit-to-signed-value convention (`net_amount = credit -
-    debit` is a best guess, same tier of guess as `CLOSINGBALANCE`'s sign
-    above).
+## Raw-data reconciliation (P&L safety check)
 
-  Do not trust month/week P&L numbers from this agent until confirmed
-  against a real TallyPrime instance - everything downstream of the Tally
-  gateway call (server routes, merge pipeline, admin UI) has been verified
-  against the live dev server with fixture data, but not against real
-  Tally output.
+The agent does not push period (P&L) records on the strength of Tally's
+report alone. For each month or week it also pulls the ledger range
+Collection and checks that, for every mapped period ledger, the report's net
+amount matches the raw `closing - opening` within one paisa. If any ledger
+disagrees, the agent logs each mismatch and pushes nothing for that period
+type until the next cycle. It also logs a warning if the raw closing balances
+across all ledgers do not sum to zero, which would point at the raw data or
+the sign convention.
+
+To check this by hand against the gateway, run
+`agent/scripts/check_pl_raw.ps1` (PowerShell). It is read-only, sends the same requests,
+prints the disagreements, and saves the P&L response to
+`tally_response.xml` in the current folder.
+
+Do not trust month/week P&L numbers from this agent until the Profit and
+Loss items above are confirmed against the real gateway. Ledger closing
+balances are now confirmed end to end against the real gateway (parsing,
+sign convention, and name encoding); everything downstream of the Tally
+gateway call (server routes, merge pipeline, admin UI) has separately been
+verified against the live dev server with fixture data.
 
 ## Running it
 
