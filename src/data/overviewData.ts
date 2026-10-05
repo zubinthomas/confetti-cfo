@@ -1,23 +1,34 @@
 // Pure, parametrized cross-business (F&B + Store) overview computation.
+// Ids resolved by name from live reference data - see the header note in
+// fabData.ts for why.
 import { series, pctSeries, sum, fyLabel, type FrIndex, type Series } from "./seriesKernel";
-import { computeFabMonthly, FNB_BU } from "./fabData";
-import { computeStoreYear, STORE_BU } from "./storeFinancials";
+import { computeFabMonthly, resolveFnbBu, resolveFabLi, CEPL_ID, type FabLi } from "./fabData";
+import { computeStoreYear, resolveStoreBu, resolveStoreLi, type StoreLi } from "./storeFinancials";
+import type { LineItem } from "./types";
 
-export { FNB_BU, STORE_BU };
+export { resolveFnbBu, resolveStoreBu, resolveFabLi, resolveStoreLi };
 
-const LI = {
-  totalRevenue: 4, totalExpense: 33, profitLoss: 34, plPct: 35,
-  storeTotalSales: 36, storeTotalExpense: 61, storeProfitLoss: 62,
-};
-// The Overview sheet's historical blocks: lineItems 191 (Sales), 192
-// (Expense), 193 (Profit & Loss) per month, for units F&B (1) and Store (2).
-const OV_LI = { sales: 191, expense: 192, pl: 193 };
+// The Overview sheet's historical blocks: Sales/Expense/Profit & Loss per
+// month, shared across departments (the businessUnitId param picks F&B vs
+// Store's reading of the same line items).
+const OV_LI_NAMES = { sales: "Sales (Overview)", expense: "Expense (Overview)", pl: "Profit & Loss (Overview)" } as const;
 
-export function computeOverviewYear(idx: FrIndex, unitId: number, periodIds: number[]) {
+export type OverviewOvLi = Record<keyof typeof OV_LI_NAMES, number | null>;
+
+export function resolveOverviewOvLi(lineItems: LineItem[]): OverviewOvLi {
+  const byName = new Map(lineItems.filter((l) => l.businessId === CEPL_ID).map((l) => [l.name, l.id]));
+  const out = {} as OverviewOvLi;
+  for (const key of Object.keys(OV_LI_NAMES) as (keyof typeof OV_LI_NAMES)[]) {
+    out[key] = byName.get(OV_LI_NAMES[key]) ?? null;
+  }
+  return out;
+}
+
+export function computeOverviewYear(idx: FrIndex, unitId: number, ovLi: OverviewOvLi, periodIds: number[]) {
   return {
-    sales: sum(series(idx, unitId, OV_LI.sales, periodIds)),
-    expense: sum(series(idx, unitId, OV_LI.expense, periodIds)),
-    pl: sum(series(idx, unitId, OV_LI.pl, periodIds)),
+    sales: sum(series(idx, unitId, ovLi.sales, periodIds)),
+    expense: sum(series(idx, unitId, ovLi.expense, periodIds)),
+    pl: sum(series(idx, unitId, ovLi.pl, periodIds)),
   };
 }
 
@@ -30,22 +41,25 @@ export interface OverviewYearData {
   totals: { fbSales: number; storeSales: number; fbPL: number; storePL: number };
 }
 
-export function computeOverviewForFY(idx: FrIndex, fiscalYear: string, periodIds: number[]): OverviewYearData {
-  const fbSales = series(idx, FNB_BU, LI.totalRevenue, periodIds);
+export function computeOverviewForFY(
+  idx: FrIndex, fnbBu: number, storeBu: number, fnbLi: FabLi, storeLi: StoreLi, ovLi: OverviewOvLi,
+  fiscalYear: string, periodIds: number[]
+): OverviewYearData {
+  const fbSales = series(idx, fnbBu, fnbLi.totalRevenue, periodIds);
   const hasMonthlyDetail = fbSales.some((v) => v != null);
 
   if (hasMonthlyDetail) {
     const fb = {
       sales: fbSales,
-      expense: series(idx, FNB_BU, LI.totalExpense, periodIds),
-      pl: series(idx, FNB_BU, LI.profitLoss, periodIds),
-      plPct: pctSeries(idx, FNB_BU, LI.plPct, periodIds),
+      expense: series(idx, fnbBu, fnbLi.totalExpense, periodIds),
+      pl: series(idx, fnbBu, fnbLi.profitLoss, periodIds),
+      plPct: pctSeries(idx, fnbBu, fnbLi.plPct, periodIds),
     };
     const store = {
-      sales: series(idx, STORE_BU, LI.storeTotalSales, periodIds),
-      expense: series(idx, STORE_BU, LI.storeTotalExpense, periodIds),
-      pl: series(idx, STORE_BU, LI.storeProfitLoss, periodIds),
-      plPct: pctSeries(idx, STORE_BU, LI.plPct, periodIds),
+      sales: series(idx, storeBu, storeLi.storeTotalSales, periodIds),
+      expense: series(idx, storeBu, storeLi.storeTotalExpense, periodIds),
+      pl: series(idx, storeBu, storeLi.storeProfitLoss, periodIds),
+      plPct: pctSeries(idx, storeBu, storeLi.plPct, periodIds),
     };
     return {
       fy: fiscalYear, label: fyLabel(fiscalYear), hasMonthlyDetail: true, fb, store,
@@ -56,8 +70,8 @@ export function computeOverviewForFY(idx: FrIndex, fiscalYear: string, periodIds
     };
   }
 
-  const fbAnnual = computeOverviewYear(idx, FNB_BU, periodIds);
-  const storeAnnual = computeOverviewYear(idx, STORE_BU, periodIds);
+  const fbAnnual = computeOverviewYear(idx, fnbBu, ovLi, periodIds);
+  const storeAnnual = computeOverviewYear(idx, storeBu, ovLi, periodIds);
   return {
     fy: fiscalYear, label: fyLabel(fiscalYear), hasMonthlyDetail: false,
     fb: { sales: [], expense: [], pl: [], plPct: [] },
@@ -76,17 +90,20 @@ export interface FnbStoreHistoryYear {
   store: { sales: number; expense: number; pl: number };
 }
 
-export function computeFnbStoreHistory(idx: FrIndex, periodIdsForFy: (fy: string) => number[]): FnbStoreHistoryYear[] {
+export function computeFnbStoreHistory(
+  idx: FrIndex, fnbBu: number, storeBu: number, fnbLi: FabLi, storeLi: StoreLi, ovLi: OverviewOvLi,
+  periodIdsForFy: (fy: string) => number[]
+): FnbStoreHistoryYear[] {
   const priorYears = ["2021-2022", "2022-2023", "2023-2024", "2024-2025"].map((fy) => ({
     fy,
     label: fyLabel(fy),
-    fb: computeOverviewYear(idx, FNB_BU, periodIdsForFy(fy)),
-    store: computeOverviewYear(idx, STORE_BU, periodIdsForFy(fy)),
+    fb: computeOverviewYear(idx, fnbBu, ovLi, periodIdsForFy(fy)),
+    store: computeOverviewYear(idx, storeBu, ovLi, periodIdsForFy(fy)),
   }));
 
   const fy2526Pids = periodIdsForFy("2025-2026");
-  const fab = computeFabMonthly(idx, fy2526Pids);
-  const store = computeStoreYear(idx, "2025-2026", "FY 25-26", fy2526Pids);
+  const fab = computeFabMonthly(idx, fnbBu, fnbLi, fy2526Pids);
+  const store = computeStoreYear(idx, storeBu, storeLi, "2025-2026", "FY 25-26", fy2526Pids);
 
   return [
     ...priorYears,

@@ -5,22 +5,25 @@ import { useMemo } from 'react';
 import { useReferenceData } from './useReferenceData';
 import { useFinancialRecords } from './useFinancialRecords';
 import { buildFrIndex, monthPeriodIds } from '@/data/seriesKernel';
-import { computeDeptFinancials, DEPT_BU, type DeptKey, type DeptFinancials } from '@/data/deptFinancials';
+import { computeDeptFinancials, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptFinancials } from '@/data/deptFinancials';
 
 const CRAFT_KEYS: DeptKey[] = ['tradingItems', 'pottery', 'batik', 'stitching'];
-const CRAFT_BUS = CRAFT_KEYS.map((k) => DEPT_BU[k]);
 const FY = '2025-2026';
 
 export function useCraftFinancials(): Record<DeptKey, DeptFinancials> | undefined {
   const { data: ref } = useReferenceData();
-  const { data: records } = useFinancialRecords({ businessUnitId: CRAFT_BUS, fiscalYear: [FY] });
+  const deptBu = ref ? resolveDeptBu(ref.businessUnits) : null;
+  const { data: records } = useFinancialRecords({
+    businessUnitId: deptBu ? CRAFT_KEYS.map((k) => deptBu[k]) : undefined, fiscalYear: [FY],
+  });
 
   return useMemo(() => {
-    if (!ref || !records) return undefined;
+    if (!ref || !records || !deptBu) return undefined;
     const idx = buildFrIndex(records);
+    const deptLi = resolveDeptLi(ref.lineItems);
     const periodIds = monthPeriodIds(ref.periods, FY);
     return Object.fromEntries(
-      CRAFT_KEYS.map((k) => [k, computeDeptFinancials(idx, k, periodIds)])
+      CRAFT_KEYS.map((k) => [k, computeDeptFinancials(idx, deptBu[k], deptLi, k, periodIds)])
     ) as Record<DeptKey, DeptFinancials>;
-  }, [ref, records]);
+  }, [ref, records, deptBu]);
 }

@@ -12,7 +12,7 @@ import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import { useFnbVenueData } from "@/hooks/useFnbVenueData";
 import { targetSeries, projectionSeries } from "@/data/revenueTargets";
-import { computeFabYear, FNB_BU } from "@/data/fabData";
+import { computeFabYear, resolveFnbBu, resolveFabLi, resolveFabOvLi } from "@/data/fabData";
 import { VENUE_NAMES, DRILL_DOWN_CATEGORIES } from "@/data/fnbVenueData";
 import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
 import {
@@ -71,7 +71,8 @@ export default function SiennaTab() {
   const venueData = useFnbVenueData();
   // Unfiltered-by-year fetch so the multi-year history list below can total
   // every year in one pass, the way StoreTab's storeHistory already does.
-  const { data: allFnbRecords } = useFinancialRecords({ businessUnitId: [FNB_BU] });
+  const fnbBu = ref ? resolveFnbBu(ref.businessUnits) : null;
+  const { data: allFnbRecords } = useFinancialRecords({ businessUnitId: fnbBu != null ? [fnbBu] : undefined });
 
   if (!fys || !fy || !FAB) return <PageSpinner />;
 
@@ -94,7 +95,10 @@ export default function SiennaTab() {
               return (realFys ?? []).map((y) => ({
                 fy: y,
                 label: fyLabel(y),
-                total: computeFabYear(idx, y, fyLabel(y), monthPeriodIds(ref.periods, y)).totals.revenue,
+                total: computeFabYear(
+                  idx, fnbBu ?? -1, resolveFabLi(ref.lineItems), resolveFabOvLi(ref.lineItems),
+                  y, fyLabel(y), monthPeriodIds(ref.periods, y)
+                ).totals.revenue,
                 method: "actual" as const,
               }));
             })()

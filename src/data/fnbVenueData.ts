@@ -114,7 +114,6 @@ const MENU_ITEMS = [
   "Baro Plates", "Chotto Plates", "Sharing Portions", "Sienna Specials", "Bar Bites",
   "Mixer", "Misti", "Sienna Kids Menu", "Tasting Menu Food", "Tasting Menu Drinks",
 ];
-
 export const computeMenuMix = (
   idx: FrIndex, li: (name: string) => number | null,
   venueUnits: Partial<Record<VenueName, number>>, weeks: FnbWeek[]

@@ -6,7 +6,7 @@ import StatusRow from "./StatusRow";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
 import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
-import { computeDeptFinancials, DEPT_BU, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
+import { computeDeptFinancials, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
@@ -24,16 +24,18 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
   const [selectedFy, setSelectedFy] = useState<string | null>(null);
   const fy = selectedFy ?? fys?.at(-1);
 
+  const deptBu = ref ? resolveDeptBu(ref.businessUnits) : null;
   const { data: records } = useFinancialRecords({
-    businessUnitId: fy ? [DEPT_BU[deptKey]] : undefined,
+    businessUnitId: fy && deptBu ? [deptBu[deptKey]] : undefined,
     fiscalYear: fy ? [fy] : undefined,
   });
 
   const data = useMemo(() => {
-    if (!ref || !records || !fy) return null;
+    if (!ref || !records || !fy || !deptBu) return null;
     const idx = buildFrIndex(records);
-    return computeDeptFinancials(idx, deptKey, monthPeriodIds(ref.periods, fy));
-  }, [ref, records, fy, deptKey]);
+    const deptLi = resolveDeptLi(ref.lineItems);
+    return computeDeptFinancials(idx, deptBu[deptKey], deptLi, deptKey, monthPeriodIds(ref.periods, fy));
+  }, [ref, records, fy, deptKey, deptBu]);
 
   if (!ref || !fys || !fy || !data) return <PageSpinner />;
 

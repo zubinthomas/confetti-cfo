@@ -37,7 +37,7 @@ export function series(idx: FrIndex, businessUnitId: number, lineItemId: number 
 }
 
 // financialRecords stores percentages as fractions (0.296 = 29.6%)
-export function pctSeries(idx: FrIndex, businessUnitId: number, lineItemId: number, periodIds: number[]): Series {
+export function pctSeries(idx: FrIndex, businessUnitId: number, lineItemId: number | null, periodIds: number[]): Series {
   return series(idx, businessUnitId, lineItemId, periodIds).map((v) =>
     v == null ? null : Math.round(v * 1000) / 10
   );

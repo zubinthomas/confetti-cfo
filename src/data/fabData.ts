@@ -1,13 +1,65 @@
-// Pure, parametrized F&B (CEPL business unit 1) monthly P&L computation.
+// Pure, parametrized F&B (CEPL department "F&B") monthly P&L computation.
+//
+// Business-unit and line-item ids aren't hardcoded here - they're assigned
+// by whatever order the importer (or `npm run db:seed`'s canonical dataset)
+// happened to create rows in, which varies between a fresh Excel import and
+// the seeded verified dataset. Only the (businessId, name[, valueType])
+// identity is stable, so resolveFnbBu/resolveFabLi/resolveFabOvLi look ids
+// up by name against live reference data, the same way fnbVenueData.ts and
+// outletData.ts's buildLi2Lookup already do for their own tables.
 import { MONTHS, series, pctSeries, sum, type FrIndex, type Series } from "./seriesKernel";
+import type { BusinessUnit, LineItem } from "./types";
 
-export const FNB_BU = 1;
+export const CEPL_ID = 1;
+const FNB_BU_NAME = "F&B";
 
-const LI = {
-  productSales: 1, retailBarSales: 2, eventCatering: 3, totalRevenue: 4,
-  rawMaterial: 5, cogsPct: 9, hrCost: 12, hrPct: 15, siteCost: 16,
-  marketingCost: 20, deliveryComm: 22, totalExpense: 33, profitLoss: 34, plPct: 35,
-};
+export function resolveFnbBu(businessUnits: BusinessUnit[]): number {
+  return businessUnits.find((u) => u.businessId === CEPL_ID && u.name === FNB_BU_NAME)?.id ?? -1;
+}
+
+const LI_NAMES = {
+  productSales: "F&B Product Sales",
+  retailBarSales: "F&B Retail & Bar Sales",
+  eventCatering: "F&B Event & Catering Receipt",
+  totalRevenue: "Total F&B Sales Monthwise",
+  rawMaterial: "Raw Material",
+  cogsPct: "% COGS",
+  hrCost: "HR Cost",
+  hrPct: "HR Cost Percentage",
+  siteCost: "Site Cost (IT, POS, Utilities, Internet, Phones, Electiricity & Similar Costs)",
+  marketingCost: "Marketing & PR",
+  deliveryComm: "Delivery Partner Commission",
+  totalExpense: "Total F&B Expenses",
+  profitLoss: "P+L = Gross Revenue - Operating Costs",
+  plPct: "Profit & Loss %",
+} as const;
+
+export type FabLi = Record<keyof typeof LI_NAMES, number | null>;
+
+export function resolveFabLi(lineItems: LineItem[]): FabLi {
+  const byName = new Map(lineItems.filter((l) => l.businessId === CEPL_ID).map((l) => [l.name, l.id]));
+  const out = {} as FabLi;
+  for (const key of Object.keys(LI_NAMES) as (keyof typeof LI_NAMES)[]) {
+    out[key] = byName.get(LI_NAMES[key]) ?? null;
+  }
+  return out;
+}
+
+// F&B has no secondary workbook with multi-year detail to fall back on the
+// way Store does - years without department-sheet data only get the two
+// Overview-sheet annual totals for the F&B business unit, nothing else.
+const OV_LI_NAMES = { sales: "Sales (Overview)", pl: "Profit & Loss (Overview)" } as const;
+
+export type FabOvLi = Record<keyof typeof OV_LI_NAMES, number | null>;
+
+export function resolveFabOvLi(lineItems: LineItem[]): FabOvLi {
+  const byName = new Map(lineItems.filter((l) => l.businessId === CEPL_ID).map((l) => [l.name, l.id]));
+  const out = {} as FabOvLi;
+  for (const key of Object.keys(OV_LI_NAMES) as (keyof typeof OV_LI_NAMES)[]) {
+    out[key] = byName.get(OV_LI_NAMES[key]) ?? null;
+  }
+  return out;
+}
 
 export interface FabMonthly {
   months: string[];
@@ -16,31 +68,25 @@ export interface FabMonthly {
   marketingCost: Series; deliveryComm: Series; totalExpense: Series; profitLoss: Series; plPct: Series;
 }
 
-export function computeFabMonthly(idx: FrIndex, periodIds: number[]): FabMonthly {
+export function computeFabMonthly(idx: FrIndex, bu: number, li: FabLi, periodIds: number[]): FabMonthly {
   return {
     months: MONTHS,
-    productSales:   series(idx, FNB_BU, LI.productSales, periodIds),
-    retailBarSales: series(idx, FNB_BU, LI.retailBarSales, periodIds),
-    eventCatering:  series(idx, FNB_BU, LI.eventCatering, periodIds),
-    totalRevenue:   series(idx, FNB_BU, LI.totalRevenue, periodIds),
-    rawMaterial:    series(idx, FNB_BU, LI.rawMaterial, periodIds),
-    cogsPct:        pctSeries(idx, FNB_BU, LI.cogsPct, periodIds),
-    hrCost:         series(idx, FNB_BU, LI.hrCost, periodIds),
-    hrPct:          pctSeries(idx, FNB_BU, LI.hrPct, periodIds),
-    siteCost:       series(idx, FNB_BU, LI.siteCost, periodIds),
-    marketingCost:  series(idx, FNB_BU, LI.marketingCost, periodIds),
-    deliveryComm:   series(idx, FNB_BU, LI.deliveryComm, periodIds),
-    totalExpense:   series(idx, FNB_BU, LI.totalExpense, periodIds),
-    profitLoss:     series(idx, FNB_BU, LI.profitLoss, periodIds),
-    plPct:          pctSeries(idx, FNB_BU, LI.plPct, periodIds),
+    productSales:   series(idx, bu, li.productSales, periodIds),
+    retailBarSales: series(idx, bu, li.retailBarSales, periodIds),
+    eventCatering:  series(idx, bu, li.eventCatering, periodIds),
+    totalRevenue:   series(idx, bu, li.totalRevenue, periodIds),
+    rawMaterial:    series(idx, bu, li.rawMaterial, periodIds),
+    cogsPct:        pctSeries(idx, bu, li.cogsPct, periodIds),
+    hrCost:         series(idx, bu, li.hrCost, periodIds),
+    hrPct:          pctSeries(idx, bu, li.hrPct, periodIds),
+    siteCost:       series(idx, bu, li.siteCost, periodIds),
+    marketingCost:  series(idx, bu, li.marketingCost, periodIds),
+    deliveryComm:   series(idx, bu, li.deliveryComm, periodIds),
+    totalExpense:   series(idx, bu, li.totalExpense, periodIds),
+    profitLoss:     series(idx, bu, li.profitLoss, periodIds),
+    plPct:          pctSeries(idx, bu, li.plPct, periodIds),
   };
 }
-
-// F&B has no secondary workbook with multi-year detail to fall back on the
-// way Store does - years without department-sheet data only get the two
-// Overview-sheet annual totals (lineItems 191 Sales, 193 Profit & Loss for
-// business unit 1), nothing else.
-const OV_LI = { sales: 191, pl: 193 };
 
 export interface FabYearData {
   fy: string;
@@ -52,14 +98,16 @@ export interface FabYearData {
   totals: { revenue: number; pl: number };
 }
 
-export function computeFabYear(idx: FrIndex, fy: string, label: string, periodIds: number[]): FabYearData {
-  const m = computeFabMonthly(idx, periodIds);
+export function computeFabYear(
+  idx: FrIndex, bu: number, li: FabLi, ovLi: FabOvLi, fy: string, label: string, periodIds: number[]
+): FabYearData {
+  const m = computeFabMonthly(idx, bu, li, periodIds);
   const hasMonthlyDetail = m.totalRevenue.some((v) => v != null);
   const totals = hasMonthlyDetail
     ? { revenue: sum(m.totalRevenue), pl: sum(m.profitLoss) }
     : {
-        revenue: sum(series(idx, FNB_BU, OV_LI.sales, periodIds)),
-        pl: sum(series(idx, FNB_BU, OV_LI.pl, periodIds)),
+        revenue: sum(series(idx, bu, ovLi.sales, periodIds)),
+        pl: sum(series(idx, bu, ovLi.pl, periodIds)),
       };
   return {
     fy, label, hasMonthlyDetail,

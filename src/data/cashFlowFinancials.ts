@@ -1,5 +1,5 @@
-// Pure, parametrized group cash-flow computation (CEPL workbook, business
-// units 1-6).
+// Pure, parametrized group cash-flow computation (CEPL workbook, all six
+// departments - F&B, Store, Trading Items, Pottery, Batik, Stitching).
 //
 // This only produces a real number for a fiscal year when ALL SIX
 // departments have monthly detail for it - unlike F&B/Store, the four craft
@@ -14,13 +14,24 @@
 // CASH_GAPS below, which the Cash Flow page and the AI context builder
 // surface instead of invented numbers.
 import { MONTHS, frGet, sum, fyLabel, type FrIndex } from "./seriesKernel";
-import type { LineItem } from "./types";
-import { computeFabMonthly } from "./fabData";
-import { computeStoreYear } from "./storeFinancials";
-import { computeDeptFinancials, type DeptKey } from "./deptFinancials";
+import type { BusinessUnit, LineItem } from "./types";
+import { computeFabMonthly, resolveFnbBu, resolveFabLi, type FabLi } from "./fabData";
+import { computeStoreYear, resolveStoreBu, resolveStoreLi, type StoreLi } from "./storeFinancials";
+import { computeDeptFinancials, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptLi } from "./deptFinancials";
 
-const CEPL_UNITS = [1, 2, 3, 4, 5, 6];
 const CRAFT_KEYS: DeptKey[] = ["tradingItems", "pottery", "batik", "stitching"];
+
+export interface CashFlowIds {
+  fnbBu: number; storeBu: number; deptBu: Record<DeptKey, number>;
+  fnbLi: FabLi; storeLi: StoreLi; deptLi: DeptLi;
+}
+
+export function resolveCashFlowIds(businessUnits: BusinessUnit[], lineItems: LineItem[]): CashFlowIds {
+  return {
+    fnbBu: resolveFnbBu(businessUnits), storeBu: resolveStoreBu(businessUnits), deptBu: resolveDeptBu(businessUnits),
+    fnbLi: resolveFabLi(lineItems), storeLi: resolveStoreLi(lineItems), deptLi: resolveDeptLi(lineItems),
+  };
+}
 
 // sum one-or-more line items (by exact name) across all CEPL departments
 const liIdsByName = (lineItems: LineItem[], ...names: string[]): number[] =>
@@ -28,9 +39,9 @@ const liIdsByName = (lineItems: LineItem[], ...names: string[]): number[] =>
     .filter((l) => l.businessId === 1 && l.valueType === "amount" && names.includes(l.name))
     .map((l) => l.id);
 
-function monthlyAcrossUnits(idx: FrIndex, liIds: number[], periodIds: number[]): number[] {
+function monthlyAcrossUnits(idx: FrIndex, units: number[], liIds: number[], periodIds: number[]): number[] {
   return periodIds.map((pid) =>
-    sum(CEPL_UNITS.flatMap((u) => liIds.map((lid) => frGet(idx, u, pid, lid))))
+    sum(units.flatMap((u) => liIds.map((lid) => frGet(idx, u, pid, lid))))
   );
 }
 
@@ -60,12 +71,13 @@ export interface CashFlowYearData {
 }
 
 export function computeCashFlowForFY(
-  idx: FrIndex, lineItems: LineItem[], fiscalYear: string, periodIds: number[]
+  idx: FrIndex, ids: CashFlowIds, lineItems: LineItem[], fiscalYear: string, periodIds: number[]
 ): CashFlowYearData {
-  const fab = computeFabMonthly(idx, periodIds);
+  const allUnits = [ids.fnbBu, ids.storeBu, ...CRAFT_KEYS.map((k) => ids.deptBu[k])];
+  const fab = computeFabMonthly(idx, ids.fnbBu, ids.fnbLi, periodIds);
   const fabHasMonthlyDetail = fab.totalRevenue.some((v) => v != null);
-  const store = computeStoreYear(idx, fiscalYear, fyLabel(fiscalYear), periodIds);
-  const crafts = CRAFT_KEYS.map((k) => computeDeptFinancials(idx, k, periodIds));
+  const store = computeStoreYear(idx, ids.storeBu, ids.storeLi, fiscalYear, fyLabel(fiscalYear), periodIds);
+  const crafts = CRAFT_KEYS.map((k) => computeDeptFinancials(idx, ids.deptBu[k], ids.deptLi, k, periodIds));
 
   const hasFullDetail = fabHasMonthlyDetail && store.hasMonthlyDetail
     && crafts.every((c) => c.revenue.some((v) => v != null));
@@ -86,7 +98,7 @@ export function computeCashFlowForFY(
   const cumulative = net.reduce((acc: number[], v) => [...acc, (acc.at(-1) ?? 0) + v], [] as number[]);
 
   const outflowCategories: OutflowCategory[] = CATEGORY_LINES.map(([label, names]) => {
-    const monthly = monthlyAcrossUnits(idx, liIdsByName(lineItems, ...names), periodIds);
+    const monthly = monthlyAcrossUnits(idx, allUnits, liIdsByName(lineItems, ...names), periodIds);
     return { label, monthly, total: sum(monthly) };
   });
   // residual = reported total expenses minus the categorised lines
@@ -96,7 +108,7 @@ export function computeCashFlowForFY(
 
   // GST memo - a real cash outflow, but reported outside the departmental
   // expense totals in the source sheets (pass-through, not a P&L cost)
-  const gstMonthly = monthlyAcrossUnits(idx, liIdsByName(lineItems, "GST Paid", "GST Expenses"), periodIds);
+  const gstMonthly = monthlyAcrossUnits(idx, allUnits, liIdsByName(lineItems, "GST Paid", "GST Expenses"), periodIds);
 
   return {
     fy: fiscalYear, label: fyLabel(fiscalYear), hasFullDetail: true,

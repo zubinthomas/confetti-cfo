@@ -10,7 +10,7 @@ import {
   computeChannelBreakdown, computeChannelTotals, computeCategoriesForFY,
   computeStoreRevenue, computeFirstMonthRevenue,
 } from '@/data/storeSalesData';
-import { computeStoreYear, STORE_BU, type StoreDeptYearData } from '@/data/storeFinancials';
+import { computeStoreYear, resolveStoreBu, resolveStoreLi, type StoreDeptYearData } from '@/data/storeFinancials';
 
 export const STORE_FYS = ['2021-2022', '2022-2023', '2023-2024', '2024-2025', '2025-2026'];
 const ALL_FYS = [...STORE_FYS, '2026-2027'];
@@ -37,12 +37,16 @@ export interface StoreData {
 
 export function useStoreData(): StoreData | undefined {
   const { data: ref } = useReferenceData();
+  const storeBu = ref ? resolveStoreBu(ref.businessUnits) : null;
   const { data: sales } = useSalesRecords({ fiscalYear: ALL_FYS });
-  const { data: financial } = useFinancialRecords({ businessUnitId: [STORE_BU], fiscalYear: ALL_FYS });
+  const { data: financial } = useFinancialRecords({
+    businessUnitId: storeBu != null ? [storeBu] : undefined, fiscalYear: ALL_FYS,
+  });
 
   return useMemo(() => {
-    if (!ref || !sales || !financial) return undefined;
+    if (!ref || !sales || !financial || storeBu == null) return undefined;
     const frIdx = buildFrIndex(financial);
+    const storeLi = resolveStoreLi(ref.lineItems);
     const pidsFor = (fy: string) => monthPeriodIds(ref.periods, fy);
 
     const fy2627Pids = ref.periods
@@ -79,7 +83,7 @@ export function useStoreData(): StoreData | undefined {
 
     const storeFinancialsByFy: Record<string, StoreDeptYearData> = {};
     for (const fy of STORE_FYS) {
-      storeFinancialsByFy[fy] = computeStoreYear(frIdx, fy, fyLabel(fy), pidsFor(fy));
+      storeFinancialsByFy[fy] = computeStoreYear(frIdx, storeBu, storeLi, fy, fyLabel(fy), pidsFor(fy));
     }
 
     return {
@@ -93,5 +97,5 @@ export function useStoreData(): StoreData | undefined {
       aprilByFy,
       storeFinancialsByFy,
     };
-  }, [ref, sales, financial]);
+  }, [ref, sales, financial, storeBu]);
 }
