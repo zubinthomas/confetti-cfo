@@ -1,6 +1,11 @@
-// Seed the database from src/data/extracted_data.json (the verified Excel
-// extraction). Idempotent: wipes and reloads the dataset tables.
-//   node db/seed.ts
+// Seed the database from a dataset JSON in the shape of
+// src/data/extracted_data.json (the verified Excel extraction). Idempotent:
+// wipes and reloads the dataset tables.
+//
+//   node db/seed.ts                         # extracted_data.json (default)
+//   node db/seed.ts ../src/data/foo.json     # explicit path (CLI arg wins)
+//   SEED_DATASET=../src/data/foo.json node db/seed.ts   # or via env var
+//
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +13,12 @@ import { sql } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATASET = path.join(__dirname, '..', '..', 'src', 'data', 'extracted_data.json');
+const argPath = process.argv[2];
+const DATASET = argPath
+  ? path.resolve(process.cwd(), argPath)
+  : process.env.SEED_DATASET
+    ? path.resolve(process.cwd(), process.env.SEED_DATASET)
+    : path.join(__dirname, '..', '..', 'src', 'data', 'extracted_data.json');
 
 const raw = JSON.parse(fs.readFileSync(DATASET, 'utf-8'));
 
