@@ -365,6 +365,23 @@ export const tallyLedgerMappings = pgTable('tally_ledger_mappings', {
   uniqueIndex('tally_ledger_mappings_source_ledger').on(t.tallySourceId, t.ledgerName),
 ]);
 
+// Default mapping for every ledger in a Tally group. A ledger's own row in
+// tally_ledger_mappings overrides this when it has a businessUnitId or
+// lineItemId set; otherwise the ledger takes its group's values. See
+// server/tally/effectiveMappings.ts.
+export const tallyGroupMappings = pgTable('tally_group_mappings', {
+  id: serial('id').primaryKey(),
+  tallySourceId: integer('tally_source_id').notNull().references(() => tallySources.id, { onDelete: 'cascade' }),
+  groupName: text('group_name').notNull(),
+  businessUnitId: integer('business_unit_id').references(() => businessUnits.id),
+  lineItemId: integer('line_item_id').references(() => lineItems.id),
+  valueMode: tallyValueModeEnum('value_mode').notNull().default('balance'),
+  periodGranularity: tallyPeriodGranularityEnum('period_granularity').notNull().default('month'),
+  createdAt: text('created_at').notNull(), // ISO-8601
+}, (t) => [
+  uniqueIndex('tally_group_mappings_source_group').on(t.tallySourceId, t.groupName),
+]);
+
 // ── App entities (HR & compliance forms) ─────────────────────────────────────
 export const employees = pgTable('employees', {
   id: text('id').primaryKey(),

@@ -12,6 +12,7 @@ import { authMiddleware, requirePermission } from '../middleware/auth.ts';
 import { db, ready, schema } from '../db/client.ts';
 import { loadWorkbook } from '../import/xlsx.ts';
 import { parseLedgerList } from '../tally/parseLedgerList.ts';
+import { loadEffectiveMappings } from '../tally/loadEffectiveMappings.ts';
 
 const router = Router();
 router.use(authMiddleware);
@@ -121,13 +122,15 @@ router.delete('/sources/:id', requirePermission('TallySource', 'delete'), async 
   res.json({ ok: true });
 });
 
-/** GET /api/tally/sources/:id/mappings */
+/** GET /api/tally/sources/:id/mappings - each ledger's own row, plus `effective`:
+ *  where its values land after its group default is applied. */
 router.get('/sources/:id/mappings', requirePermission('TallySource', 'read'), async (req, res) => {
   await ready();
   const id = Number(req.params.id);
   const rows = await db.select().from(schema.tallyLedgerMappings)
     .where(eq(schema.tallyLedgerMappings.tallySourceId, id));
-  res.json(rows);
+  const effective = await loadEffectiveMappings(id);
+  res.json(rows.map((r) => ({ ...r, effective: effective.get(r.ledgerName) })));
 });
 
 /** POST /api/tally/sources/:id/mappings/import - upload a Tally "List of
@@ -231,6 +234,72 @@ router.patch('/mappings/:id', requirePermission('TallySource', 'write'), async (
     .where(eq(schema.tallyLedgerMappings.id, id)).returning();
   if (!updated) return res.status(404).json({ message: 'Not found' });
   res.json(updated);
+});
+
+/** GET /api/tally/sources/:id/group-mappings - every Tally group that has ledgers
+ *  in this source, with its default and how many of its ledgers are overridden. */
+router.get('/sources/:id/group-mappings', requirePermission('TallySource', 'read'), async (req, res) => {
+  await ready();
+  const id = Number(req.params.id);
+  const [ledgers, groups] = await Promise.all([
+    db.select().from(schema.tallyLedgerMappings).where(eq(schema.tallyLedgerMappings.tallySourceId, id)),
+    db.select().from(schema.tallyGroupMappings).where(eq(schema.tallyGroupMappings.tallySourceId, id)),
+  ]);
+  const groupByName = new Map(groups.map((g) => [g.groupName, g]));
+  const counts = new Map<string, { ledgerCount: number; overrideCount: number }>();
+  for (const l of ledgers) {
+    if (l.groupName == null) continue;
+    const c = counts.get(l.groupName) ?? { ledgerCount: 0, overrideCount: 0 };
+    c.ledgerCount += 1;
+    if (l.businessUnitId != null || l.lineItemId != null) c.overrideCount += 1;
+    counts.set(l.groupName, c);
+  }
+  res.json([...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([groupName, c]) => {
+      const g = groupByName.get(groupName);
+      return {
+        groupName, ...c,
+        businessUnitId: g?.businessUnitId ?? null,
+        lineItemId: g?.lineItemId ?? null,
+        valueMode: g?.valueMode ?? 'balance',
+        periodGranularity: g?.periodGranularity ?? 'month',
+      };
+    }));
+});
+
+/** POST /api/tally/sources/:id/group-mappings { groupName, businessUnitId, lineItemId,
+ *  valueMode, periodGranularity } - sets the default for every ledger in the group.
+ *  Ledgers that already have their own assignment keep it. Send all fields: omitted
+ *  valueMode/periodGranularity reset to balance/month, and null businessUnitId and
+ *  lineItemId clear the group default. */
+router.post('/sources/:id/group-mappings', requirePermission('TallySource', 'write'), async (req, res) => {
+  await ready();
+  const tallySourceId = Number(req.params.id);
+  const { groupName, businessUnitId, lineItemId, valueMode, periodGranularity } = req.body as {
+    groupName?: string; businessUnitId?: number | null; lineItemId?: number | null;
+    valueMode?: string; periodGranularity?: string;
+  };
+  if (!groupName?.trim()) return res.status(400).json({ message: 'groupName is required' });
+  if (valueMode !== undefined && !VALUE_MODES.includes(valueMode as typeof VALUE_MODES[number])) {
+    return res.status(400).json({ message: `valueMode must be one of: ${VALUE_MODES.join(', ')}` });
+  }
+  if (periodGranularity !== undefined && !PERIOD_GRANULARITIES.includes(periodGranularity as typeof PERIOD_GRANULARITIES[number])) {
+    return res.status(400).json({ message: `periodGranularity must be one of: ${PERIOD_GRANULARITIES.join(', ')}` });
+  }
+  const values = {
+    businessUnitId: businessUnitId ?? null,
+    lineItemId: lineItemId ?? null,
+    valueMode: (valueMode ?? 'balance') as typeof VALUE_MODES[number],
+    periodGranularity: (periodGranularity ?? 'month') as typeof PERIOD_GRANULARITIES[number],
+  };
+  const [row] = await db.insert(schema.tallyGroupMappings).values({
+    tallySourceId, groupName, ...values, createdAt: new Date().toISOString(),
+  }).onConflictDoUpdate({
+    target: [schema.tallyGroupMappings.tallySourceId, schema.tallyGroupMappings.groupName],
+    set: values,
+  }).returning();
+  res.status(201).json(row);
 });
 
 export default router;

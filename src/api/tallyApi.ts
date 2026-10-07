@@ -41,6 +41,30 @@ export interface TallyLedgerMapping {
   valueMode: TallyValueMode;
   periodGranularity: TallyPeriodGranularity;
   createdAt: string;
+  /** Where this ledger's values actually land, after the group default. */
+  effective: TallyEffectiveMapping;
+}
+
+export interface TallyEffectiveMapping {
+  businessUnitId: number | null;
+  lineItemId: number | null;
+  valueMode: TallyValueMode;
+  periodGranularity: TallyPeriodGranularity;
+  /** 'ledger' = the ledger's own assignment, 'group' = its group's default,
+   *  null = neither is set (unmapped). */
+  inheritedFrom: "ledger" | "group" | null;
+}
+
+export interface TallyGroupMapping {
+  groupName: string;
+  /** Ledgers in this source whose Tally group is this one. */
+  ledgerCount: number;
+  /** Of those, how many have their own assignment instead of the group default. */
+  overrideCount: number;
+  businessUnitId: number | null;
+  lineItemId: number | null;
+  valueMode: TallyValueMode;
+  periodGranularity: TallyPeriodGranularity;
 }
 
 /** Only returned once, right when a key is created or rotated - the server
@@ -70,6 +94,16 @@ export const updateTallyMapping = (
     valueMode?: TallyValueMode; periodGranularity?: TallyPeriodGranularity;
   },
 ) => patch<TallyLedgerMapping>(`/tally/mappings/${id}`, body);
+
+export const listTallyGroupMappings = (sourceId: number) =>
+  get<TallyGroupMapping[]>(`/tally/sources/${sourceId}/group-mappings`);
+export const upsertTallyGroupMapping = (
+  sourceId: number,
+  body: {
+    groupName: string; businessUnitId: number | null; lineItemId: number | null;
+    valueMode: TallyValueMode; periodGranularity: TallyPeriodGranularity;
+  },
+) => post<TallyGroupMapping>(`/tally/sources/${sourceId}/group-mappings`, body);
 
 export interface ImportMappingsResult { imported: number }
 

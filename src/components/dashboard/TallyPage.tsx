@@ -4,8 +4,11 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   listTallySources, createTallySource, updateTallySource, rotateTallySourceKey, deleteTallySource,
   listTallyMappings, updateTallyMapping, importTallyMappings,
+  listTallyGroupMappings, upsertTallyGroupMapping,
   type TallySource, type TallySyncMode, type TallyLedgerMapping,
+  type TallyEffectiveMapping, type TallyGroupMapping,
 } from "@/api/tallyApi";
+import type { Business, BusinessUnit, LineItem } from "@/data/types";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useAuth } from "@/lib/AuthContext";
 import {
@@ -333,9 +336,84 @@ function SourcesCard({
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
+type MappingValues = Pick<TallyEffectiveMapping, "businessUnitId" | "lineItemId" | "valueMode" | "periodGranularity">;
+type MappingPatch = Partial<MappingValues>;
+
+/** Business unit, line item and value selects, shared by the group and ledger rows.
+ *  Renders three table cells, so it must sit directly inside a <tr>. */
+function MappingSelects({ value, disabled, onChange, businesses, businessUnits, lineItems }: {
+  value: MappingValues;
+  disabled: boolean;
+  onChange: (patch: MappingPatch) => void;
+  businesses: Business[];
+  businessUnits: BusinessUnit[];
+  lineItems: LineItem[];
+}) {
+  const unit = value.businessUnitId != null ? businessUnits.find((u) => u.id === value.businessUnitId) : undefined;
+  const scopedLineItems = unit ? lineItems.filter((li) => li.businessId === unit.businessId) : lineItems;
+  const selectClass = "px-1.5 py-1 rounded border border-border bg-background text-xs disabled:opacity-50";
+  return (
+    <>
+      <td className="py-1.5 px-2.5">
+        <select
+          value={value.businessUnitId ?? ""}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value ? Number(e.target.value) : null;
+            const newUnit = v != null ? businessUnits.find((u) => u.id === v) : undefined;
+            const currentLineItem = value.lineItemId != null ? lineItems.find((li) => li.id === value.lineItemId) : undefined;
+            const keepLineItem = currentLineItem != null && currentLineItem.businessId === newUnit?.businessId;
+            onChange({ businessUnitId: v, ...(keepLineItem ? {} : { lineItemId: null }) });
+          }}
+          className={`${selectClass} min-w-[140px]`}
+        >
+          <option value="">Unmapped</option>
+          {businesses.map((b) => (
+            <optgroup key={b.id} label={b.name}>
+              {businessUnits.filter((u) => u.businessId === b.id).map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </td>
+      <td className="py-1.5 px-2.5">
+        <select
+          value={value.lineItemId ?? ""}
+          disabled={disabled || value.businessUnitId == null}
+          onChange={(e) => onChange({ lineItemId: e.target.value ? Number(e.target.value) : null })}
+          className={`${selectClass} min-w-[160px]`}
+        >
+          <option value="">{value.businessUnitId == null ? "Pick a business unit first" : "Unmapped"}</option>
+          {scopedLineItems.map((li) => (
+            <option key={li.id} value={li.id}>{li.name}</option>
+          ))}
+        </select>
+      </td>
+      <td className="py-1.5 px-2.5">
+        <select
+          value={value.valueMode === "period" ? `period-${value.periodGranularity}` : "balance"}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "balance") onChange({ valueMode: "balance" });
+            else onChange({ valueMode: "period", periodGranularity: v === "period-week" ? "week" : "month" });
+          }}
+          className={`${selectClass} min-w-[130px]`}
+        >
+          <option value="balance">Balance</option>
+          <option value="period-month">Monthly P&amp;L</option>
+          <option value="period-week">Weekly P&amp;L</option>
+        </select>
+      </td>
+    </>
+  );
+}
+
 function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boolean }) {
   const { data: reference } = useReferenceData();
   const [mappings, setMappings] = useState<TallyLedgerMapping[] | null>(null);
+  const [groups, setGroups] = useState<TallyGroupMapping[] | null>(null);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [importResult, setImportResult] = useState<number | null>(null);
@@ -344,14 +422,15 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
-    listTallyMappings(source.id)
-      .then(setMappings)
+    Promise.all([listTallyMappings(source.id), listTallyGroupMappings(source.id)])
+      .then(([rows, groupRows]) => { setMappings(rows); setGroups(groupRows); })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load mappings"));
   }, [source.id]);
-  useEffect(() => { setMappings(null); refresh(); }, [refresh]);
+  useEffect(() => { setMappings(null); setGroups(null); refresh(); }, [refresh]);
   useEffect(() => { setPage(1); }, [search, onlyUnmapped, pageSize, source.id]);
 
   const onFile = async (file: File) => {
@@ -370,14 +449,18 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
     }
   };
 
-  const onAssign = async (mapping: TallyLedgerMapping, patch: {
-    businessUnitId?: number | null; lineItemId?: number | null;
-    valueMode?: TallyLedgerMapping["valueMode"]; periodGranularity?: TallyLedgerMapping["periodGranularity"];
-  }) => {
+  // A ledger change starts from the values the row shows now, so changing one
+  // field doesn't drop the others. The ledger then carries its own assignment.
+  const onAssign = async (mapping: TallyLedgerMapping, patch: MappingPatch) => {
     setBusyId(mapping.id);
     try {
-      const updated = await updateTallyMapping(mapping.id, patch);
-      setMappings((prev) => prev?.map((m) => (m.id === updated.id ? updated : m)) ?? prev);
+      const base = mapping.effective;
+      await updateTallyMapping(mapping.id, {
+        businessUnitId: base.businessUnitId, lineItemId: base.lineItemId,
+        valueMode: base.valueMode, periodGranularity: base.periodGranularity,
+        ...patch,
+      });
+      refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update mapping");
     } finally {
@@ -385,23 +468,52 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
     }
   };
 
+  const onResetLedger = async (mapping: TallyLedgerMapping) => {
+    setBusyId(mapping.id);
+    try {
+      await updateTallyMapping(mapping.id, { businessUnitId: null, lineItemId: null });
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset mapping");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onAssignGroup = async (group: TallyGroupMapping, patch: MappingPatch) => {
+    setBusyGroup(group.groupName);
+    try {
+      await upsertTallyGroupMapping(source.id, {
+        groupName: group.groupName,
+        businessUnitId: group.businessUnitId, lineItemId: group.lineItemId,
+        valueMode: group.valueMode, periodGranularity: group.periodGranularity,
+        ...patch,
+      });
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update group");
+    } finally {
+      setBusyGroup(null);
+    }
+  };
+
   const businesses = reference?.businesses ?? [];
   const businessUnits = reference?.businessUnits ?? [];
   const lineItems = reference?.lineItems ?? [];
-  const unitById = useMemo(() => new Map(businessUnits.map((u) => [u.id, u])), [businessUnits]);
-  const lineItemById = useMemo(() => new Map(lineItems.map((li) => [li.id, li])), [lineItems]);
+
+  const isMapped = (m: TallyLedgerMapping) => m.effective.businessUnitId != null && m.effective.lineItemId != null;
 
   const filtered = useMemo(() => {
     if (!mappings) return [];
     const q = search.trim().toLowerCase();
     return mappings.filter((m) => {
-      if (onlyUnmapped && (m.businessUnitId != null || m.lineItemId != null)) return false;
+      if (onlyUnmapped && isMapped(m)) return false;
       if (!q) return true;
       return m.ledgerName.toLowerCase().includes(q) || (m.groupName ?? "").toLowerCase().includes(q);
     });
   }, [mappings, search, onlyUnmapped]);
 
-  const unmappedCount = mappings?.filter((m) => m.businessUnitId == null || m.lineItemId == null).length ?? 0;
+  const unmappedCount = mappings?.filter((m) => !isMapped(m)).length ?? 0;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -432,7 +544,7 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
         </p>
       )}
 
-      {mappings === null ? (
+      {mappings === null || groups === null ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : mappings.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -440,6 +552,49 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
         </p>
       ) : (
         <>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Tally groups</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            A group&apos;s default applies to every ledger in it that has no assignment of its own.
+            Only the group a ledger sits directly in is used, so a ledger inside a sub-group needs
+            its own group mapped or an assignment on the ledger.
+          </p>
+          {groups.length === 0 ? (
+            <p className="text-sm text-muted-foreground mb-6">No groups in this chart of accounts.</p>
+          ) : (
+            <div className="overflow-x-auto border border-border rounded-lg mb-6">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                    <th className="py-2 px-2.5 font-medium">Group</th>
+                    <th className="py-2 px-2.5 font-medium">Ledgers</th>
+                    <th className="py-2 px-2.5 font-medium" title="Ledgers with their own assignment, which ignore this group">Own assignments</th>
+                    <th className="py-2 px-2.5 font-medium">Business unit</th>
+                    <th className="py-2 px-2.5 font-medium">Line item</th>
+                    <th className="py-2 px-2.5 font-medium">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((g) => (
+                    <tr key={g.groupName} className="border-b border-border last:border-0">
+                      <td className="py-1.5 px-2.5 text-foreground">{g.groupName}</td>
+                      <td className="py-1.5 px-2.5 text-muted-foreground">{g.ledgerCount}</td>
+                      <td className="py-1.5 px-2.5 text-muted-foreground">{g.overrideCount}</td>
+                      <MappingSelects
+                        value={g}
+                        disabled={!canWrite || busyGroup === g.groupName}
+                        onChange={(patch) => onAssignGroup(g, patch)}
+                        businesses={businesses}
+                        businessUnits={businessUnits}
+                        lineItems={lineItems}
+                      />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 className="text-sm font-semibold text-foreground mb-1">Ledgers</h3>
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -471,71 +626,42 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
                   <th className="py-2 px-2.5 font-medium">Business unit</th>
                   <th className="py-2 px-2.5 font-medium">Line item</th>
                   <th className="py-2 px-2.5 font-medium">Value</th>
+                  <th className="py-2 px-2.5 font-medium">Source</th>
                 </tr>
               </thead>
               <tbody>
-                {paged.map((m) => {
-                  const unit = m.businessUnitId != null ? unitById.get(m.businessUnitId) : undefined;
-                  const scopedLineItems = unit ? lineItems.filter((li) => li.businessId === unit.businessId) : lineItems;
-                  return (
-                    <tr key={m.id} className="border-b border-border last:border-0">
-                      <td className="py-1.5 px-2.5 text-foreground">{m.ledgerName}</td>
-                      <td className="py-1.5 px-2.5 text-muted-foreground">{m.groupName ?? "—"}</td>
-                      <td className="py-1.5 px-2.5">
-                        <select
-                          value={m.businessUnitId ?? ""}
-                          disabled={!canWrite || busyId === m.id}
-                          onChange={(e) => {
-                            const v = e.target.value ? Number(e.target.value) : null;
-                            const newUnit = v != null ? unitById.get(v) : undefined;
-                            const currentLineItem = m.lineItemId != null ? lineItemById.get(m.lineItemId) : undefined;
-                            const keepLineItem = currentLineItem != null && currentLineItem.businessId === newUnit?.businessId;
-                            onAssign(m, { businessUnitId: v, ...(keepLineItem ? {} : { lineItemId: null }) });
-                          }}
-                          className="px-1.5 py-1 rounded border border-border bg-background text-xs disabled:opacity-50 min-w-[140px]"
+                {paged.map((m) => (
+                  <tr key={m.id} className="border-b border-border last:border-0">
+                    <td className="py-1.5 px-2.5 text-foreground">{m.ledgerName}</td>
+                    <td className="py-1.5 px-2.5 text-muted-foreground">{m.groupName ?? "—"}</td>
+                    <MappingSelects
+                      value={m.effective}
+                      disabled={!canWrite || busyId === m.id}
+                      onChange={(patch) => onAssign(m, patch)}
+                      businesses={businesses}
+                      businessUnits={businessUnits}
+                      lineItems={lineItems}
+                    />
+                    <td className="py-1.5 px-2.5 whitespace-nowrap">
+                      {m.effective.inheritedFrom === "ledger" && (
+                        <span className="text-muted-foreground">Own</span>
+                      )}
+                      {m.effective.inheritedFrom === "group" && (
+                        <span className="text-muted-foreground">From group</span>
+                      )}
+                      {m.effective.inheritedFrom === null && <span className="text-muted-foreground">—</span>}
+                      {canWrite && (m.businessUnitId != null || m.lineItemId != null) && (
+                        <button
+                          onClick={() => onResetLedger(m)} disabled={busyId === m.id}
+                          className="ml-2 text-primary hover:underline disabled:opacity-50"
+                          title="Remove this ledger's own assignment so it follows its group again"
                         >
-                          <option value="">Unmapped</option>
-                          {businesses.map((b) => (
-                            <optgroup key={b.id} label={b.name}>
-                              {businessUnits.filter((u) => u.businessId === b.id).map((u) => (
-                                <option key={u.id} value={u.id}>{u.name}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-1.5 px-2.5">
-                        <select
-                          value={m.lineItemId ?? ""}
-                          disabled={!canWrite || busyId === m.id || m.businessUnitId == null}
-                          onChange={(e) => onAssign(m, { lineItemId: e.target.value ? Number(e.target.value) : null })}
-                          className="px-1.5 py-1 rounded border border-border bg-background text-xs disabled:opacity-50 min-w-[160px]"
-                        >
-                          <option value="">{m.businessUnitId == null ? "Pick a business unit first" : "Unmapped"}</option>
-                          {scopedLineItems.map((li) => (
-                            <option key={li.id} value={li.id}>{li.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-1.5 px-2.5">
-                        <select
-                          value={m.valueMode === "period" ? `period-${m.periodGranularity}` : "balance"}
-                          disabled={!canWrite || busyId === m.id}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "balance") onAssign(m, { valueMode: "balance" });
-                            else onAssign(m, { valueMode: "period", periodGranularity: v === "period-week" ? "week" : "month" });
-                          }}
-                          className="px-1.5 py-1 rounded border border-border bg-background text-xs disabled:opacity-50 min-w-[130px]"
-                        >
-                          <option value="balance">Balance</option>
-                          <option value="period-month">Monthly P&amp;L</option>
-                          <option value="period-week">Weekly P&amp;L</option>
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
+                          Use group
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

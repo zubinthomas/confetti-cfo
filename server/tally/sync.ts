@@ -13,6 +13,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { buildMergePlan, commitMergePlan } from '../import/merge.ts';
 import { canAutoCommit } from '../sheets/sync.ts';
+import { loadEffectiveMappings } from './loadEffectiveMappings.ts';
 import { fiscalYearOf, monthPeriod } from '../import/types.ts';
 import type { Issue, ParsedFinancialRecord, ParsedPeriod, ParsedWorkbook } from '../import/types.ts';
 
@@ -83,9 +84,8 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
       };
     }
 
-    const mappings = await db.select().from(schema.tallyLedgerMappings)
-      .where(eq(schema.tallyLedgerMappings.tallySourceId, source.id));
-    const mappingByLedger = new Map(mappings.map((m) => [m.ledgerName, m]));
+    const mappingByLedger = await loadEffectiveMappings(source.id);
+    const mappings = [...mappingByLedger.values()];
 
     const unitIds = [...new Set(mappings.map((m) => m.businessUnitId).filter((v): v is number => v != null))];
     const lineItemIds = [...new Set(mappings.map((m) => m.lineItemId).filter((v): v is number => v != null))];

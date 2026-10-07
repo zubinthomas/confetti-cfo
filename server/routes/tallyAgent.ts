@@ -3,10 +3,10 @@
 // and can only read its own config or push data attributed to its own
 // tally_sources row.
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
 import { tallyAgentAuth, type TallyAgentRequest } from '../middleware/tallyAgentAuth.ts';
-import { db, ready, schema } from '../db/client.ts';
+import { ready } from '../db/client.ts';
 import { syncTallyPush } from '../tally/sync.ts';
+import { loadEffectiveMappings } from '../tally/loadEffectiveMappings.ts';
 import type { TallyRecordInput } from '../tally/sync.ts';
 import { batchSummary } from './import.ts';
 
@@ -20,20 +20,19 @@ router.use(tallyAgentAuth);
 router.get('/config', async (req: TallyAgentRequest, res) => {
   await ready();
   const source = req.tallySource!;
-  const mappings = await db.select({
-    ledgerName: schema.tallyLedgerMappings.ledgerName,
-    valueMode: schema.tallyLedgerMappings.valueMode,
-    periodGranularity: schema.tallyLedgerMappings.periodGranularity,
-  }).from(schema.tallyLedgerMappings)
-    .where(eq(schema.tallyLedgerMappings.tallySourceId, source.id));
+  // Only ledgers that resolve to a business unit and line item: an unmapped
+  // ledger has nowhere to land, so the agent doesn't need to send it.
+  const effective = await loadEffectiveMappings(source.id);
   res.json({
     syncIntervalMinutes: source.syncIntervalMinutes,
     syncMode: source.syncMode,
-    ledgers: mappings.map((m) => ({
-      name: m.ledgerName,
-      valueMode: m.valueMode,
-      periodGranularity: m.periodGranularity,
-    })),
+    ledgers: [...effective.entries()]
+      .filter(([, m]) => m.businessUnitId != null && m.lineItemId != null)
+      .map(([name, m]) => ({
+        name,
+        valueMode: m.valueMode,
+        periodGranularity: m.periodGranularity,
+      })),
     tallyGatewayUrl: source.tallyGatewayUrl,
     tallyCompanyName: source.tallyCompanyName,
     tallyPeriodReportName: source.tallyPeriodReportName,
