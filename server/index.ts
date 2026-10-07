@@ -40,6 +40,10 @@ const PORT = process.env.PORT || 3001;
 
 console.log(process.env.CLIENT_URL)
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+// The Tally agent sends a whole sync cycle in one request, which goes past
+// Express's 100kb default once a few thousand ledgers are mapped. Other routes
+// keep the default. body-parser skips the second parser once the body is read.
+app.use('/api/tally-agent', express.json({ limit: '10mb' }));
 app.use(express.json());
 
 // Serve uploaded files
