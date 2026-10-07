@@ -350,7 +350,10 @@ function MappingSelects({ value, disabled, onChange, businesses, businessUnits, 
   lineItems: LineItem[];
 }) {
   const unit = value.businessUnitId != null ? businessUnits.find((u) => u.id === value.businessUnitId) : undefined;
-  const scopedLineItems = unit ? lineItems.filter((li) => li.businessId === unit.businessId) : lineItems;
+  // Empty, not the full list, when no unit is picked yet: the select is disabled either
+  // way, and a real chart of accounts can have hundreds of groups each rendering this -
+  // every line item as an <option> on every one of them is enough DOM to freeze the tab.
+  const scopedLineItems = unit ? lineItems.filter((li) => li.businessId === unit.businessId) : [];
   const selectClass = "px-1.5 py-1 rounded border border-border bg-background text-xs disabled:opacity-50";
   return (
     <>
@@ -421,6 +424,9 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
   const [onlyUnmapped, setOnlyUnmapped] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [groupPage, setGroupPage] = useState(1);
+  const [groupPageSize, setGroupPageSize] = useState(25);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -432,6 +438,7 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
   }, [source.id]);
   useEffect(() => { setMappings(null); setGroups(null); refresh(); }, [refresh]);
   useEffect(() => { setPage(1); }, [search, onlyUnmapped, pageSize, source.id]);
+  useEffect(() => { setGroupPage(1); }, [groupSearch, groupPageSize, source.id]);
 
   const onFile = async (file: File) => {
     setUploading(true);
@@ -518,6 +525,18 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
   const currentPage = Math.min(page, totalPages);
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  // A real chart of accounts can have hundreds of groups - paginated the same
+  // way as the ledgers table, so the page never has to render them all at once.
+  const groupFiltered = useMemo(() => {
+    if (!groups) return [];
+    const q = groupSearch.trim().toLowerCase();
+    if (!q) return groups;
+    return groups.filter((g) => g.groupName.toLowerCase().includes(q));
+  }, [groups, groupSearch]);
+  const groupTotalPages = Math.max(1, Math.ceil(groupFiltered.length / groupPageSize));
+  const groupCurrentPage = Math.min(groupPage, groupTotalPages);
+  const groupPaged = groupFiltered.slice((groupCurrentPage - 1) * groupPageSize, groupCurrentPage * groupPageSize);
+
   return (
     <DashCard title={`Ledger mappings · ${source.label}`}>
       {canWrite && (
@@ -561,37 +580,74 @@ function MappingsCard({ source, canWrite }: { source: TallySource; canWrite: boo
           {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground mb-6">No groups in this chart of accounts.</p>
           ) : (
-            <div className="overflow-x-auto border border-border rounded-lg mb-6">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
-                    <th className="py-2 px-2.5 font-medium">Group</th>
-                    <th className="py-2 px-2.5 font-medium">Ledgers</th>
-                    <th className="py-2 px-2.5 font-medium" title="Ledgers with their own assignment, which ignore this group">Own assignments</th>
-                    <th className="py-2 px-2.5 font-medium">Business unit</th>
-                    <th className="py-2 px-2.5 font-medium">Line item</th>
-                    <th className="py-2 px-2.5 font-medium">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groups.map((g) => (
-                    <tr key={g.groupName} className="border-b border-border last:border-0">
-                      <td className="py-1.5 px-2.5 text-foreground">{g.groupName}</td>
-                      <td className="py-1.5 px-2.5 text-muted-foreground">{g.ledgerCount}</td>
-                      <td className="py-1.5 px-2.5 text-muted-foreground">{g.overrideCount}</td>
-                      <MappingSelects
-                        value={g}
-                        disabled={!canWrite || busyGroup === g.groupName}
-                        onChange={(patch) => onAssignGroup(g, patch)}
-                        businesses={businesses}
-                        businessUnits={businessUnits}
-                        lineItems={lineItems}
-                      />
+            <>
+              <div className="relative mb-3 max-w-xs">
+                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text" value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)}
+                  placeholder="Search group name…"
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs"
+                />
+              </div>
+              <div className="overflow-x-auto border border-border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                      <th className="py-2 px-2.5 font-medium">Group</th>
+                      <th className="py-2 px-2.5 font-medium">Ledgers</th>
+                      <th className="py-2 px-2.5 font-medium" title="Ledgers with their own assignment, which ignore this group">Own assignments</th>
+                      <th className="py-2 px-2.5 font-medium">Business unit</th>
+                      <th className="py-2 px-2.5 font-medium">Line item</th>
+                      <th className="py-2 px-2.5 font-medium">Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {groupPaged.map((g) => (
+                      <tr key={g.groupName} className="border-b border-border last:border-0">
+                        <td className="py-1.5 px-2.5 text-foreground">{g.groupName}</td>
+                        <td className="py-1.5 px-2.5 text-muted-foreground">{g.ledgerCount}</td>
+                        <td className="py-1.5 px-2.5 text-muted-foreground">{g.overrideCount}</td>
+                        <MappingSelects
+                          value={g}
+                          disabled={!canWrite || busyGroup === g.groupName}
+                          onChange={(patch) => onAssignGroup(g, patch)}
+                          businesses={businesses}
+                          businessUnits={businessUnits}
+                          lineItems={lineItems}
+                        />
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {groupFiltered.length > groupPageSize && (
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-3 mb-6">
+                  <button
+                    onClick={() => setGroupPage(groupCurrentPage - 1)} disabled={groupCurrentPage === 1}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                  </button>
+                  <span className="text-xs text-muted-foreground px-1">
+                    Page {groupCurrentPage} of {groupTotalPages} ({groupFiltered.length} groups)
+                  </span>
+                  <button
+                    onClick={() => setGroupPage(groupCurrentPage + 1)} disabled={groupCurrentPage === groupTotalPages}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                  <select
+                    value={groupPageSize} onChange={(e) => setGroupPageSize(Number(e.target.value))}
+                    className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-xs"
+                    title="Groups per page"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
+                  </select>
+                </div>
+              )}
+              {groupFiltered.length <= groupPageSize && <div className="mb-6" />}
+            </>
           )}
 
           <h3 className="text-sm font-semibold text-foreground mb-1">Ledgers</h3>
