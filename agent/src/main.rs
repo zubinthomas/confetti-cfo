@@ -138,6 +138,14 @@ fn run_cycle(server: &ServerClient, local: &Config) -> u64 {
     let tally = HttpTallyGateway::new(gateway_url, company_name);
     let report_name = agent_config.tally_period_report_name.as_deref().unwrap_or(DEFAULT_PERIOD_REPORT_NAME);
 
+    // Standing books-balance check (tally-deployment-steps.md step 3). Runs
+    // every cycle regardless of which value mode is mapped - unlike
+    // `books_imbalance`, which only ever runs inside `fetch_period_records`
+    // and so has never actually run against this client (no period-mode
+    // ledger is mapped yet, only balance mode). Diagnostic only; never
+    // affects what gets pushed.
+    check_trial_balance(&tally);
+
     let balance_ledgers: Vec<&MappedLedger> =
         agent_config.ledgers.iter().filter(|l| l.value_mode == ValueMode::Balance).collect();
     let month_ledgers: Vec<&MappedLedger> = agent_config.ledgers.iter()
@@ -262,4 +270,47 @@ fn fetch_period_records(
 /// (`YYYYMMDD`, per the reference Tally MCP implementation).
 fn format_tally_date(d: NaiveDate) -> String {
     d.format("%Y%m%d").to_string()
+}
+
+/// Pulls Tally's own Trial Balance report and the raw ledger-balances
+/// Collection (both with no date range, so both report the same scope - see
+/// `build_trial_balance_request`) and compares their grand totals. In a
+/// double-entry book, each should sum to zero on its own; comparing the two
+/// against each other, not just each against zero, is what tells a real
+/// client-side books problem apart from a bug in the agent's own data pull:
+/// if they disagree with each other, something in the agent's own parsing or
+/// sign convention is wrong; if they agree, Tally itself is reporting
+/// unbalanced books, which is a question for the client's accountant, not
+/// something this agent can fix. Logs only - never blocks a sync.
+fn check_trial_balance(tally: &HttpTallyGateway) {
+    let raw_total: f64 = match tally.fetch_ledger_balances() {
+        Ok(balances) => balances.iter().map(|b| b.closing_balance).sum(),
+        Err(e) => {
+            log::error!("trial balance check: could not fetch ledger balances from Tally: {e}");
+            return;
+        }
+    };
+    let groups = match tally.fetch_trial_balance() {
+        Ok(g) => g,
+        Err(e) => {
+            log::error!("trial balance check: could not fetch Tally's Trial Balance report: {e}");
+            return;
+        }
+    };
+    let tb_total: f64 = groups.iter().map(|g| g.net_amount).sum();
+
+    const TOLERANCE: f64 = 1.0; // rupee tolerance, same as books_imbalance/trial_balance_imbalance
+    if raw_total.abs() <= TOLERANCE && tb_total.abs() <= TOLERANCE {
+        log::info!("trial balance check: books balance (raw ledger sum {raw_total:.2}, Tally's Trial Balance {tb_total:.2})");
+        return;
+    }
+    if (raw_total - tb_total).abs() > TOLERANCE {
+        log::error!(
+            "trial balance check: the agent's raw ledger sum ({raw_total:.2}) disagrees with Tally's own Trial Balance total ({tb_total:.2}) - likely a bug in the agent's own data pull, not the client's books"
+        );
+        return;
+    }
+    log::warn!(
+        "trial balance check: books do not balance - raw ledger sum {raw_total:.2} and Tally's own Trial Balance total {tb_total:.2} agree with each other, which points at the client's books, not the agent"
+    );
 }

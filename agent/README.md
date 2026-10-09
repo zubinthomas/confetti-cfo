@@ -69,8 +69,10 @@ Live-tested against the client's real TallyPrime install (company
   (debit) comes back already negative, `DSPCLCRAMTA` (credit) positive, so
   `net_amount = credit + debit` (a plain sum - fixed from the previous
   `credit - debit`, which would have double-signed every debit row).
-  This Trial Balance shape is no longer parsed by the agent; the P&L parser
-  below replaced it, since the agent only pulls P&L.
+  This Trial Balance shape went unparsed for a while - the P&L parser below
+  replaced it, back when the agent only pulled P&L - but is parsed again as
+  of 2026-10-09 by `parse_trial_balance`, for the standing books-balance
+  check further down. Nothing pushes a record off it; it's diagnostic only.
 - **Profit and Loss report (`EXPLODEFLAG=Yes`) - confirmed shape** (2026-10-04).
   It is not the Trial Balance shape. Group headings are `DSPACCNAME` followed
   by `PLAMT` (group total). Ledger rows are `BSNAME` (name in
@@ -126,6 +128,35 @@ Live-tested against the client's real TallyPrime install (company
   `OPENINGBALANCE`/`CLOSINGBALANCE` over `SVFROMDATE`/`SVTODATE`). Its shape
   is taken from the reference implementation. The parser treats an empty
   amount as zero and a missing element as an error.
+
+## Standing Trial Balance check (books-balance check)
+
+Added 2026-10-09 (tally-deployment-steps.md step 3). Every cycle, as soon as
+the gateway URL is known, `check_trial_balance` in `main.rs` runs regardless
+of which value mode is actually mapped - unlike the P&L safety check below,
+which only ever runs when a period-mode ledger is mapped and so has never
+actually run against this client (only balance mode is mapped so far). It
+pulls two things, both with no date range so both report the same scope:
+Tally's own Trial Balance report (`fetch_trial_balance`) and the raw
+ledger-balances Collection (`fetch_ledger_balances`, the same one balance-mode
+sync already uses). Each should sum to zero on its own in a double-entry
+book; comparing the two totals *against each other*, not just each against
+zero, is what tells a real client-side books problem apart from a bug in the
+agent's own parsing or sign convention:
+
+- Both ~zero: books balance, logged at `info`.
+- The two totals disagree with each other (beyond a rupee): the agent's own
+  data pull is wrong somewhere, logged at `error`.
+- The two totals agree with each other, but both are off from zero: Tally
+  itself is reporting unbalanced books - a question for the client's
+  accountant, not something this agent can fix. Logged at `warn`.
+
+This is diagnostic only - it never blocks or alters a sync push. The real
+figure seen on 2026-10-04 (closing balances summing to 6,776,325.59) came
+from a manual, one-off run of `check_pl_raw.ps1` against real JP Office
+data, not from this check (which didn't exist yet), and has not been
+re-confirmed against this check's own two totals - that's the next thing to
+look at once this ships and the client's agent is rebuilt.
 
 ## Raw-data reconciliation (P&L safety check)
 

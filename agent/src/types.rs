@@ -103,3 +103,14 @@ pub struct PeriodLedgerAmount {
     pub name: String,
     pub net_amount: f64,
 }
+
+/// One primary group's net closing balance from Tally's own Trial Balance
+/// report. Group-level only - Trial Balance isn't exploded down to ledgers
+/// the way Profit and Loss is. This is the standing cross-check
+/// (`trial_balance_imbalance`) against the agent's own raw sum of ledger
+/// closing balances.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrialBalanceGroup {
+    pub name: String,
+    pub net_amount: f64,
+}

@@ -22,7 +22,7 @@ use std::collections::HashMap;
 
 use roxmltree::Document;
 
-use crate::types::{LedgerBalance, LedgerRange, PeriodLedgerAmount};
+use crate::types::{LedgerBalance, LedgerRange, PeriodLedgerAmount, TrialBalanceGroup};
 
 #[derive(Debug)]
 pub enum TallyError {
@@ -121,6 +121,98 @@ pub fn build_period_report_request(
         from_date = xml_escape(from_date),
         to_date = xml_escape(to_date),
     )
+}
+
+/// Builds the ENVELOPE request for Tally's own Trial Balance report - the
+/// standing books-balance check (tally-deployment-steps.md step 3), distinct
+/// from the Profit and Loss request above. Confirmed on-site 2026-10-01:
+/// `TYPE=Data`, `ID=Trial Balance`, group-level with no `EXPLODEFLAG` (Tally
+/// doesn't explode a Trial Balance down to ledgers), no `SUBTYPE`/`TDL`
+/// needed since it's a built-in report. Deliberately no
+/// `SVFROMDATE`/`SVTODATE`: like `build_ledger_balances_request`, this reads
+/// whatever reporting period is currently configured in Tally itself, so its
+/// grand total is directly comparable to the raw ledger-balances Collection's
+/// own sum - both report the same scope without the agent having to guess a
+/// fiscal-year start date.
+pub fn build_trial_balance_request(company: Option<&str>) -> String {
+    let company_var = company
+        .map(|c| format!("<SVCURRENTCOMPANY>{}</SVCURRENTCOMPANY>", xml_escape(c)))
+        .unwrap_or_default();
+    format!(
+        r#"<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Data</TYPE>
+  <ID>Trial Balance</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+    {company_var}
+   </STATICVARIABLES>
+  </DESC>
+ </BODY>
+</ENVELOPE>"#
+    )
+}
+
+/// Parses Tally's own Trial Balance report - confirmed on-site 2026-10-01.
+/// Unlike the Profit and Loss shape, there's no HEADER/BODY wrapper: ENVELOPE
+/// directly contains alternating DSPACCNAME/DSPACCINFO siblings, paired
+/// positionally (not DSPACCNAME nested inside DSPACCINFO), one pair per
+/// primary group - there are no ledger-level rows, since this report isn't
+/// exploded. The amount is two levels deep (DSPACCINFO -> DSPCLDRAMT ->
+/// DSPCLDRAMTA for the debit side, DSPCLCRAMT -> DSPCLCRAMTA for credit), and
+/// the side a group carries no balance on comes back as an empty string, not
+/// "0" - both are treated as zero here. Sign convention: DSPCLDRAMTA (debit)
+/// comes back already negative, DSPCLCRAMTA (credit) positive, so the net is
+/// a plain sum of the two, not credit minus debit (which would double-sign
+/// every debit-side group).
+pub fn parse_trial_balance(xml: &str) -> Result<Vec<TrialBalanceGroup>, TallyError> {
+    let doc = Document::parse(xml).map_err(TallyError::Xml)?;
+    let mut out = Vec::new();
+    for node in doc.root_element().children().filter(|n| n.has_tag_name("DSPACCNAME")) {
+        let name = node
+            .descendants()
+            .find(|n| n.has_tag_name("DSPDISPNAME"))
+            .and_then(|n| n.text())
+            .map(|t| t.trim().to_string())
+            .unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        let info_node = node
+            .next_siblings()
+            .skip(1)
+            .find(|n| n.is_element())
+            .filter(|n| n.has_tag_name("DSPACCINFO"))
+            .ok_or_else(|| TallyError::Unexpected(format!("Trial Balance group \"{name}\" is not followed by a DSPACCINFO element")))?;
+        let debit = optional_nested_amount(&info_node, "DSPCLDRAMT", "DSPCLDRAMTA")?;
+        let credit = optional_nested_amount(&info_node, "DSPCLCRAMT", "DSPCLCRAMTA")?;
+        out.push(TrialBalanceGroup { name, net_amount: credit + debit });
+    }
+    Ok(out)
+}
+
+/// Reads a two-levels-deep amount (e.g. DSPACCINFO -> DSPCLDRAMT ->
+/// DSPCLDRAMTA) where the whole outer tag, the inner tag, or the text can
+/// each be absent or empty - any of those means this side of the row carries
+/// no balance, which is zero, not an error (unlike `required_amount`, where a
+/// missing tag is unexpected).
+fn optional_nested_amount(node: &roxmltree::Node, outer: &str, inner: &str) -> Result<f64, TallyError> {
+    let Some(outer_node) = node.children().find(|c| c.has_tag_name(outer)) else {
+        return Ok(0.0);
+    };
+    let Some(inner_node) = outer_node.children().find(|c| c.has_tag_name(inner)) else {
+        return Ok(0.0);
+    };
+    let raw = inner_node.text().unwrap_or("").trim();
+    if raw.is_empty() {
+        return Ok(0.0);
+    }
+    parse_amount(raw).ok_or_else(|| TallyError::Unexpected(format!("{inner} is not a number: {raw:?}")))
 }
 
 /// Parses a Profit and Loss report exported with EXPLODEFLAG=Yes. Confirmed
@@ -353,6 +445,18 @@ pub fn books_imbalance(range: &[LedgerRange]) -> Option<f64> {
     (total.abs() > 1.0).then_some(total)
 }
 
+/// Same idea as `books_imbalance`, but against Tally's own Trial Balance
+/// report rather than the agent's raw ledger-balances pull - every primary
+/// group's net balance should also sum to zero. Comparing this total with
+/// `books_imbalance`'s is what tells the agent apart a real client-side
+/// books problem from a bug in its own data pull: if the two disagree with
+/// each other, the agent got something wrong; if they agree, Tally itself is
+/// reporting unbalanced books.
+pub fn trial_balance_imbalance(groups: &[TrialBalanceGroup]) -> Option<f64> {
+    let total: f64 = groups.iter().map(|g| g.net_amount).sum();
+    (total.abs() > 1.0).then_some(total)
+}
+
 fn child_text(node: &roxmltree::Node, tag: &str) -> Option<String> {
     node.children()
         .find(|c| c.has_tag_name(tag))
@@ -434,6 +538,14 @@ impl HttpTallyGateway {
         let body = build_period_report_request(report_name, self.company_name.as_deref(), from_date, to_date);
         parse_period_report(&self.send_export(body)?)
     }
+
+    /// Tally's own Trial Balance report, group-level - the standing
+    /// books-balance cross-check (tally-deployment-steps.md step 3). No date
+    /// range: see `build_trial_balance_request` for why.
+    pub fn fetch_trial_balance(&self) -> Result<Vec<TrialBalanceGroup>, TallyError> {
+        let body = build_trial_balance_request(self.company_name.as_deref());
+        parse_trial_balance(&self.send_export(body)?)
+    }
 }
 
 #[cfg(test)]
@@ -508,6 +620,8 @@ mod tests {
                 "1-Apr-2026",
                 "17-Sep-2026",
             ),
+            build_trial_balance_request(None),
+            build_trial_balance_request(Some("CONFETTI EXPORTS PVT. LTD")),
         ];
         for req in requests {
             assert!(req.contains("<TALLYREQUEST>Export</TALLYREQUEST>"));
@@ -702,5 +816,76 @@ mod tests {
     fn period_report_ledger_row_without_amount_is_an_error() {
         let xml = r#"<ENVELOPE><BSNAME><DSPACCNAME><DSPDISPNAME>Orphan</DSPDISPNAME></DSPACCNAME></BSNAME></ENVELOPE>"#;
         assert!(matches!(parse_period_report(xml), Err(TallyError::Unexpected(_))));
+    }
+
+    #[test]
+    fn trial_balance_request_has_expected_shape() {
+        let req = build_trial_balance_request(Some("CONFETTI EXPORTS PVT. LTD"));
+        assert!(req.contains("<TYPE>Data</TYPE>"));
+        assert!(req.contains("<ID>Trial Balance</ID>"));
+        assert!(req.contains("<SVCURRENTCOMPANY>CONFETTI EXPORTS PVT. LTD</SVCURRENTCOMPANY>"));
+        // No EXPLODEFLAG and no date range, unlike the P&L request - see the
+        // builder's own doc comment for why.
+        assert!(!req.contains("EXPLODEFLAG"));
+        assert!(!req.contains("SVFROMDATE"));
+        assert!(!req.contains("SVTODATE"));
+    }
+
+    // Structure only, built from the confirmed shape in agent/README.md
+    // ("Period report shape - confirmed against a real Trial Balance
+    // export"), not a verbatim capture - no full raw export was saved on
+    // 2026-10-01. Exercises the positional DSPACCNAME/DSPACCINFO pairing, the
+    // two-levels-deep amount tags, an empty unused side, and the plain-sum
+    // sign convention (debit already negative, credit positive).
+    #[test]
+    fn parses_trial_balance_groups_structural() {
+        let xml = r#"<ENVELOPE>
+<DSPACCNAME>
+  <DSPDISPNAME>Sundry Creditors</DSPDISPNAME>
+</DSPACCNAME>
+<DSPACCINFO>
+  <DSPCLDRAMT>
+    <DSPCLDRAMTA></DSPCLDRAMTA>
+  </DSPCLDRAMT>
+  <DSPCLCRAMT>
+    <DSPCLCRAMTA>1791964.67</DSPCLCRAMTA>
+  </DSPCLCRAMT>
+</DSPACCINFO>
+<DSPACCNAME>
+  <DSPDISPNAME>Fixed Assets</DSPDISPNAME>
+</DSPACCNAME>
+<DSPACCINFO>
+  <DSPCLDRAMT>
+    <DSPCLDRAMTA>-19391632.27</DSPCLDRAMTA>
+  </DSPCLDRAMT>
+  <DSPCLCRAMT>
+    <DSPCLCRAMTA></DSPCLCRAMTA>
+  </DSPCLCRAMT>
+</DSPACCINFO>
+</ENVELOPE>"#;
+        let groups = parse_trial_balance(xml).unwrap();
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].name, "Sundry Creditors");
+        assert_eq!(groups[0].net_amount, 1791964.67);
+        assert_eq!(groups[1].name, "Fixed Assets");
+        assert_eq!(groups[1].net_amount, -19391632.27);
+    }
+
+    #[test]
+    fn trial_balance_group_without_info_is_an_error() {
+        let xml = r#"<ENVELOPE><DSPACCNAME><DSPDISPNAME>Orphan</DSPDISPNAME></DSPACCNAME></ENVELOPE>"#;
+        assert!(matches!(parse_trial_balance(xml), Err(TallyError::Unexpected(_))));
+    }
+
+    fn tb_group(name: &str, net: f64) -> TrialBalanceGroup {
+        TrialBalanceGroup { name: name.into(), net_amount: net }
+    }
+
+    #[test]
+    fn trial_balance_imbalance_reports_only_real_imbalance() {
+        let balanced = [tb_group("Sundry Creditors", 1000.0), tb_group("Fixed Assets", -1000.0)];
+        assert_eq!(trial_balance_imbalance(&balanced), None);
+        let off = [tb_group("Sundry Creditors", 1005.0), tb_group("Fixed Assets", -1000.0)];
+        assert_eq!(trial_balance_imbalance(&off), Some(5.0));
     }
 }
