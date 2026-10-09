@@ -289,6 +289,12 @@ if ($null -ne $ghDoc) {
 
 # ── Roll up ledger balances to primary group, walking the parent chain ─────
 function Get-PrimaryGroup([string]$StartGroup, [hashtable]$ParentOf) {
+    # A ledger with no group at all (its own immediate PARENT is empty or the
+    # literal string "Primary") is Tally's reserved Profit & Loss A/c ledger -
+    # confirmed 2026-10-09, the only real example. Tally's own Trial Balance
+    # reports that ledger under the "Profit & Loss A/c" primary group, not a
+    # group literally named "Primary" (which doesn't exist as a GROUP row).
+    if ($StartGroup -eq '' -or $StartGroup -eq 'Primary') { return 'Profit & Loss A/c' }
     $seen = New-Object System.Collections.Generic.HashSet[string]
     $current = $StartGroup
     while ($true) {
@@ -296,11 +302,7 @@ function Get-PrimaryGroup([string]$StartGroup, [hashtable]$ParentOf) {
         if ($seen.Count -gt 50) { return $current }  # depth guard
         if (-not $ParentOf.ContainsKey($current)) { return $current }  # not a known group - treat as its own root
         $parent = $ParentOf[$current]
-        # Tally's root sentinel: the reserved Profit & Loss A/c ledger came
-        # back with PARENT="Primary" literally (not empty) in the real
-        # capture - treat either convention as "reached a primary group",
-        # not as another name to recurse into.
-        if ($parent -eq '' -or $parent -eq 'Primary') { return $current }
+        if ($parent -eq '' -or $parent -eq 'Primary') { return $current }  # reached a primary group
         $current = $parent
     }
 }
@@ -310,7 +312,6 @@ if ($ledgers.Count -gt 0 -and $parentOf.Count -gt 0) {
     Write-Host "── reconciling raw ledger rollup against Trial Balance, per primary group ──"
     $rollup = @{}
     foreach ($l in $ledgers) {
-        if ($l.Parent -eq '') { continue }
         $primary = Get-PrimaryGroup $l.Parent $parentOf
         if ($rollup.ContainsKey($primary)) { $rollup[$primary] += $l.Amount } else { $rollup[$primary] = $l.Amount }
     }

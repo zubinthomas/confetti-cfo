@@ -17,7 +17,10 @@ use chrono::Duration as ChronoDuration;
 
 use confetti_tally_agent::config::Config;
 use confetti_tally_agent::server_client::ServerClient;
-use confetti_tally_agent::tally_client::{books_imbalance, reconcile_period_with_ledger_range, HttpTallyGateway};
+use confetti_tally_agent::tally_client::{
+    books_imbalance, reconcile_period_with_ledger_range, reconcile_trial_balance_by_group, roll_up_by_primary_group,
+    HttpTallyGateway,
+};
 use confetti_tally_agent::types::{MappedLedger, PeriodGranularity, PeriodType, TallyRecord, ValueMode};
 
 /// Used when the server doesn't send a period report name. Unverified against
@@ -272,45 +275,86 @@ fn format_tally_date(d: NaiveDate) -> String {
     d.format("%Y%m%d").to_string()
 }
 
-/// Pulls Tally's own Trial Balance report and the raw ledger-balances
-/// Collection (both with no date range, so both report the same scope - see
-/// `build_trial_balance_request`) and compares their grand totals. In a
-/// double-entry book, each should sum to zero on its own; comparing the two
-/// against each other, not just each against zero, is what tells a real
-/// client-side books problem apart from a bug in the agent's own data pull:
-/// if they disagree with each other, something in the agent's own parsing or
-/// sign convention is wrong; if they agree, Tally itself is reporting
-/// unbalanced books, which is a question for the client's accountant, not
-/// something this agent can fix. Logs only - never blocks a sync.
+/// Groups whose raw rollup is known, as of 2026-10-09, not to match Tally's
+/// own Trial Balance exactly - confirmed on real data, not guessed. Logged at
+/// `warn` with the known-imprecise reason instead of `error`, so a genuinely
+/// new problem in some other group still stands out. "Current Assets" is
+/// short by about 14.2 lakh against a real capture: roughly 440 of the 730
+/// ledgers that roll up to it (mostly Sundry Debtors/Advance-type ledgers)
+/// come back with an empty CLOSINGBALANCE from the plain ledger-balances
+/// Collection, which `parse_ledger_balances` treats as zero - the working
+/// theory is a handful of those are bill-wise-tracked ledgers that actually
+/// carry a real balance that NATIVEMETHOD ClosingBalance doesn't resolve for
+/// that ledger type, not that they're genuinely zero. Not yet root-caused to
+/// specific ledgers - see tally-deployment-steps.md step 3.
+const KNOWN_IMPRECISE_GROUPS: &[&str] = &["Current Assets"];
+
+/// Groups Tally computes for display rather than reports as a literal
+/// rollup, so comparing them to the agent's own raw-ledger rollup isn't
+/// meaningful - see `reconcile_trial_balance_by_group`'s own doc comment.
+const SKIP_GROUPS: &[&str] = &["Profit & Loss A/c"];
+
+/// The standing books-balance check (tally-deployment-steps.md step 3):
+/// pulls Tally's own Trial Balance report, the raw ledger-balances
+/// Collection, and the group hierarchy, rolls the raw ledger balances up to
+/// their primary groups, and compares each primary group's rolled-up total
+/// against Tally's own Trial Balance figure for that group. This replaced an
+/// earlier grand-total-only version (2026-10-09): Tally won't save an
+/// unbalanced voucher, so a single "do both totals net to zero" comparison
+/// is close to a tautology and doesn't test anything real. Comparing group
+/// by group does: it confirms the agent's own ledger pull, sign convention,
+/// and group-rollup logic agree with Tally's own authoritative report,
+/// which is a genuine integrity check on the agent's own data pipeline, not
+/// a claim about whether the client's books balance (Tally already
+/// guarantees that). Diagnostic only - never blocks a sync.
 fn check_trial_balance(tally: &HttpTallyGateway) {
-    let raw_total: f64 = match tally.fetch_ledger_balances() {
-        Ok(balances) => balances.iter().map(|b| b.closing_balance).sum(),
+    let balances = match tally.fetch_ledger_balances() {
+        Ok(b) => b,
         Err(e) => {
             log::error!("trial balance check: could not fetch ledger balances from Tally: {e}");
             return;
         }
     };
-    let groups = match tally.fetch_trial_balance() {
+    let groups = match tally.fetch_group_hierarchy() {
         Ok(g) => g,
+        Err(e) => {
+            log::error!("trial balance check: could not fetch Tally's group hierarchy: {e}");
+            return;
+        }
+    };
+    let trial_balance = match tally.fetch_trial_balance() {
+        Ok(tb) => tb,
         Err(e) => {
             log::error!("trial balance check: could not fetch Tally's Trial Balance report: {e}");
             return;
         }
     };
-    let tb_total: f64 = groups.iter().map(|g| g.net_amount).sum();
 
-    const TOLERANCE: f64 = 1.0; // rupee tolerance, same as books_imbalance/trial_balance_imbalance
-    if raw_total.abs() <= TOLERANCE && tb_total.abs() <= TOLERANCE {
-        log::info!("trial balance check: books balance (raw ledger sum {raw_total:.2}, Tally's Trial Balance {tb_total:.2})");
-        return;
+    let rollup = roll_up_by_primary_group(&balances, &groups);
+    let problems = reconcile_trial_balance_by_group(&rollup, &trial_balance, SKIP_GROUPS);
+
+    let mut unexpected = 0;
+    for (name, raw, tally_total) in &problems {
+        let diff = raw - tally_total;
+        if KNOWN_IMPRECISE_GROUPS.contains(&name.as_str()) {
+            log::warn!(
+                "trial balance check: \"{name}\" raw rollup {raw:.2} vs Tally's Trial Balance {tally_total:.2} (diff {diff:.2}) - known imprecision, see agent/README.md"
+            );
+        } else {
+            unexpected += 1;
+            log::error!(
+                "trial balance check: \"{name}\" raw rollup {raw:.2} disagrees with Tally's own Trial Balance {tally_total:.2} (diff {diff:.2})"
+            );
+        }
     }
-    if (raw_total - tb_total).abs() > TOLERANCE {
-        log::error!(
-            "trial balance check: the agent's raw ledger sum ({raw_total:.2}) disagrees with Tally's own Trial Balance total ({tb_total:.2}) - likely a bug in the agent's own data pull, not the client's books"
+    if unexpected == 0 {
+        let mut seen: std::collections::HashSet<&str> = rollup.keys().map(String::as_str).collect();
+        seen.extend(trial_balance.iter().map(|g| g.name.as_str()));
+        let compared = seen.len() - seen.iter().filter(|n| SKIP_GROUPS.contains(n)).count();
+        log::info!(
+            "trial balance check: no unexpected mismatches ({compared} primary group(s) compared, {} known-imprecise, {} skipped)",
+            problems.len(),
+            SKIP_GROUPS.len()
         );
-        return;
     }
-    log::warn!(
-        "trial balance check: books do not balance - raw ledger sum {raw_total:.2} and Tally's own Trial Balance total {tb_total:.2} agree with each other, which points at the client's books, not the agent"
-    );
 }

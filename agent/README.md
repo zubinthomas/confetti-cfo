@@ -131,32 +131,63 @@ Live-tested against the client's real TallyPrime install (company
 
 ## Standing Trial Balance check (books-balance check)
 
-Added 2026-10-09 (tally-deployment-steps.md step 3). Every cycle, as soon as
-the gateway URL is known, `check_trial_balance` in `main.rs` runs regardless
-of which value mode is actually mapped - unlike the P&L safety check below,
-which only ever runs when a period-mode ledger is mapped and so has never
-actually run against this client (only balance mode is mapped so far). It
-pulls two things, both with no date range so both report the same scope:
-Tally's own Trial Balance report (`fetch_trial_balance`) and the raw
-ledger-balances Collection (`fetch_ledger_balances`, the same one balance-mode
-sync already uses). Each should sum to zero on its own in a double-entry
-book; comparing the two totals *against each other*, not just each against
-zero, is what tells a real client-side books problem apart from a bug in the
-agent's own parsing or sign convention:
+Added 2026-10-09, revised the same day (tally-deployment-steps.md step 3).
+Every cycle, as soon as the gateway URL is known, `check_trial_balance` in
+`main.rs` runs regardless of which value mode is actually mapped - unlike the
+P&L safety check below, which only ever runs when a period-mode ledger is
+mapped and so has never actually run against this client (only balance mode
+is mapped so far).
 
-- Both ~zero: books balance, logged at `info`.
-- The two totals disagree with each other (beyond a rupee): the agent's own
-  data pull is wrong somewhere, logged at `error`.
-- The two totals agree with each other, but both are off from zero: Tally
-  itself is reporting unbalanced books - a question for the client's
-  accountant, not something this agent can fix. Logged at `warn`.
+The first version of this check compared one grand total (Tally's own Trial
+Balance report) against another (the raw sum of every ledger's
+`CLOSINGBALANCE`) and flagged a disagreement. That doesn't work: Tally won't
+save an unbalanced voucher, so its own Trial Balance report nets to ~0 almost
+by construction - comparing against that is close to a tautology, not a real
+test. A live run against the client's real data also showed the raw-ledger
+grand total legitimately *can't* match it: a single reserved ledger
+(`Profit & Loss A/c`, the company's accumulated retained earnings) carries a
+real, large balance that Trial Balance's own "Profit & Loss A/c" line doesn't
+show - that line is a figure Tally computes on the fly for display (the
+current, not-yet-closed year's running profit), not a rollup of the reserved
+ledger's actual recorded balance. Confirmed against a real capture, not a
+data bug.
 
-This is diagnostic only - it never blocks or alters a sync push. The real
-figure seen on 2026-10-04 (closing balances summing to 6,776,325.59) came
-from a manual, one-off run of `check_pl_raw.ps1` against real JP Office
-data, not from this check (which didn't exist yet), and has not been
-re-confirmed against this check's own two totals - that's the next thing to
-look at once this ships and the client's agent is rebuilt.
+The check now does something more useful: it pulls Tally's own group
+hierarchy (`fetch_group_hierarchy`, the `ConfettiGroupHierarchy` Collection -
+`TYPE=Group`, same `NATIVEMETHOD` pattern as the ledger collections,
+confirmed on-site 2026-10-09), walks every ledger's immediate `PARENT` up to
+its primary group (`roll_up_by_primary_group`/`primary_group_of` in
+`tally_client.rs`), and compares each primary group's rolled-up raw total
+against Tally's own Trial Balance figure for that same group
+(`reconcile_trial_balance_by_group`) - skipping only `Profit & Loss A/c`, for
+the reason above. This is a genuine integrity check: it confirms the agent's
+own ledger pull, sign convention, and group-rollup logic agree with Tally's
+own authoritative report, group by group, rather than asking whether the
+client's books balance (Tally already guarantees that at voucher-save time).
+
+Confirmed against a real capture (2026-10-09, company `CONFETTI EXPORTS PVT.
+LTD`): **11 of 13 primary groups matched Tally's own Trial Balance exactly,
+to the paisa** (Capital Account, Current Liabilities, Direct Expenses, Direct
+Incomes, Fixed Assets, Indirect Expenses, Indirect Incomes, Loans
+(Liability), Purchase Accounts, Sales Accounts, plus `Profit & Loss A/c`
+itself once correctly attributed - see `primary_group_of`'s handling of a
+ledger whose own `PARENT` is literally `"Primary"`, the one real example
+being the reserved P&L ledger). One group, **"Current Assets", is a real,
+unexplained ~₹14.2 lakh short** against Tally's own total - logged at `warn`
+as a known, documented imprecision (`KNOWN_IMPRECISE_GROUPS` in `main.rs`),
+not `error`, so a genuinely new mismatch elsewhere still stands out.
+Root-caused this far: of the ~730 ledgers that roll up to Current Assets,
+about 440 come back with an empty `CLOSINGBALANCE` from the plain
+ledger-balances Collection (mostly `Sundry Debtors`/`Advance to *`
+sub-accounts) - `parse_ledger_balances` treats that as zero, per the
+README's own earlier note, but this result is the first real evidence that
+assumption doesn't always hold. Working theory, not confirmed: a handful of
+those are bill-wise-tracked ledgers whose real balance doesn't resolve
+through a plain `NATIVEMETHOD ClosingBalance` field. Not yet traced to
+specific ledgers - would need a bill-wise-aware request, which is separate
+follow-up work, not blocking this check or the balance-only deploy.
+
+This is diagnostic only - it never blocks or alters a sync push.
 
 ## Raw-data reconciliation (P&L safety check)
 

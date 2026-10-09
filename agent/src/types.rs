@@ -81,7 +81,8 @@ pub struct SyncResponse {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LedgerBalance {
     pub name: String,
-    #[allow(dead_code)] // captured for future mapping-seed use, not needed for a sync push
+    /// Used by `tally_client::roll_up_by_primary_group` to walk the ledger up
+    /// to its primary group for the standing Trial Balance check.
     pub parent: Option<String>,
     pub closing_balance: f64,
 }
@@ -113,4 +114,16 @@ pub struct PeriodLedgerAmount {
 pub struct TrialBalanceGroup {
     pub name: String,
     pub net_amount: f64,
+}
+
+/// One group from Tally's own group hierarchy (NOT a Trial Balance line -
+/// every group, including sub-groups, primary groups and everything in
+/// between). Used to walk a ledger's immediate PARENT up to its primary
+/// group. `parent` is empty, or the literal string `"Primary"`, exactly
+/// when `name` is itself a primary group - confirmed on-site 2026-10-09
+/// (15 primary groups in the real export, all with `PARENT=Primary`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TallyGroup {
+    pub name: String,
+    pub parent: String,
 }

@@ -18,11 +18,11 @@
 //! corrected request against the real gateway, so the sign convention on
 //! CLOSINGBALANCE (debit vs. credit), the period-report row/tag shape, and
 //! any escaping quirks in real ledger names still need confirming on-site.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use roxmltree::Document;
 
-use crate::types::{LedgerBalance, LedgerRange, PeriodLedgerAmount, TrialBalanceGroup};
+use crate::types::{LedgerBalance, LedgerRange, PeriodLedgerAmount, TallyGroup, TrialBalanceGroup};
 
 #[derive(Debug)]
 pub enum TallyError {
@@ -392,6 +392,151 @@ pub fn parse_ledger_range(xml: &str) -> Result<Vec<LedgerRange>, TallyError> {
     Ok(out)
 }
 
+/// Builds the ENVELOPE request for every group's immediate parent - the
+/// `ConfettiGroupHierarchy` Collection, confirmed on-site 2026-10-09 (same
+/// NATIVEMETHOD pattern as the ledger collections, `TYPE=Group` instead of
+/// `TYPE=Ledger`). Used to walk a ledger up to its primary group for the
+/// standing Trial Balance check (`roll_up_by_primary_group`).
+pub fn build_group_hierarchy_request(company: Option<&str>) -> String {
+    let company_var = company
+        .map(|c| format!("<SVCURRENTCOMPANY>{}</SVCURRENTCOMPANY>", xml_escape(c)))
+        .unwrap_or_default();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Collection</TYPE>
+  <ID>ConfettiGroupHierarchy</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+    {company_var}
+   </STATICVARIABLES>
+   <TDL>
+    <TDLMESSAGE>
+     <COLLECTION NAME="ConfettiGroupHierarchy" ISMODIFY="No">
+      <TYPE>Group</TYPE>
+      <NATIVEMETHOD>Name</NATIVEMETHOD>
+      <NATIVEMETHOD>Parent</NATIVEMETHOD>
+     </COLLECTION>
+    </TDLMESSAGE>
+   </TDL>
+  </DESC>
+ </BODY>
+</ENVELOPE>"#
+    )
+}
+
+/// Parses a `ConfettiGroupHierarchy` response - confirmed on-site
+/// 2026-10-09: wrapped in `BODY/DATA/COLLECTION` (unlike the ledger
+/// collections, which came back as flat `ENVELOPE` children), so this
+/// searches the whole document rather than assuming a wrapper depth. A
+/// `<GROUP>` with no `NAME` attribute is skipped - the real response's own
+/// `CMPINFO` header happens to contain a bare `<GROUP>0</GROUP>` object-
+/// browser count that would otherwise be mistaken for a row.
+pub fn parse_group_hierarchy(xml: &str) -> Result<Vec<TallyGroup>, TallyError> {
+    let doc = Document::parse(xml).map_err(TallyError::Xml)?;
+    let mut out = Vec::new();
+    for node in doc.descendants().filter(|n| n.has_tag_name("GROUP")) {
+        let Some(name) = node.attribute("NAME").map(str::to_string).filter(|n| !n.is_empty()) else {
+            continue;
+        };
+        let parent = child_text(&node, "PARENT").unwrap_or_default();
+        out.push(TallyGroup { name, parent });
+    }
+    Ok(out)
+}
+
+/// Walks a ledger's immediate parent group up to its primary group, using
+/// the group hierarchy's own `parent` chain. Two terminal cases: a group
+/// whose own parent is empty or `"Primary"` IS a primary group (confirmed
+/// on-site: all 15 real primary groups have `PARENT=Primary`); a name the
+/// hierarchy doesn't know about (or a cycle, or a chain longer than 50 -
+/// real Tally charts are nowhere near that deep) is returned as-is rather
+/// than erroring, so one bad row doesn't block every other group's rollup.
+///
+/// `ledger_parent` empty or literally `"Primary"` is a ledger with no group
+/// at all - confirmed on-site 2026-10-09, the only real example is the
+/// reserved `Profit & Loss A/c` ledger itself, which Tally's own Trial
+/// Balance also reports under the `Profit & Loss A/c` primary group (not a
+/// group literally named "Primary", which doesn't exist) - so that's
+/// returned directly rather than falling into the walk below.
+pub fn primary_group_of(ledger_parent: &str, groups: &HashMap<&str, &str>) -> String {
+    if ledger_parent.is_empty() || ledger_parent == "Primary" {
+        return "Profit & Loss A/c".to_string();
+    }
+    let mut seen = HashSet::new();
+    let mut current = ledger_parent;
+    loop {
+        if !seen.insert(current) || seen.len() > 50 {
+            return current.to_string();
+        }
+        let Some(&parent) = groups.get(current) else {
+            return current.to_string();
+        };
+        if parent.is_empty() || parent == "Primary" {
+            return current.to_string();
+        }
+        current = parent;
+    }
+}
+
+/// Sums every ledger's raw closing balance by primary group, walking each
+/// one's immediate PARENT through `groups`. A ledger with no PARENT at all
+/// is skipped - it can't be attributed to any group. This is the raw side
+/// of the standing Trial Balance check: compare the result against
+/// `TrialBalanceGroup` entries from the same cycle, group name for group
+/// name.
+pub fn roll_up_by_primary_group(balances: &[LedgerBalance], groups: &[TallyGroup]) -> HashMap<String, f64> {
+    let parent_of: HashMap<&str, &str> = groups.iter().map(|g| (g.name.as_str(), g.parent.as_str())).collect();
+    let mut rollup: HashMap<String, f64> = HashMap::new();
+    for ledger in balances {
+        let Some(parent) = ledger.parent.as_deref() else { continue };
+        let primary = primary_group_of(parent, &parent_of);
+        *rollup.entry(primary).or_insert(0.0) += ledger.closing_balance;
+    }
+    rollup
+}
+
+/// Rupee tolerance for comparing a raw rollup against Tally's own report.
+const GROUP_RECONCILE_TOLERANCE: f64 = 1.0;
+
+/// Compares a primary-group rollup (`roll_up_by_primary_group`) against
+/// Tally's own Trial Balance groups for the same cycle. `skip` lists group
+/// names to leave out of the comparison entirely - as of 2026-10-09 that's
+/// just `"Profit & Loss A/c"` (Tally computes that line on the fly for
+/// display, the current year's running profit, not a rollup of the reserved
+/// ledger's own recorded balance - confirmed against a real capture, not a
+/// data bug). Returns one `(group name, raw rollup, Tally's total)` triple
+/// per group that disagrees by more than a rupee; empty means every
+/// compared group matched exactly.
+pub fn reconcile_trial_balance_by_group(
+    rollup: &HashMap<String, f64>,
+    trial_balance: &[TrialBalanceGroup],
+    skip: &[&str],
+) -> Vec<(String, f64, f64)> {
+    let tb: HashMap<&str, f64> = trial_balance.iter().map(|g| (g.name.as_str(), g.net_amount)).collect();
+    let mut names: Vec<&str> = rollup.keys().map(String::as_str).chain(tb.keys().copied()).collect();
+    names.sort_unstable();
+    names.dedup();
+    let mut problems = Vec::new();
+    for name in names {
+        if skip.contains(&name) {
+            continue;
+        }
+        let raw = rollup.get(name).copied().unwrap_or(0.0);
+        let tally = tb.get(name).copied().unwrap_or(0.0);
+        if (raw - tally).abs() > GROUP_RECONCILE_TOLERANCE {
+            problems.push((name.to_string(), raw, tally));
+        }
+    }
+    problems
+}
+
 fn required_amount(node: &roxmltree::Node, tag: &str) -> Result<f64, TallyError> {
     let child = node
         .children()
@@ -546,6 +691,14 @@ impl HttpTallyGateway {
         let body = build_trial_balance_request(self.company_name.as_deref());
         parse_trial_balance(&self.send_export(body)?)
     }
+
+    /// Every group's immediate parent - used to walk a ledger up to its
+    /// primary group for the same standing check. See
+    /// `build_group_hierarchy_request`.
+    pub fn fetch_group_hierarchy(&self) -> Result<Vec<TallyGroup>, TallyError> {
+        let body = build_group_hierarchy_request(self.company_name.as_deref());
+        parse_group_hierarchy(&self.send_export(body)?)
+    }
 }
 
 #[cfg(test)]
@@ -622,6 +775,8 @@ mod tests {
             ),
             build_trial_balance_request(None),
             build_trial_balance_request(Some("CONFETTI EXPORTS PVT. LTD")),
+            build_group_hierarchy_request(None),
+            build_group_hierarchy_request(Some("CONFETTI EXPORTS PVT. LTD")),
         ];
         for req in requests {
             assert!(req.contains("<TALLYREQUEST>Export</TALLYREQUEST>"));
@@ -887,5 +1042,153 @@ mod tests {
         assert_eq!(trial_balance_imbalance(&balanced), None);
         let off = [tb_group("Sundry Creditors", 1005.0), tb_group("Fixed Assets", -1000.0)];
         assert_eq!(trial_balance_imbalance(&off), Some(5.0));
+    }
+
+    #[test]
+    fn group_hierarchy_request_has_expected_shape() {
+        let req = build_group_hierarchy_request(Some("CONFETTI EXPORTS PVT. LTD"));
+        assert!(req.contains("<TYPE>Collection</TYPE>"));
+        assert!(req.contains("<ID>ConfettiGroupHierarchy</ID>"));
+        assert!(req.contains("<TYPE>Group</TYPE>"));
+        assert!(req.contains("<NATIVEMETHOD>Name</NATIVEMETHOD>"));
+        assert!(req.contains("<NATIVEMETHOD>Parent</NATIVEMETHOD>"));
+    }
+
+    // Verbatim excerpt from a live TallyPrime ConfettiGroupHierarchy export
+    // (CONFETTI EXPORTS PVT. LTD), captured 2026-10-09. Confirms: wrapped in
+    // BODY/DATA/COLLECTION rather than flat under ENVELOPE like the ledger
+    // collections (parse_group_hierarchy searches the whole document, not
+    // just root_element().children(), because of this); a primary group's
+    // PARENT comes back as " Primary" with a leading space (trimmed by
+    // child_text); and the real CMPINFO header's own bare <GROUP>0</GROUP>
+    // object-browser count must not be mistaken for a row.
+    #[test]
+    fn parses_group_hierarchy_from_real_export() {
+        let xml = r#"<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <STATUS>1</STATUS>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <CMPINFO>
+    <COMPANY>0</COMPANY>
+    <GROUP>0</GROUP>
+    <LEDGER>1119</LEDGER>
+   </CMPINFO>
+  </DESC>
+  <DATA>
+   <COLLECTION ISMSTDEPTYPE="Yes" MSTDEPTYPE="4">
+    <GROUP NAME="Advance to Staff" RESERVEDNAME="">
+     <PARENT TYPE="String">Loans &amp; Advances (Asset)</PARENT>
+    </GROUP>
+    <GROUP NAME="Loans &amp; Advances (Asset)" RESERVEDNAME="Loans &amp; Advances (Asset)">
+     <PARENT TYPE="String">Current Assets</PARENT>
+    </GROUP>
+    <GROUP NAME="Current Assets" RESERVEDNAME="Current Assets">
+     <PARENT TYPE="String"> Primary</PARENT>
+    </GROUP>
+    <GROUP NAME="Fixed Assets" RESERVEDNAME="Fixed Assets">
+     <PARENT TYPE="String"> Primary</PARENT>
+    </GROUP>
+   </COLLECTION>
+  </DATA>
+ </BODY>
+</ENVELOPE>"#;
+        let groups = parse_group_hierarchy(xml).unwrap();
+        // The CMPINFO's bare <GROUP>0</GROUP> (no NAME attribute) is skipped,
+        // so this is 4, not 5.
+        assert_eq!(groups.len(), 4);
+        assert_eq!(groups[0], TallyGroup { name: "Advance to Staff".into(), parent: "Loans & Advances (Asset)".into() });
+        assert_eq!(groups[2], TallyGroup { name: "Current Assets".into(), parent: "Primary".into() });
+    }
+
+    fn real_group_hierarchy() -> Vec<TallyGroup> {
+        vec![
+            TallyGroup { name: "Advance to Staff".into(), parent: "Loans & Advances (Asset)".into() },
+            TallyGroup { name: "Loans & Advances (Asset)".into(), parent: "Current Assets".into() },
+            TallyGroup { name: "Current Assets".into(), parent: "Primary".into() },
+            TallyGroup { name: "Fixed Assets".into(), parent: "Primary".into() },
+        ]
+    }
+
+    #[test]
+    fn primary_group_of_walks_a_multi_level_chain() {
+        let groups = real_group_hierarchy();
+        let parent_of: HashMap<&str, &str> = groups.iter().map(|g| (g.name.as_str(), g.parent.as_str())).collect();
+        // Advance to Staff -> Loans & Advances (Asset) -> Current Assets: a
+        // real two-hop chain, confirmed against the live export 2026-10-09.
+        assert_eq!(primary_group_of("Advance to Staff", &parent_of), "Current Assets");
+        // Already a primary group (its own parent is "Primary") - zero hops.
+        assert_eq!(primary_group_of("Fixed Assets", &parent_of), "Fixed Assets");
+    }
+
+    // The only real example of this shape (confirmed 2026-10-09): the
+    // reserved Profit & Loss A/c ledger has PARENT="Primary" directly, no
+    // group at all. Tally's own Trial Balance reports that ledger under the
+    // "Profit & Loss A/c" primary group, not a group literally named
+    // "Primary" (which doesn't exist), so that's what this must return.
+    #[test]
+    fn primary_group_of_treats_a_parentless_ledger_as_profit_and_loss() {
+        let groups = real_group_hierarchy();
+        let parent_of: HashMap<&str, &str> = groups.iter().map(|g| (g.name.as_str(), g.parent.as_str())).collect();
+        assert_eq!(primary_group_of("Primary", &parent_of), "Profit & Loss A/c");
+        assert_eq!(primary_group_of("", &parent_of), "Profit & Loss A/c");
+    }
+
+    #[test]
+    fn primary_group_of_does_not_hang_on_a_cycle() {
+        let parent_of: HashMap<&str, &str> = [("A", "B"), ("B", "A")].into_iter().collect();
+        // Must terminate, not loop forever - the exact name returned doesn't
+        // matter as much as this test completing at all.
+        let result = primary_group_of("A", &parent_of);
+        assert!(result == "A" || result == "B");
+    }
+
+    #[test]
+    fn primary_group_of_falls_back_on_an_unknown_parent() {
+        let parent_of: HashMap<&str, &str> = HashMap::new();
+        assert_eq!(primary_group_of("Some New Group Nobody Mapped", &parent_of), "Some New Group Nobody Mapped");
+    }
+
+    #[test]
+    fn roll_up_by_primary_group_sums_ledgers_to_their_primary_group() {
+        let groups = real_group_hierarchy();
+        let balances = [
+            LedgerBalance { name: "Staff A".into(), parent: Some("Advance to Staff".into()), closing_balance: -100.0 },
+            LedgerBalance { name: "Staff B".into(), parent: Some("Advance to Staff".into()), closing_balance: -50.0 },
+            LedgerBalance { name: "HDFC Bank".into(), parent: Some("Fixed Assets".into()), closing_balance: -500.0 },
+            LedgerBalance { name: "No Parent".into(), parent: None, closing_balance: 999.0 },
+        ];
+        let rollup = roll_up_by_primary_group(&balances, &groups);
+        assert_eq!(rollup.get("Current Assets"), Some(&-150.0));
+        assert_eq!(rollup.get("Fixed Assets"), Some(&-500.0));
+        // The parentless ledger can't be attributed to any group and must
+        // not silently show up under some other bucket.
+        assert_eq!(rollup.len(), 2);
+    }
+
+    #[test]
+    fn reconcile_trial_balance_by_group_skips_listed_groups_and_flags_real_mismatches() {
+        let mut rollup = HashMap::new();
+        rollup.insert("Fixed Assets".to_string(), -19917872.27);
+        rollup.insert("Current Assets".to_string(), -20722222.46); // known-imprecise, see README
+        rollup.insert("Profit & Loss A/c".to_string(), 7608553.18); // skipped
+        let trial_balance = [
+            tb_group("Fixed Assets", -19917872.27), // exact match
+            tb_group("Current Assets", -22144844.47), // real gap, confirmed 2026-10-09
+            tb_group("Profit & Loss A/c", -665.76), // skipped - different quantities, not a bug
+        ];
+        let problems = reconcile_trial_balance_by_group(&rollup, &trial_balance, &["Profit & Loss A/c"]);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].0, "Current Assets");
+    }
+
+    #[test]
+    fn reconcile_trial_balance_by_group_passes_when_everything_matches() {
+        let mut rollup = HashMap::new();
+        rollup.insert("Sales Accounts".to_string(), 47848738.02);
+        let trial_balance = [tb_group("Sales Accounts", 47848738.02)];
+        assert!(reconcile_trial_balance_by_group(&rollup, &trial_balance, &[]).is_empty());
     }
 }
