@@ -208,23 +208,46 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
 
   // ── financial records ───────────────────────────────────────────────────────
   const finByKey = new Map(finRecords.map((r) => [`${r.businessUnitId}|${r.periodId}|${r.lineItemId}`, r]));
+  // Most parsers only ever produce one record per (unit, period, lineItem) -
+  // one spreadsheet cell is one record. A Tally sync doesn't: mapping a Tally
+  // group to one line item fans that line out across every ledger under the
+  // group, each pushed as its own record for the same period. Resolve
+  // dimensions and total by key first, so N ledgers under one group become
+  // one financial_records row (its sum), not N rows racing for the same
+  // natural key - financial_records_natural_key would reject the second one.
+  interface FinAgg {
+    unitName: string; lineItemName: string; periodStart: string; periodEnd: string;
+    businessUnitId: number; periodId: number; lineItemId: number; value: number;
+  }
+  const finAgg = new Map<string, FinAgg>();
   for (const r of parsed.financialRecords) {
-    const unitId = resolveUnit(r.unitName, r.unitType);
+    const businessUnitId = resolveUnit(r.unitName, r.unitType);
     const periodId = resolvePeriod({
       periodType: r.periodType, startDate: r.periodStart, endDate: r.periodEnd,
       label: r.periodStart, fiscalYear: '', isSpecialEvent: false, // only used if the parser forgot to declare it
     });
     const lineItemId = resolveLineItem(r.lineItemName, r.valueType);
-    const description = `${r.unitName} · ${r.lineItemName} · ${r.periodStart}–${r.periodEnd}`;
-    const existing = finByKey.get(`${unitId}|${periodId}|${lineItemId}`);
+    const key = `${businessUnitId}|${periodId}|${lineItemId}`;
+    const prior = finAgg.get(key);
+    finAgg.set(key, {
+      unitName: r.unitName, lineItemName: r.lineItemName, periodStart: r.periodStart, periodEnd: r.periodEnd,
+      businessUnitId, periodId, lineItemId, value: (prior?.value ?? 0) + r.value,
+    });
+  }
+  for (const agg of finAgg.values()) {
+    const description = `${agg.unitName} · ${agg.lineItemName} · ${agg.periodStart}–${agg.periodEnd}`;
+    const existing = finByKey.get(`${agg.businessUnitId}|${agg.periodId}|${agg.lineItemId}`);
     if (!existing) {
-      pendingRows.financialRecords.push({ id: nextFin(), businessUnitId: unitId, periodId, lineItemId, value: r.value, notes: null });
+      pendingRows.financialRecords.push({
+        id: nextFin(), businessUnitId: agg.businessUnitId, periodId: agg.periodId, lineItemId: agg.lineItemId,
+        value: agg.value, notes: null,
+      });
       stats.financialRecords.creates++;
-      details.financialRecords.push({ action: 'create', description, fields: [{ field: 'value', from: null, to: r.value }] });
-    } else if (!Object.is(existing.value, r.value)) {
-      updates.push({ table: 'financialRecords', id: existing.id, set: { value: r.value } });
+      details.financialRecords.push({ action: 'create', description, fields: [{ field: 'value', from: null, to: agg.value }] });
+    } else if (!Object.is(existing.value, agg.value)) {
+      updates.push({ table: 'financialRecords', id: existing.id, set: { value: agg.value } });
       stats.financialRecords.updates++;
-      details.financialRecords.push({ action: 'update', description, fields: [{ field: 'value', from: existing.value, to: r.value }] });
+      details.financialRecords.push({ action: 'update', description, fields: [{ field: 'value', from: existing.value, to: agg.value }] });
     } else {
       stats.financialRecords.unchanged++;
     }
