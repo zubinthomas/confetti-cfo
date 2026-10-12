@@ -4,9 +4,9 @@
       "id": "tally-integration",
       "title": "Tally integration: automated P&L sync",
       "area": "Finance",
-      "status": "blocked",
+      "status": "in_progress",
       "description": "A Rust agent pushes month and week period P&L values from Tally into the dashboard automatically, packaged as a Windows Service.",
-      "reason": "Built but not tested or deployed - waiting on authorization before it's tried against a real Tally installation."
+      "reason": "Live-tested against the real JP Office install: all 74 Tally groups are mapped (23 balance-sheet, 51 P&L), a standing Trial Balance reconciliation check runs every cycle, but no sync has been committed yet (sync mode is manual review) and no dashboard page displays the Balance Sheet or company-wide P&L business units once it is - still needs a run-sync/review/commit pass and a new display page (same pattern as the existing department P&L pages)."
     },
     {
       "id": "password-reset-emails",
