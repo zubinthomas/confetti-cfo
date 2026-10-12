@@ -247,12 +247,23 @@ action below, since that VM had no real Tally install to generate a crash
 against - lower priority than the install/start/stop path that's now
 confirmed.
 
-**Build** (on an actual Windows machine, recommended for a production
-binary - cross-compiling with the `gnu` target from Linux is only useful as
-a compile-smoke-test, not for a binary you'd actually deploy):
+**Build** - either on an actual Windows machine:
 ```
 cargo build --release --target x86_64-pc-windows-msvc
 ```
+or cross-compiled from Linux/macOS with `cargo-xwin` (confirmed working
+2026-10-12 - produces a real PE32+ MSVC-ABI binary, not a smoke-test one;
+unlike the `gnu` target, this *is* a binary worth deploying):
+```
+cargo install cargo-xwin        # once
+rustup target add x86_64-pc-windows-msvc   # once
+cargo xwin build --release --target x86_64-pc-windows-msvc
+```
+`cargo-xwin` downloads the Windows SDK/CRT headers and links with `lld`
+instead of `link.exe` - no Windows install needed at all. (The plain `gnu`
+target used earlier in this project is still fine as a quick compile
+smoke-test, but was never meant for an actual deploy - see the two
+cross-compiles that got handed over during the 2026-10 Trial Balance work.)
 
 **Install** (from an elevated/Administrator command prompt, after copying
 the built `.exe` and a filled-in `config.toml` next to each other):
