@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
-  MenuIcon, X, Plus,
+  MenuIcon, X, Plus, FileBarChart, Scale,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
 import { useAuth } from "@/lib/AuthContext";
@@ -58,6 +58,8 @@ const NAV_SECTIONS = [
   {
     title: "Finance",
     items: [
+      { to: "/finance/profit-loss", label: "Profit & Loss", icon: FileBarChart },
+      { to: "/finance/balance-sheet", label: "Balance Sheet", icon: Scale },
       { to: "/cashflow", label: "Cash Flow", icon: Banknote },
       { to: "/ai", label: "AI Queries", icon: Sparkles },
     ],

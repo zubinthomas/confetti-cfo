@@ -20,6 +20,8 @@ import RoadmapPage from '@/components/dashboard/RoadmapPage';
 import SiennaTab from '@/components/dashboard/SiennaTab';
 import StoreTab from '@/components/dashboard/StoreTab';
 import CashFlowTab from '@/components/dashboard/CashFlowTab';
+import ProfitLossPage from '@/components/dashboard/ProfitLossPage';
+import BalanceSheetPage from '@/components/dashboard/BalanceSheetPage';
 import CraftDeptPage from '@/components/dashboard/CraftDeptPage';
 import ConsignmentPage from '@/components/dashboard/ConsignmentPage';
 import OpsPage from '@/components/dashboard/OpsPage';
@@ -71,6 +73,8 @@ export default function DashboardApp() {
           <Route path="crafts/stitching" element={<CraftDeptPage deptKey="stitching" heading="Stitching Division" />} />
           <Route path="crafts/trading-items" element={<CraftDeptPage deptKey="tradingItems" heading="Trading Items" />} />
           <Route path="cashflow" element={<CashFlowTab />} />
+          <Route path="finance/profit-loss" element={<ProfitLossPage />} />
+          <Route path="finance/balance-sheet" element={<BalanceSheetPage />} />
         </Route>
 
         <Route element={<RequirePermission mode="all" requires={[
