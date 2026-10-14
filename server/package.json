@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node index.ts",
+    "start": "node --max-old-space-size=600 index.ts",
     "dev": "node --watch index.ts",
     "db:seed": "node db/seed.ts",
     "db:seed-settings": "node db/seed-settings.ts",
