@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import DashCard from "./DashCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ImportDetailsModal from "./ImportDetailsModal";
+import BatchGroupHistoryModal from "./BatchGroupHistoryModal";
+import { groupBatches, type BatchGroup } from "./groupImportBatches";
 import {
   uploadWorkbook, listBatches, commitBatch, discardBatch, getBatchDetails,
   type ImportBatch, type ImportIssue, type ImportBatchDetails, type RejectedUpload,
@@ -13,9 +15,10 @@ import {
 import {
   Upload, Loader2, AlertTriangle, AlertCircle, Info, CheckCircle2,
   RefreshCw, Trash2, ExternalLink, FileSpreadsheet, Link2, Filter,
-  ChevronLeft, ChevronRight, Eye, Cable,
+  ChevronLeft, ChevronRight, Eye, Cable, History,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { localDay } from "@/lib/localDay";
 
 const KIND_LABELS: Record<ImportBatch["kind"], string> = {
   cepl: "CEPL P&L",
@@ -100,6 +103,7 @@ const SYNC_STATUS_CHIP: Record<NonNullable<SheetSource["lastSyncStatus"]>, { lab
   preview_created: { label: "preview ready", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
   auto_committed: { label: "auto-committed", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
   no_changes: { label: "no changes", cls: "bg-muted text-muted-foreground" },
+  auto_discarded: { label: "auto-discarded", cls: "bg-muted text-muted-foreground" },
   error: { label: "error", cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 };
 
@@ -379,12 +383,6 @@ function SheetsCard({ onBatchesChanged }: { onBatchesChanged: () => void }) {
   );
 }
 
-/** Local calendar day (yyyy-mm-dd) of an ISO timestamp, comparable to <input type="date"> values. */
-const localDay = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
 export default function ImportPage() {
   const { can } = useAuth();
   const canWrite = can("Import", "write");
@@ -400,18 +398,20 @@ export default function ImportPage() {
   const [filterKind, setFilterKind] = useState<"all" | ImportBatch["kind"]>("all");
   const [filterSource, setFilterSource] = useState<"all" | ImportBatch["sourceType"]>("all");
   const [hideDiscarded, setHideDiscarded] = useState(true);
+  const [hideAutoResolved, setHideAutoResolved] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [detailsCache, setDetailsCache] = useState<Record<number, ImportBatchDetails>>({});
   const [detailsOpenFor, setDetailsOpenFor] = useState<number | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [historyGroup, setHistoryGroup] = useState<BatchGroup | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => { listBatches().then(setBatches).catch(() => {}); }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
   // back to the first page whenever the visible set changes shape
-  useEffect(() => { setPage(1); }, [filterFrom, filterTo, filterKind, filterSource, hideDiscarded, pageSize]);
+  useEffect(() => { setPage(1); }, [filterFrom, filterTo, filterKind, filterSource, hideDiscarded, hideAutoResolved, pageSize]);
 
   const onFile = async (file: File) => {
     setUploading(true);
@@ -465,20 +465,27 @@ export default function ImportPage() {
     }
   };
 
-  // hideDiscarded counts as "active" only when switched off its default
-  const hasFilters = !!filterFrom || !!filterTo || filterKind !== "all" || filterSource !== "all" || !hideDiscarded;
-  const visibleBatches = batches.filter((b) => {
+  // hideDiscarded/hideAutoResolved count as "active" only when switched off their defaults
+  const hasFilters = !!filterFrom || !!filterTo || filterKind !== "all" || filterSource !== "all" || !hideDiscarded || !hideAutoResolved;
+
+  // Group over the FULL batch list, so a group's history always has every
+  // occurrence regardless of the active filters - only which GROUPS show on
+  // the main list (via their representative instance) is filtered below.
+  const allGroups = groupBatches(batches);
+  const visibleGroups = allGroups.filter((g) => {
+    const b = g.representative;
     const day = localDay(b.uploadedAt);
     return (!filterFrom || day >= filterFrom)
       && (!filterTo || day <= filterTo)
       && (filterKind === "all" || b.kind === filterKind)
       && (filterSource === "all" || b.sourceType === filterSource)
-      && (!hideDiscarded || b.status !== "discarded");
+      && (!hideDiscarded || b.status !== "discarded")
+      && (!hideAutoResolved || !b.decisionSource?.startsWith("auto_discard_"));
   });
 
-  const totalPages = Math.max(1, Math.ceil(visibleBatches.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(visibleGroups.length / pageSize));
   const currentPage = Math.min(page, totalPages); // stays valid if the list shrinks
-  const pagedBatches = visibleBatches.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pagedGroups = visibleGroups.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-6">
@@ -582,35 +589,53 @@ export default function ImportPage() {
             />
             Hide discarded
           </label>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox" checked={hideAutoResolved}
+              onChange={(e) => setHideAutoResolved(e.target.checked)}
+              className="accent-primary"
+            />
+            Hide auto-resolved
+          </label>
           {hasFilters && (
             <>
               <button
                 onClick={() => {
                   setFilterFrom(""); setFilterTo(""); setFilterKind("all"); setFilterSource("all");
-                  setHideDiscarded(true);
+                  setHideDiscarded(true); setHideAutoResolved(true);
                 }}
                 className="text-xs text-muted-foreground underline hover:text-foreground"
               >
                 Clear
               </button>
               <span className="text-xs text-muted-foreground ml-auto">
-                {visibleBatches.length} of {batches.length} batch{batches.length === 1 ? "" : "es"}
+                {visibleGroups.length} of {allGroups.length} batch group{allGroups.length === 1 ? "" : "s"}
               </span>
             </>
           )}
         </div>
       )}
 
-      {batches.length > 0 && visibleBatches.length === 0 && (
+      {batches.length > 0 && visibleGroups.length === 0 && (
         <p className="text-sm text-muted-foreground">No import batches match the current filters.</p>
       )}
 
-      {pagedBatches.map((b) => (
+      {pagedGroups.map((g) => {
+        const b = g.representative;
+        return (
         <DashCard
-          key={b.id}
+          key={g.key}
           title={`#${b.id} · ${b.filename}`}
           action={
             <>
+              {g.instances.length > 1 && (
+                <button
+                  onClick={() => setHistoryGroup(g)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <History className="w-3 h-3" /> {g.instances.length} occurrences
+                </button>
+              )}
               <button
                 onClick={() => openDetails(b.id)}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg border border-border text-[11px] text-muted-foreground hover:text-foreground"
@@ -672,7 +697,14 @@ export default function ImportPage() {
             </div>
           )}
         </DashCard>
-      ))}
+        );
+      })}
+
+      <BatchGroupHistoryModal
+        open={historyGroup !== null}
+        onOpenChange={(open) => { if (!open) setHistoryGroup(null); }}
+        group={historyGroup}
+      />
 
       <ImportDetailsModal
         open={detailsOpenFor !== null}
@@ -689,7 +721,7 @@ export default function ImportPage() {
         loading={detailsLoading}
       />
 
-      {visibleBatches.length > pageSize && (
+      {visibleGroups.length > pageSize && (
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1}

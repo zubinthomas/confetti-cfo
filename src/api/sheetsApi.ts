@@ -13,7 +13,7 @@ export interface SheetSource {
   syncMode: SheetSyncMode;
   createdAt: string;
   lastSyncAt: string | null;
-  lastSyncStatus: "preview_created" | "auto_committed" | "no_changes" | "error" | null;
+  lastSyncStatus: "preview_created" | "auto_committed" | "no_changes" | "auto_discarded" | "error" | null;
   lastSyncError: string | null;
   lastSyncIssues: ImportIssue[] | null;
 }

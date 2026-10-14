@@ -13,7 +13,7 @@
 // text column to keep the existing API contract byte-identical.
 import {
   pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
-  uniqueIndex, unique, primaryKey, type AnyPgColumn,
+  uniqueIndex, unique, primaryKey, index, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import type { RecordChange } from '../import/types.ts';
 
@@ -276,6 +276,17 @@ export const settings = pgTable('settings', {
 
 // ── Workbook imports (upload → preview → commit/discard) ────────────────────
 export const importStatusEnum = pgEnum('import_status', ['preview', 'committed', 'discarded']);
+// How a batch arrived at its current status - null while still pending.
+// manual = a human clicked commit/discard; auto_commit = syncMode:'auto' with
+// no warning/error issues; the auto_discard_* values are all written by the
+// dedup/no-op logic in server/import/batchResolution.ts.
+export const importDecisionSourceEnum = pgEnum('import_decision_source', [
+  'manual',
+  'auto_commit',
+  'auto_discard_noop',
+  'auto_discard_duplicate_rejected',
+  'auto_discard_superseded',
+]);
 
 // Saved Google Sheets sources, re-synced on a schedule or on demand.
 export const sheetAccessMethodEnum = pgEnum('sheet_access_method', ['link', 'service_account']);
@@ -312,7 +323,12 @@ export const importBatches = pgTable('import_batches', {
   sourceType: text('source_type').notNull().default('upload'), // upload | sheet | tally
   sheetSourceId: integer('sheet_source_id').references(() => sheetSources.id, { onDelete: 'set null' }),
   tallySourceId: integer('tally_source_id').references(() => tallySources.id, { onDelete: 'set null' }),
-});
+  contentHash: text('content_hash'), // sha256 of canonicalized `details`, for grouping identical changes; null for pre-feature batches
+  decisionSource: importDecisionSourceEnum('decision_source'), // null while status is still 'preview'
+  decidedByUserId: integer('decided_by_user_id').references(() => users.id, { onDelete: 'set null' }), // set only when decisionSource is 'manual'
+}, (t) => [
+  index('import_batches_dedup').on(t.kind, t.sourceType, t.sheetSourceId, t.tallySourceId, t.contentHash),
+]);
 
 // ── Tally integration (a Rust agent installed on the client's machine pushes
 // ledger data over HTTPS, authenticated with its own API key - see

@@ -13,6 +13,14 @@ export interface ImportFieldChange { field: string; from: unknown; to: unknown }
 export interface ImportRecordChange { action: "create" | "update"; description: string; fields?: ImportFieldChange[] }
 export type ImportBatchDetails = Record<string, ImportRecordChange[]> | null;
 
+// How a batch arrived at its current status - null while still pending review.
+export type DecisionSource =
+  | "manual"
+  | "auto_commit"
+  | "auto_discard_noop"
+  | "auto_discard_duplicate_rejected"
+  | "auto_discard_superseded";
+
 export interface ImportBatch {
   id: number;
   filename: string;
@@ -25,6 +33,9 @@ export interface ImportBatch {
   sourceType: "upload" | "sheet" | "tally";
   sheetSourceId: number | null;
   tallySourceId: number | null;
+  contentHash: string | null;
+  decisionSource: DecisionSource | null;
+  decidedByEmail: string | null;
 }
 
 /** A workbook that failed validation: no batch was created on the server. */

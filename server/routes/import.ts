@@ -4,11 +4,13 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { eq, desc } from 'drizzle-orm';
-import { authMiddleware, requirePermission } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
 import { db, ready, schema } from '../db/client.ts';
 import { loadWorkbook } from '../import/xlsx.ts';
 import { detectKind, PARSERS } from '../import/detect.ts';
 import { buildMergePlan, commitMergePlan } from '../import/merge.ts';
+import { computeContentHash } from '../import/contentHash.ts';
+import { findManuallyRejectedPrecedent } from '../import/batchResolution.ts';
 import type { Issue, ParsedWorkbook } from '../import/types.ts';
 
 const router = Router();
@@ -22,11 +24,12 @@ const upload = multer({
 const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === 'error');
 
 // also used by routes/sheets.ts - keeps the heavy parsed payload out of responses
-export const batchSummary = (b: typeof schema.importBatches.$inferSelect) => ({
+export const batchSummary = (b: typeof schema.importBatches.$inferSelect, decidedByEmail: string | null = null) => ({
   id: b.id, filename: b.filename, kind: b.kind, status: b.status,
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
   issues: b.issues, stats: b.stats,
   sourceType: b.sourceType, sheetSourceId: b.sheetSourceId, tallySourceId: b.tallySourceId,
+  contentHash: b.contentHash, decisionSource: b.decisionSource, decidedByEmail,
 });
 
 /** POST /api/import/upload - parse + validate a workbook, store a preview batch. */
@@ -54,16 +57,23 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
     }
     // preview merge plan against the current database (not committed)
     const plan = await buildMergePlan(parsed);
+    const contentHash = computeContentHash(plan.details);
+    const noChanges = Object.values(plan.stats).every((s) => s.creates + s.updates === 0);
+    const rejectedBefore = !noChanges && await findManuallyRejectedPrecedent(db, {
+      kind, sourceType: 'upload', sheetSourceId: null, tallySourceId: null, contentHash,
+    });
     const [batch] = await db.insert(schema.importBatches).values({
       filename: req.file.originalname,
       kind,
-      status: 'preview',
+      status: noChanges || rejectedBefore ? 'discarded' : 'preview',
       uploadedAt: new Date().toISOString(),
       committedAt: null,
       issues: parsed.issues,
       stats: plan.stats,
       details: plan.details,
       payload: parsed,
+      contentHash,
+      decisionSource: noChanges ? 'auto_discard_noop' : rejectedBefore ? 'auto_discard_duplicate_rejected' : null,
     }).returning();
     res.status(201).json(batchSummary(batch));
   } catch (err) {
@@ -75,12 +85,17 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
 /** GET /api/import/batches - newest first, without payloads. */
 router.get('/batches', requirePermission('Import', 'read'), async (_req, res) => {
   await ready();
-  const rows = await db.select().from(schema.importBatches).orderBy(desc(schema.importBatches.id));
-  res.json(rows.map(batchSummary));
+  const rows = await db.select({
+    batch: schema.importBatches,
+    decidedByEmail: schema.users.email,
+  }).from(schema.importBatches)
+    .leftJoin(schema.users, eq(schema.users.id, schema.importBatches.decidedByUserId))
+    .orderBy(desc(schema.importBatches.id));
+  res.json(rows.map((r) => batchSummary(r.batch, r.decidedByEmail)));
 });
 
 /** POST /api/import/:id/commit */
-router.post('/:id/commit', requirePermission('Import', 'write'), async (req, res) => {
+router.post('/:id/commit', requirePermission('Import', 'write'), async (req: AuthedRequest, res) => {
   try {
     await ready();
     const id = Number(req.params.id);
@@ -98,8 +113,11 @@ router.post('/:id/commit', requirePermission('Import', 'write'), async (req, res
       committedAt: new Date().toISOString(),
       stats: plan.stats,
       details: plan.details,
+      contentHash: computeContentHash(plan.details),
+      decisionSource: 'manual',
+      decidedByUserId: req.user!.id,
     }).where(eq(schema.importBatches.id, id)).returning();
-    res.json(batchSummary(updated));
+    res.json(batchSummary(updated, req.user!.email));
   } catch (err) {
     console.error('import commit error:', err);
     res.status(500).json({ message: err instanceof Error ? err.message : 'Commit failed' });
@@ -117,16 +135,16 @@ router.get('/:id/details', requirePermission('Import', 'read'), async (req, res)
 });
 
 /** POST /api/import/:id/discard */
-router.post('/:id/discard', requirePermission('Import', 'delete'), async (req, res) => {
+router.post('/:id/discard', requirePermission('Import', 'delete'), async (req: AuthedRequest, res) => {
   await ready();
   const id = Number(req.params.id);
   const [batch] = await db.select().from(schema.importBatches).where(eq(schema.importBatches.id, id));
   if (!batch) return res.status(404).json({ message: 'Not found' });
   if (batch.status !== 'preview') return res.status(409).json({ message: `Batch is already ${batch.status}` });
   const [updated] = await db.update(schema.importBatches)
-    .set({ status: 'discarded' })
+    .set({ status: 'discarded', decisionSource: 'manual', decidedByUserId: req.user!.id })
     .where(eq(schema.importBatches.id, id)).returning();
-  res.json(batchSummary(updated));
+  res.json(batchSummary(updated, req.user!.email));
 });
 
 export default router;

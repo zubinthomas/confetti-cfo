@@ -6,7 +6,7 @@ import { get, post, patch, del, authHeaders, API_BASE } from "./http";
 import type { ImportIssue } from "./importApi";
 
 export type TallySyncMode = "auto" | "manual" | "paused";
-export type TallySyncStatus = "preview_created" | "auto_committed" | "no_changes" | "error";
+export type TallySyncStatus = "preview_created" | "auto_committed" | "no_changes" | "auto_discarded" | "error";
 
 export interface TallySource {
   id: number;

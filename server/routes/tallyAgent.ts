@@ -51,7 +51,7 @@ router.post('/sync', async (req: TallyAgentRequest, res) => {
     status: result.status,
     error: result.error,
     unmappedLedgers: result.unmappedLedgers,
-    batches: result.batches.map(batchSummary),
+    batches: result.batches.map((b) => batchSummary(b)),
   });
 });
 

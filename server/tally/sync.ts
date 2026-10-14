@@ -13,6 +13,8 @@ import { eq, inArray } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { buildMergePlan, commitMergePlan } from '../import/merge.ts';
 import { canAutoCommit } from '../sheets/sync.ts';
+import { computeContentHash } from '../import/contentHash.ts';
+import { findManuallyRejectedPrecedent, supersedePendingForSource } from '../import/batchResolution.ts';
 import { loadEffectiveMappings } from './loadEffectiveMappings.ts';
 import { fiscalYearOf, monthPeriod } from '../import/types.ts';
 import type { Issue, ParsedFinancialRecord, ParsedPeriod, ParsedWorkbook } from '../import/types.ts';
@@ -27,7 +29,7 @@ export interface TallyRecordInput {
 
 type TallySource = typeof schema.tallySources.$inferSelect;
 type ImportBatch = typeof schema.importBatches.$inferSelect;
-export type TallySyncStatus = 'preview_created' | 'auto_committed' | 'no_changes' | 'error';
+export type TallySyncStatus = 'preview_created' | 'auto_committed' | 'no_changes' | 'auto_discarded' | 'error';
 
 export interface TallySyncResult {
   status: TallySyncStatus;
@@ -136,7 +138,9 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
     }
 
     const batches: ImportBatch[] = [];
+    const newPreviewIds: number[] = [];
     let anyChange = false;
+    let anyDuplicateRejected = false;
     let allAutoCommitted = true;
 
     for (const { businessName, records: financialRecords, periods } of byBusiness.values()) {
@@ -157,10 +161,53 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
       } as unknown as ParsedWorkbook;
 
       const plan = await buildMergePlan(parsed);
+      const contentHash = computeContentHash(plan.details);
       const noChanges = Object.values(plan.stats).every((s) => s.creates + s.updates === 0);
-      if (noChanges) continue;
-      anyChange = true;
+      if (noChanges) {
+        const [batch] = await db.insert(schema.importBatches).values({
+          filename: `${source.label} (${businessName})`,
+          kind: 'tally',
+          status: 'discarded',
+          uploadedAt: new Date().toISOString(),
+          committedAt: null,
+          issues,
+          stats: plan.stats,
+          details: plan.details,
+          payload: parsed,
+          sourceType: 'tally',
+          tallySourceId: source.id,
+          contentHash,
+          decisionSource: 'auto_discard_noop',
+        }).returning();
+        batches.push(batch);
+        continue;
+      }
 
+      const rejectedBefore = await findManuallyRejectedPrecedent(db, {
+        kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source.id, contentHash,
+      });
+      if (rejectedBefore) {
+        const [batch] = await db.insert(schema.importBatches).values({
+          filename: `${source.label} (${businessName})`,
+          kind: 'tally',
+          status: 'discarded',
+          uploadedAt: new Date().toISOString(),
+          committedAt: null,
+          issues,
+          stats: plan.stats,
+          details: plan.details,
+          payload: parsed,
+          sourceType: 'tally',
+          tallySourceId: source.id,
+          contentHash,
+          decisionSource: 'auto_discard_duplicate_rejected',
+        }).returning();
+        batches.push(batch);
+        anyDuplicateRejected = true;
+        continue;
+      }
+
+      anyChange = true;
       const [batch] = await db.insert(schema.importBatches).values({
         filename: `${source.label} (${businessName})`,
         kind: 'tally',
@@ -173,12 +220,14 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
         payload: parsed,
         sourceType: 'tally',
         tallySourceId: source.id,
+        contentHash,
       }).returning();
+      newPreviewIds.push(batch.id);
 
       if (source.syncMode === 'auto' && canAutoCommit(issues)) {
         await commitMergePlan(plan);
         const [committed] = await db.update(schema.importBatches).set({
-          status: 'committed', committedAt: new Date().toISOString(),
+          status: 'committed', committedAt: new Date().toISOString(), decisionSource: 'auto_commit',
         }).where(eq(schema.importBatches.id, batch.id)).returning();
         batches.push(committed);
       } else {
@@ -187,7 +236,13 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
       }
     }
 
-    const status: TallySyncStatus = !anyChange ? 'no_changes' : allAutoCommitted ? 'auto_committed' : 'preview_created';
+    if (newPreviewIds.length) {
+      await supersedePendingForSource(db, { sourceType: 'tally', tallySourceId: source.id }, newPreviewIds);
+    }
+
+    const status: TallySyncStatus = !anyChange
+      ? (anyDuplicateRejected ? 'auto_discarded' : 'no_changes')
+      : allAutoCommitted ? 'auto_committed' : 'preview_created';
     return {
       status, batches, unmappedLedgers: [...unmapped],
       source: await recordOutcome(source.id, status, null, issues.length ? issues : null),
