@@ -211,11 +211,19 @@ fn run_cycle(server: &ServerClient, local: &Config) -> u64 {
     sleep_seconds
 }
 
-/// Fetches Tally's period report for `[period_start, query_to]` and builds one
-/// TallyRecord per mapped ledger. Nothing is returned unless the report agrees
-/// with the raw ledger opening/closing balances over the same range - Tally's
-/// final report is not trusted on its own. `period_end` is what gets sent to
-/// the server (load-bearing for `Week`), and may differ from `query_to`.
+/// Fetches Tally's period report for `[period_start, query_to]` purely as a
+/// cross-check, and builds one TallyRecord per mapped ledger from the raw
+/// ledger range instead. Tally's `EXPLODEFLAG=Yes` report export has been
+/// confirmed (2026-10-14, live against the JP Office install) to come back
+/// 0.00 for a scattered subset of ledgers whose actual period movement is
+/// nonzero - verified wrong by cross-checking Tally's own UI three ways
+/// (Ledger Voucher list, Ledger Monthly Summary, Group Summary) for
+/// "CLEANING CHARGES", all of which agreed with the raw range and not with
+/// the exploded export. The raw range query has no report template or
+/// EXPLODEFLAG explosion to get wrong, so it's the one used for the actual
+/// pushed value; a disagreement is now a warning, not a reason to discard an
+/// entire cycle's otherwise-good data. `period_end` is what gets sent to the
+/// server (load-bearing for `Week`), and may differ from `query_to`.
 fn fetch_period_records(
     tally: &HttpTallyGateway,
     report_name: &str,
@@ -230,14 +238,14 @@ fn fetch_period_records(
     let amounts = match tally.fetch_period_report(report_name, &from, &to) {
         Ok(a) => a,
         Err(e) => {
-            log::error!("could not fetch period report ({period_type:?}) from Tally: {e}");
-            return Vec::new();
+            log::error!("could not fetch period report ({period_type:?}) from Tally - skipping the cross-check this cycle: {e}");
+            Vec::new()
         }
     };
     let range = match tally.fetch_ledger_range(&from, &to) {
         Ok(r) => r,
         Err(e) => {
-            log::error!("could not fetch raw ledger balances ({period_type:?}) to check the period report against: {e}");
+            log::error!("could not fetch raw ledger balances ({period_type:?}): {e}");
             return Vec::new();
         }
     };
@@ -246,25 +254,21 @@ fn fetch_period_records(
     }
     let names: Vec<&str> = ledgers.iter().map(|l| l.name.as_str()).collect();
     let problems = reconcile_period_with_ledger_range(&amounts, &range, &names);
-    if !problems.is_empty() {
-        for p in &problems {
-            log::error!("P&L check failed ({period_type:?}): {p}");
-        }
-        log::error!("not pushing {period_type:?} P&L records this cycle");
-        return Vec::new();
+    for p in &problems {
+        log::warn!("P&L report disagrees with raw ledger movement ({period_type:?}), using raw ledger movement: {p}");
     }
     let wanted: std::collections::HashSet<&str> = names.into_iter().collect();
     let period_start_str = period_start.format("%Y-%m-%d").to_string();
     let period_end_str = period_end.format("%Y-%m-%d").to_string();
-    amounts
+    range
         .into_iter()
-        .filter(|a| wanted.contains(a.name.as_str()))
-        .map(|a| TallyRecord {
-            ledger_name: a.name,
+        .filter(|r| wanted.contains(r.name.as_str()))
+        .map(|r| TallyRecord {
+            ledger_name: r.name,
             period_type,
             period_start: period_start_str.clone(),
             period_end: period_end_str.clone(),
-            value: a.net_amount,
+            value: r.closing - r.opening,
         })
         .collect()
 }
@@ -356,5 +360,101 @@ fn check_trial_balance(tally: &HttpTallyGateway) {
             problems.len(),
             SKIP_GROUPS.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+
+    /// Reproduces the real failure confirmed 2026-10-14 against the JP
+    /// Office install: the EXPLODEFLAG period report comes back 0.00 for
+    /// "CLEANING CHARGES" while the raw ledger range shows real movement.
+    /// Asserts the returned record uses the raw range's value, and that a
+    /// ledger where both sources agree ("CCTV Maintanence") still comes
+    /// through correctly too.
+    #[test]
+    fn fetch_period_records_prefers_the_raw_range_over_a_disagreeing_report() {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let addr = server.server_addr();
+
+        let handle = thread::spawn(move || {
+            // fetch_period_records calls fetch_period_report first, then
+            // fetch_ledger_range - respond to each in that fixed order.
+            let mut period_request = server.recv().unwrap();
+            let mut body = String::new();
+            period_request.as_reader().read_to_string(&mut body).unwrap();
+            assert!(body.contains("<TYPE>Data</TYPE>"), "first request should be the period report export");
+            let period_xml = r#"<ENVELOPE>
+<BSNAME>
+  <DSPACCNAME>
+   <DSPDISPNAME>CLEANING CHARGES</DSPDISPNAME>
+</DSPACCNAME>
+</BSNAME>
+ <BSAMT>
+  <BSSUBAMT>0.00</BSSUBAMT>
+  <BSMAINAMT></BSMAINAMT>
+</BSAMT>
+<BSNAME>
+  <DSPACCNAME>
+   <DSPDISPNAME>CCTV Maintanence</DSPDISPNAME>
+</DSPACCNAME>
+</BSNAME>
+ <BSAMT>
+  <BSSUBAMT>0.00</BSSUBAMT>
+  <BSMAINAMT></BSMAINAMT>
+</BSAMT>
+</ENVELOPE>"#;
+            period_request
+                .respond(tiny_http::Response::from_string(period_xml))
+                .unwrap();
+
+            let mut range_request = server.recv().unwrap();
+            let mut body = String::new();
+            range_request.as_reader().read_to_string(&mut body).unwrap();
+            assert!(body.contains("<ID>ConfettiLedgerRange</ID>"), "second request should be the raw ledger range");
+            let range_xml = r#"<ENVELOPE>
+<LEDGER NAME="CLEANING CHARGES">
+  <PARENT>Building &amp; Show Room Maintanance</PARENT>
+  <OPENINGBALANCE>190163.01</OPENINGBALANCE>
+  <CLOSINGBALANCE>201492.38</CLOSINGBALANCE>
+</LEDGER>
+<LEDGER NAME="CCTV Maintanence">
+  <PARENT>Building &amp; Show Room Maintanance</PARENT>
+  <OPENINGBALANCE>13871.00</OPENINGBALANCE>
+  <CLOSINGBALANCE>13871.00</CLOSINGBALANCE>
+</LEDGER>
+</ENVELOPE>"#;
+            range_request
+                .respond(tiny_http::Response::from_string(range_xml))
+                .unwrap();
+        });
+
+        let tally = HttpTallyGateway::new(&format!("http://{addr}"), None);
+        let cleaning = MappedLedger {
+            name: "CLEANING CHARGES".to_string(),
+            value_mode: ValueMode::Period,
+            period_granularity: PeriodGranularity::Month,
+        };
+        let cctv = MappedLedger {
+            name: "CCTV Maintanence".to_string(),
+            value_mode: ValueMode::Period,
+            period_granularity: PeriodGranularity::Month,
+        };
+        let ledgers: Vec<&MappedLedger> = vec![&cleaning, &cctv];
+        let period_start = NaiveDate::from_ymd_opt(2026, 10, 1).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 10, 13).unwrap();
+
+        let records = fetch_period_records(&tally, "Profit and Loss", &ledgers, PeriodType::Month, period_start, today, today);
+
+        handle.join().unwrap();
+
+        let by_name: std::collections::HashMap<&str, f64> =
+            records.iter().map(|r| (r.ledger_name.as_str(), r.value)).collect();
+        let cleaning = *by_name.get("CLEANING CHARGES").expect("CLEANING CHARGES should be in the pushed records");
+        assert!((cleaning - 11329.37).abs() < 0.01, "should use the raw range's value (~11329.37), not the report's wrong 0.00: got {cleaning}");
+        let cctv = *by_name.get("CCTV Maintanence").expect("CCTV Maintanence should be in the pushed records");
+        assert!(cctv.abs() < 0.01, "CCTV Maintanence had no real movement, expected ~0.0: got {cctv}");
     }
 }
