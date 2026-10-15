@@ -5,7 +5,7 @@ import PLRow from "./PLRow";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
 import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
-import { computeCompanyPL, resolveCplBu, resolveCplLi, type CompanyPL } from "@/data/companyPL";
+import { computeCompanyPL, resolveCplBu, resolveCplLi, type CompanyPL, type LineItemTotal } from "@/data/companyPL";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import type { KpiData } from "./KpiCard";
@@ -151,13 +151,16 @@ function PLDetail({ data, label }: { data: CompanyPL; label: string }) {
     },
   ];
 
+  const formatDetail = (items: LineItemTotal[]) =>
+    items.map((it) => ({ label: it.name, value: `₹${L(it.total)}` }));
+
   const plRows: PLRowData[] = [
-    { label: "Revenue", value: `₹${L(fyRevenue)}` },
-    { label: "Direct / COGS expenses", value: `₹${L(fyCogs)}`, status: "red" },
+    { label: "Revenue", value: `₹${L(fyRevenue)}`, details: formatDetail(data.lineItemBreakdown.revenue) },
+    { label: "Direct / COGS expenses", value: `₹${L(fyCogs)}`, status: "red", details: formatDetail(data.lineItemBreakdown.cogs) },
     { label: "Gross profit", value: `₹${L(fyGrossProfit)} (${fyGrossMarginPct.toFixed(1)}%)`, status: "green", isTotal: true },
-    { label: "HR / payroll costs", value: `₹${L(fyHrCost)}`, status: "red" },
-    { label: "Operating costs", value: `₹${L(fyOperatingCost)}`, status: "red" },
-    { label: "Other income", value: `₹${L(fyOther)}`, status: fyOther >= 0 ? "green" : "red" },
+    { label: "HR / payroll costs", value: `₹${L(fyHrCost)}`, status: "red", details: formatDetail(data.lineItemBreakdown.hrCost) },
+    { label: "Operating costs", value: `₹${L(fyOperatingCost)}`, status: "red", details: formatDetail(data.lineItemBreakdown.operatingCost) },
+    { label: "Other income", value: `₹${L(fyOther)}`, status: fyOther >= 0 ? "green" : "red", details: formatDetail(data.lineItemBreakdown.other) },
     { label: "Net Profit & Loss", value: `₹${L(fyNetPL)} (${fyNetMarginPct.toFixed(1)}%)`, status: fyNetPL >= 0 ? "green" : "red", isTotal: true },
   ];
 

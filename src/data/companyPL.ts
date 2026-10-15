@@ -11,7 +11,7 @@
 // magnitudes - see server/tally/sync.ts). So every category is summed with
 // a plain "+", never subtracted - subtracting an already-negative expense
 // would double it back into a profit.
-import { MONTHS, frGet, type FrIndex, type Series } from "./seriesKernel";
+import { MONTHS, frGet, series, sum, type FrIndex, type Series } from "./seriesKernel";
 import type { BusinessUnit, LineItem } from "./types";
 
 export const CEPL_ID = 1;
@@ -25,6 +25,12 @@ export function resolveCplLi(lineItems: LineItem[]): LineItem[] {
   return lineItems.filter((l) => l.businessId === CEPL_ID);
 }
 
+export interface LineItemTotal {
+  id: number;
+  name: string;
+  total: number;
+}
+
 export interface CompanyPL {
   hasMonthlyDetail: boolean;
   revenue: Series;
@@ -35,6 +41,13 @@ export interface CompanyPL {
   grossProfit: Series;
   totalExpenses: Series;
   netPL: Series;
+  lineItemBreakdown: {
+    revenue: LineItemTotal[];
+    cogs: LineItemTotal[];
+    hrCost: LineItemTotal[];
+    operatingCost: LineItemTotal[];
+    other: LineItemTotal[];
+  };
 }
 
 function sumCategory(idx: FrIndex, buId: number, lineItems: LineItem[], category: LineItem["category"], periodIds: number[]): Series {
@@ -43,6 +56,17 @@ function sumCategory(idx: FrIndex, buId: number, lineItems: LineItem[], category
     const vals = ids.map((lid) => frGet(idx, buId, pid, lid)).filter((v): v is number => v != null);
     return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
   });
+}
+
+// Per-ledger-group totals within a category, for the P&L line-item
+// drill-down - same filter as sumCategory, but keeps each item separate
+// instead of collapsing them into one number.
+function categoryBreakdown(idx: FrIndex, buId: number, lineItems: LineItem[], category: LineItem["category"], periodIds: number[]): LineItemTotal[] {
+  return lineItems
+    .filter((l) => l.category === category)
+    .map((l) => ({ id: l.id, name: l.name, total: sum(series(idx, buId, l.id, periodIds)) }))
+    .filter((l) => l.total !== 0)
+    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
 }
 
 export function computeCompanyPL(idx: FrIndex, buId: number, lineItems: LineItem[], periodIds: number[]): CompanyPL {
@@ -72,6 +96,13 @@ export function computeCompanyPL(idx: FrIndex, buId: number, lineItems: LineItem
     grossProfit,
     totalExpenses,
     netPL,
+    lineItemBreakdown: {
+      revenue: categoryBreakdown(idx, buId, lineItems, "revenue", periodIds),
+      cogs: categoryBreakdown(idx, buId, lineItems, "cogs", periodIds),
+      hrCost: categoryBreakdown(idx, buId, lineItems, "hr_cost", periodIds),
+      operatingCost: categoryBreakdown(idx, buId, lineItems, "operating_cost", periodIds),
+      other: categoryBreakdown(idx, buId, lineItems, "other", periodIds),
+    },
   };
 }
 
