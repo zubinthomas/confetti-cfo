@@ -23,8 +23,15 @@ const upload = multer({
 
 const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === 'error');
 
+// Exactly the columns this needs - lets callers select a narrowed row (see
+// GET /batches below) without pulling the heavy payload/details JSONB
+// columns through Drizzle just to discard them here.
+type BatchSummaryInput = Pick<typeof schema.importBatches.$inferSelect,
+  'id' | 'filename' | 'kind' | 'status' | 'uploadedAt' | 'committedAt' | 'issues' | 'stats'
+  | 'sourceType' | 'sheetSourceId' | 'tallySourceId' | 'contentHash' | 'decisionSource'>;
+
 // also used by routes/sheets.ts - keeps the heavy parsed payload out of responses
-export const batchSummary = (b: typeof schema.importBatches.$inferSelect, decidedByEmail: string | null = null) => ({
+export const batchSummary = (b: BatchSummaryInput, decidedByEmail: string | null = null) => ({
   id: b.id, filename: b.filename, kind: b.kind, status: b.status,
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
   issues: b.issues, stats: b.stats,
@@ -70,8 +77,13 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
       committedAt: null,
       issues: parsed.issues,
       stats: plan.stats,
-      details: plan.details,
-      payload: parsed,
+      // A no-op batch's details are structurally all-empty (noChanges means
+      // nothing was pushed to any table's diff); a duplicate-rejected batch
+      // still has a real diff worth keeping for "View full details". Neither
+      // auto-discarded case can ever reach POST /:id/commit (requires
+      // status === 'preview'), so payload is never needed again for either.
+      details: noChanges ? null : plan.details,
+      payload: noChanges || rejectedBefore ? null : parsed,
       contentHash,
       decisionSource: noChanges ? 'auto_discard_noop' : rejectedBefore ? 'auto_discard_duplicate_rejected' : null,
     }).returning();
@@ -86,12 +98,24 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
 router.get('/batches', requirePermission('Import', 'read'), async (_req, res) => {
   await ready();
   const rows = await db.select({
-    batch: schema.importBatches,
+    id: schema.importBatches.id,
+    filename: schema.importBatches.filename,
+    kind: schema.importBatches.kind,
+    status: schema.importBatches.status,
+    uploadedAt: schema.importBatches.uploadedAt,
+    committedAt: schema.importBatches.committedAt,
+    issues: schema.importBatches.issues,
+    stats: schema.importBatches.stats,
+    sourceType: schema.importBatches.sourceType,
+    sheetSourceId: schema.importBatches.sheetSourceId,
+    tallySourceId: schema.importBatches.tallySourceId,
+    contentHash: schema.importBatches.contentHash,
+    decisionSource: schema.importBatches.decisionSource,
     decidedByEmail: schema.users.email,
   }).from(schema.importBatches)
     .leftJoin(schema.users, eq(schema.users.id, schema.importBatches.decidedByUserId))
     .orderBy(desc(schema.importBatches.id));
-  res.json(rows.map((r) => batchSummary(r.batch, r.decidedByEmail)));
+  res.json(rows.map((r) => batchSummary(r, r.decidedByEmail)));
 });
 
 /** POST /api/import/:id/commit */

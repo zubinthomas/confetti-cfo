@@ -63,7 +63,7 @@ function baseBatch(overrides: Partial<typeof schema.importBatches.$inferInsert>)
   return {
     filename: 'test.xlsx', kind: 'tally', status: 'preview' as const,
     uploadedAt: new Date().toISOString(), committedAt: null,
-    issues: [], stats: {}, details: null, payload: {},
+    issues: [], stats: {}, details: null, payload: null,
     sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id,
     ...overrides,
   };

@@ -1,0 +1,1 @@
+ALTER TABLE "import_batches" ALTER COLUMN "payload" DROP NOT NULL;

@@ -15,7 +15,7 @@ import {
   pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
   uniqueIndex, unique, primaryKey, index, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import type { RecordChange } from '../import/types.ts';
+import type { ParsedWorkbook, RecordChange } from '../import/types.ts';
 
 // ── Closed value sets (verified distinct values) ─────────────────────────────
 export const unitTypeEnum = pgEnum('unit_type', ['department', 'outlet']);
@@ -319,7 +319,7 @@ export const importBatches = pgTable('import_batches', {
   issues: jsonb('issues').notNull(),           // Issue[] from the parser
   stats: jsonb('stats').notNull(),             // per-table creates/updates/unchanged
   details: jsonb('details').$type<Record<string, RecordChange[]> | null>(), // row-level detail behind stats; null for pre-feature batches
-  payload: jsonb('payload').notNull(),         // the ParsedWorkbook, so commit needn't re-parse
+  payload: jsonb('payload').$type<ParsedWorkbook | null>(), // the ParsedWorkbook, so commit needn't re-parse; null for auto-discarded batches that can never be committed
   sourceType: text('source_type').notNull().default('upload'), // upload | sheet | tally
   sheetSourceId: integer('sheet_source_id').references(() => sheetSources.id, { onDelete: 'set null' }),
   tallySourceId: integer('tally_source_id').references(() => tallySources.id, { onDelete: 'set null' }),

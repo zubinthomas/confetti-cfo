@@ -172,8 +172,12 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
           committedAt: null,
           issues,
           stats: plan.stats,
-          details: plan.details,
-          payload: parsed,
+          // No-op diffs are structurally all-empty; the batch can never be
+          // committed (status is 'discarded' directly), so neither field is
+          // needed again - see server/routes/import.ts's /upload handler for
+          // the same reasoning.
+          details: null,
+          payload: null,
           sourceType: 'tally',
           tallySourceId: source.id,
           contentHash,
@@ -195,8 +199,13 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
           committedAt: null,
           issues,
           stats: plan.stats,
+          // Keep details (real diff, shown via "View full details") - unlike
+          // the no-op case, something did change here, it just matches a
+          // previously manually-rejected content hash. payload is still safe
+          // to drop: this batch is 'discarded' directly and can never reach
+          // POST /:id/commit.
           details: plan.details,
-          payload: parsed,
+          payload: null,
           sourceType: 'tally',
           tallySourceId: source.id,
           contentHash,
