@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
-  MenuIcon, X, Plus, FileBarChart, Scale, Target,
+  MenuIcon, X, Plus, FileBarChart, Scale,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
 import { useAuth } from "@/lib/AuthContext";
@@ -26,7 +26,6 @@ const NAV_SECTIONS = [
     title: null,
     items: [
       { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-      { to: "/leadership", label: "Leadership", icon: Target },
     ],
   },
   {

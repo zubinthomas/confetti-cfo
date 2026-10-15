@@ -4,6 +4,8 @@ import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
+import LeadershipCommandCentre from "./LeadershipCommandCentre";
+import { useAuth } from "@/lib/AuthContext";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useOverviewYear } from "@/hooks/useOverviewYear";
 import { useFnbStoreHistory } from "@/hooks/useFnbStoreHistory";
@@ -34,7 +36,22 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }: { active?: 
   );
 };
 
+const LEADERSHIP_ROLE_NAME = "Leadership";
+
+// Same "/" route and nav entry for everyone - the content shown is what
+// changes by role, not the page. Leadership accounts get the concise
+// company-wide snapshot (LeadershipCommandCentre); everyone else gets the
+// existing F&B/Store group breakdown below. `user` is null on first paint
+// (auth.me() hasn't resolved yet via AuthContext's checkUserAuth), so this
+// renders the default view harmlessly until it loads, then re-renders once -
+// same load-order behavior the nav's own can()-gated links already have.
 export default function OverviewTab() {
+  const { user } = useAuth();
+  const isLeadership = user?.roles.some((r) => r.name === LEADERSHIP_ROLE_NAME) ?? false;
+  return isLeadership ? <LeadershipCommandCentre /> : <GroupOverview />;
+}
+
+function GroupOverview() {
   const fys = useOverviewFiscalYears();
   // "2026-2027" is always handled as the synthetic/projected combined-targets
   // entry (below), never as a normal year - useOverviewFiscalYears() already
