@@ -15,6 +15,9 @@ import {
   type Reservation, type ReservationLocation, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
+import { useDraftPersistence } from "@/hooks/useDraftPersistence";
+import { toast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 const todayStr = () => istDateStr();
 const clockOf = istClock;
@@ -51,6 +54,8 @@ function SignInModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { draft, save: saveDraft, clear: clearDraft } = useDraftPersistence<typeof EMPTY>("guest-signin");
+  const blankSignIn = () => ({ ...EMPTY, locationId: locations[0]?.id ?? "" });
   const [form, setForm] = useState(() => existing ? {
     ...EMPTY,
     visitType: existing.visitType,
@@ -62,11 +67,35 @@ function SignInModal({
     purpose: existing.purpose ?? "",
     host: existing.host ?? "",
     notes: existing.notes ?? "",
-  } : { ...EMPTY, locationId: locations[0]?.id ?? "" });
+  } : (draft ? { ...blankSignIn(), ...draft } : blankSignIn()));
   const [todaysBookings, setTodaysBookings] = useState<Reservation[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
+
+  useEffect(() => {
+    if (existing || !draft) return;
+    toast({
+      title: "Restored unsaved changes",
+      description: "From your last session.",
+      action: (
+        <ToastAction onClick={() => { clearDraft(); setForm(blankSignIn()); }}>
+          Discard
+        </ToastAction>
+      ),
+    });
+    // Only meant to fire once, for the draft this modal mounted with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A fresh sign-in (not editing an existing one) is the only case worth
+  // drafting - persisting edits to an existing sign-in under the same key
+  // would let a stale draft silently overwrite the next new sign-in's form.
+  // Skip persisting a still-blank form too, so opening the modal (or
+  // clicking Discard) doesn't write an empty draft right back.
+  useEffect(() => {
+    if (!existing && JSON.stringify(form) !== JSON.stringify(blankSignIn())) saveDraft(form);
+  }, [form, existing, saveDraft]);
 
   useEffect(() => {
     if (existing) return;
@@ -123,6 +152,7 @@ function SignInModal({
           signedInAt: form.timeIn !== nowTimeValue() ? isoFromTimeToday(form.timeIn) : undefined,
         });
       }
+      clearDraft();
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");

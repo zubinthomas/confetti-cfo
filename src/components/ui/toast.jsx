@@ -48,7 +48,11 @@ const Toast = React.forwardRef(({ className, variant, ...props }, ref) => {
 });
 Toast.displayName = "Toast";
 
-const ToastAction = React.forwardRef(({ className, ...props }, ref) => (
+const ToastAction = React.forwardRef((
+  /** @type {React.ComponentPropsWithoutRef<"div">} */
+  { className, ...props },
+  ref
+) => (
   <div
     ref={ref}
     className={cn(

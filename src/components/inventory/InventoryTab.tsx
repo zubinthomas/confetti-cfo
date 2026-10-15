@@ -12,6 +12,9 @@ import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "@/components/hr/FormField";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
+import { useDraftPersistence } from "@/hooks/useDraftPersistence";
+import { toast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 const divisionColors: Record<string, string> = {
   Accounts: "#f59e0b", Admin: "#8b5cf6", "Batik Unit": "#ec4899", Culinary: "#ef4444",
@@ -214,16 +217,24 @@ function ReceiveLineItem({ po, item, itemName, canWrite, onReceived }: {
   );
 }
 
+type PoForm = { division: string; vendor_name: string; order_date: string; lines: { item_id: string; quantity_ordered: string; unit_cost: string }[] };
+
 function PurchaseOrdersSection({ items, divisionOptions, canWrite }: { items: any[]; divisionOptions: readonly string[]; canWrite: boolean }) {
+  const { draft: poDraft, save: savePoDraft, clear: clearPoDraft } = useDraftPersistence<PoForm>("purchase-order");
+  const blankPoForm = (): PoForm => ({ division: divisionOptions[0] ?? "", vendor_name: "", order_date: "", lines: [{ item_id: "", quantity_ordered: "", unit_cost: "" }] });
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<PurchaseOrder | null>(null);
-  const [form, setForm] = useState<{ division: string; vendor_name: string; order_date: string; lines: { item_id: string; quantity_ordered: string; unit_cost: string }[] }>(
-    { division: divisionOptions[0] ?? "", vendor_name: "", order_date: "", lines: [{ item_id: "", quantity_ordered: "", unit_cost: "" }] },
-  );
+  const [form, setForm] = useState<PoForm>(blankPoForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Skip persisting a still-blank form, so opening the modal (or clicking
+  // Discard) doesn't write an empty draft right back.
+  useEffect(() => {
+    if (showForm && JSON.stringify(form) !== JSON.stringify(blankPoForm())) savePoDraft(form);
+  }, [form, showForm, savePoDraft]);
 
   const load = () => {
     setLoading(true);
@@ -255,7 +266,8 @@ function PurchaseOrdersSection({ items, divisionOptions, canWrite }: { items: an
         items: lines.map((l) => ({ itemId: l.item_id, quantityOrdered: Number(l.quantity_ordered), unitCost: l.unit_cost ? Number(l.unit_cost) : null })),
       });
       setShowForm(false);
-      setForm({ division: divisionOptions[0] ?? "", vendor_name: "", order_date: "", lines: [{ item_id: "", quantity_ordered: "", unit_cost: "" }] });
+      setForm(blankPoForm());
+      clearPoDraft();
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create purchase order");
@@ -269,7 +281,23 @@ function PurchaseOrdersSection({ items, divisionOptions, canWrite }: { items: an
       {canWrite && (
         <div className="flex justify-end mb-3">
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              if (poDraft) {
+                setForm({ ...blankPoForm(), ...poDraft });
+                toast({
+                  title: "Restored unsaved changes",
+                  description: "From your last session.",
+                  action: (
+                    <ToastAction onClick={() => { clearPoDraft(); setForm(blankPoForm()); }}>
+                      Discard
+                    </ToastAction>
+                  ),
+                });
+              } else {
+                setForm(blankPoForm());
+              }
+              setShowForm(true);
+            }}
             className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition"
           >
             <Plus className="w-4 h-4" /> New Purchase Order

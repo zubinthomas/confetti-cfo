@@ -11,6 +11,9 @@ import FormField from "./FormField";
 import EmployeeDocumentsPanel from "./EmployeeDocumentsPanel";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
+import { useDraftPersistence } from "@/hooks/useDraftPersistence";
+import { toast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 const divisionColors: Record<string, string> = {
   Accounts: "#f59e0b", Admin: "#8b5cf6", "Batik Unit": "#ec4899", Culinary: "#ef4444",
@@ -249,26 +252,53 @@ function InviteSelfServiceModal({ employee, onClose, onSent }: { employee: any; 
 const EXIT_TYPES = ["resignation", "termination", "end_of_contract"] as const;
 const exitTypeLabel: Record<string, string> = { resignation: "Resignation", termination: "Termination", end_of_contract: "End of Contract" };
 
+type OffboardDraft = Omit<OffboardInput, "settlement_amount"> & { settlementAmount: string };
+
+const blankOffboardForm = (): Omit<OffboardInput, "settlement_amount"> => ({
+  exit_type: "resignation",
+  notice_date: "",
+  last_working_date: "",
+  reason: "",
+  exit_interview_notes: "",
+  assets_returned: false,
+  full_settlement_done: false,
+  rehire_eligible: true,
+});
+
 function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onClose: () => void; onOffboarded: () => void }) {
-  const [form, setForm] = useState<Omit<OffboardInput, "settlement_amount">>({
-    exit_type: "resignation",
-    notice_date: "",
-    last_working_date: "",
-    reason: "",
-    exit_interview_notes: "",
-    assets_returned: false,
-    full_settlement_done: false,
-    rehire_eligible: true,
-  });
-  const [settlementAmount, setSettlementAmount] = useState("");
+  const { draft, save: saveDraft, clear: clearDraft } = useDraftPersistence<OffboardDraft>(`offboard:${employee.id}`);
+  const [form, setForm] = useState<Omit<OffboardInput, "settlement_amount">>(() => draft ? { ...blankOffboardForm(), ...draft } : blankOffboardForm());
+  const [settlementAmount, setSettlementAmount] = useState(() => draft?.settlementAmount ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!draft) return;
+    toast({
+      title: "Restored unsaved changes",
+      description: `Offboarding details for ${employee.full_name} from your last session.`,
+      action: (
+        <ToastAction onClick={() => { clearDraft(); setForm(blankOffboardForm()); setSettlementAmount(""); }}>
+          Discard
+        </ToastAction>
+      ),
+    });
+    // Only meant to fire once, for the draft this modal mounted with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const current = { ...form, settlementAmount };
+    const blank = { ...blankOffboardForm(), settlementAmount: "" };
+    if (JSON.stringify(current) !== JSON.stringify(blank)) saveDraft(current);
+  }, [form, settlementAmount, saveDraft]);
 
   const submit = async () => {
     setError("");
     setSaving(true);
     try {
       await offboardEmployee(employee.id, { ...form, settlement_amount: settlementAmount ? Number(settlementAmount) : null });
+      clearDraft();
       onOffboarded();
       onClose();
     } catch (err) {
@@ -436,8 +466,22 @@ export default function HeadcountTab() {
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({ division: "", role: "", employment_type: "", status: "" });
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  const { draft: onboardDraft, save: saveOnboardDraft, clear: clearOnboardDraft } = useDraftPersistence<Record<string, any>>("employee-onboard");
 
   useEffect(() => { load(); }, []);
+
+  // Only a brand-new employee is draft-worthy - restoring a leftover draft
+  // onto an in-progress edit of an existing employee could silently resurrect
+  // stale field values, or worse, carry over an `id` that makes `save()`
+  // PATCH the wrong employee. Also skip persisting a form that's still blank
+  // - otherwise merely opening the modal (or clicking Discard) writes an
+  // empty draft right back, which would re-trigger "Restored unsaved
+  // changes" next time for nothing.
+  useEffect(() => {
+    if (showForm && !form.id && JSON.stringify(form) !== JSON.stringify(emptyForm())) {
+      saveOnboardDraft(form);
+    }
+  }, [form, showForm, saveOnboardDraft]);
 
   const load = async () => {
     setLoading(true);
@@ -466,6 +510,7 @@ export default function HeadcountTab() {
       else await Employee.create(payload);
       setShowForm(false);
       setForm(emptyForm());
+      clearOnboardDraft();
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save employee");
@@ -643,7 +688,24 @@ export default function HeadcountTab() {
             )}
           </div>
           {canWrite && (
-            <button onClick={() => { setForm(emptyForm()); setShowForm(true); }}
+            <button
+              onClick={() => {
+                if (onboardDraft && !onboardDraft.id) {
+                  setForm({ ...emptyForm(), ...onboardDraft });
+                  toast({
+                    title: "Restored unsaved changes",
+                    description: "From your last session.",
+                    action: (
+                      <ToastAction onClick={() => { clearOnboardDraft(); setForm(emptyForm()); }}>
+                        Discard
+                      </ToastAction>
+                    ),
+                  });
+                } else {
+                  setForm(emptyForm());
+                }
+                setShowForm(true);
+              }}
               className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition">
               <Plus className="w-4 h-4" /> Add Employee
             </button>
