@@ -8,6 +8,7 @@ import {
   MenuIcon, X, Plus, FileBarChart, Scale,
 } from "lucide-react";
 import UserMenu from "./UserMenu";
+import InstallBanner from "./InstallBanner";
 import { useAuth } from "@/lib/AuthContext";
 
 // Routes not shown in NAV_SECTIONS (relocated into the header/user menu) but
@@ -256,6 +257,7 @@ export default function DashboardShell() {
               DashboardApp.tsx) - this boundary keeps the sidebar/header
               mounted during their chunk load instead of blanking the whole
               viewport. */}
+          <InstallBanner />
           <Suspense fallback={<PageSpinner />}>
             <Outlet />
           </Suspense>
