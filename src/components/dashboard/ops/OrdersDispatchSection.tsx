@@ -6,6 +6,7 @@ import StatusBadge from "@/components/dashboard/StatusBadge";
 import ExportButtons from "@/components/dashboard/ExportButtons";
 import type { ExportSheet } from "@/lib/dataExport";
 import { getOrdersSummary, type OrdersSummary, type OrderLine } from "@/api/opsApi";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 
 const PIPELINE = ["green", "drawing", "bisque", "glazeApp", "glazeFiring", "ready"] as const;
 type Stage = typeof PIPELINE[number];
@@ -81,6 +82,7 @@ export default function OrdersDispatchSection() {
     const readyQty = filtered.filter(isReady).reduce((sum, o) => sum + (o.readyQty ?? 0), 0);
     return { open: open.length, overdue: overdue.length, readyQty };
   }, [filtered, today]);
+  const freshness = useImportFreshness(["orders"]);
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!data) {
@@ -138,13 +140,23 @@ export default function OrdersDispatchSection() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <KpiCard label="Open Orders" value={kpis.open} sub="Not yet ready for dispatch" />
+        <KpiCard
+          label="Open Orders" value={kpis.open} sub="Not yet ready for dispatch"
+          definition="Order lines not yet marked Ready for dispatch, across all pipeline stages."
+          {...freshness}
+        />
         <KpiCard
           label="Overdue" value={kpis.overdue}
           status={kpis.overdue > 0 ? "red" : "green"}
           sub={kpis.overdue > 0 ? "Past their dispatch date" : "None overdue"}
+          definition="Open order lines whose planned dispatch date has already passed."
+          {...freshness}
         />
-        <KpiCard label="Ready to Dispatch" value={kpis.readyQty.toLocaleString()} sub="Total ready quantity" />
+        <KpiCard
+          label="Ready to Dispatch" value={kpis.readyQty.toLocaleString()} sub="Total ready quantity"
+          definition="Total quantity across order lines that have reached the Ready stage."
+          {...freshness}
+        />
       </div>
 
       <DashCard

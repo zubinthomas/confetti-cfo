@@ -454,12 +454,13 @@ export default function InventoryTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <KpiCard label="Total Items" value={items.length} />
+        <KpiCard label="Total Items" value={items.length} definition="All inventory items on record." />
         <KpiCard
           label="Low Stock" value={lowStockCount} status={lowStockCount > 0 ? "amber" : "green"}
           sub={lowStockCount > 0 ? "Needs reorder" : "All good"}
+          definition="Items at or below their reorder threshold."
         />
-        <KpiCard label="Total Value" value={`₹${totalValue.toLocaleString()}`} sub="Across all items" />
+        <KpiCard label="Total Value" value={`₹${totalValue.toLocaleString()}`} sub="Across all items" definition="Total value of all inventory items, at their recorded unit cost." />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

@@ -11,6 +11,7 @@ import {
 } from "@/data/balanceSheet";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 
@@ -77,9 +78,21 @@ function BsDetail({ data }: { data: BalanceSheet }) {
   const imbalanceAbs = Math.abs(data.imbalance);
   const nearZero = imbalanceAbs < Math.max(1, data.totalAssets * 0.001);
 
+  const freshness = useImportFreshness(["tally"]);
+
   const kpis: KpiData[] = [
-    { label: "Total Assets", value: `₹${L(data.totalAssets)}` },
-    { label: "Total Liabilities & Equity", value: `₹${L(data.totalLiabilityEquity)}` },
+    {
+      label: "Total Assets",
+      value: `₹${L(data.totalAssets)}`,
+      definition: "Everything the company owns - cash, receivables, inventory, fixed assets - as of this balance sheet date.",
+      ...freshness,
+    },
+    {
+      label: "Total Liabilities & Equity",
+      value: `₹${L(data.totalLiabilityEquity)}`,
+      definition: "Everything the company owes plus owner's equity, as of this balance sheet date. Should equal Total Assets.",
+      ...freshness,
+    },
     {
       label: "Balance Check",
       value: `₹${L(data.imbalance)}`,
@@ -87,6 +100,8 @@ function BsDetail({ data }: { data: BalanceSheet }) {
         ? "Assets match Liabilities & Equity"
         : "Known gap - see note below",
       status: nearZero ? "green" : "amber",
+      definition: "The difference between Total Assets and Total Liabilities & Equity. Should be zero or near-zero; see the note below for why it isn't always.",
+      ...freshness,
     },
   ];
 

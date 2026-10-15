@@ -12,6 +12,7 @@ import { useReferenceData } from "@/hooks/useReferenceData";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import { useFnbVenueData } from "@/hooks/useFnbVenueData";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { targetSeries, projectionSeries } from "@/data/revenueTargets";
 import { computeFabYear, resolveFnbBu, resolveFabLi, resolveFabOvLi } from "@/data/fabData";
 import { VENUE_NAMES, DRILL_DOWN_CATEGORIES } from "@/data/fnbVenueData";
@@ -74,6 +75,7 @@ export default function SiennaTab() {
   // every year in one pass, the way StoreTab's storeHistory already does.
   const fnbBu = ref ? resolveFnbBu(ref.businessUnits) : null;
   const { data: allFnbRecords } = useFinancialRecords({ businessUnitId: fnbBu != null ? [fnbBu] : undefined });
+  const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly"]);
 
   if (!fys || !fy || !FAB) return <PageSpinner />;
 
@@ -199,6 +201,8 @@ export default function SiennaTab() {
                       value={L(rev)}
                       sub={rev ? `${((pl / rev) * 100).toFixed(1)}% margin` : "-"}
                       status={pl >= 0 ? "green" : "red"}
+                      definition={`Total sales and net P&L for ${name} across FY 26-27's weeks with data so far.`}
+                      {...freshness}
                     />
                   );
                 })}
@@ -263,8 +267,16 @@ export default function SiennaTab() {
   const fyPL = FAB.totals.pl;
 
   const kpis: KpiData[] = [
-    { label: "Annual F&B Revenue", value: L(fyTotal), sub: FAB.label, status: "green" },
-    { label: "Annual Net Profit", value: L(fyPL), sub: fyTotal ? `${((fyPL/fyTotal)*100).toFixed(1)}% margin` : "-", status: "green" },
+    {
+      label: "Annual F&B Revenue", value: L(fyTotal), sub: FAB.label, status: "green",
+      definition: "Total F&B sales for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: "Annual Net Profit", value: L(fyPL), sub: fyTotal ? `${((fyPL/fyTotal)*100).toFixed(1)}% margin` : "-", status: "green",
+      definition: "F&B's net profit for the fiscal year, after all costs.",
+      ...freshness,
+    },
   ];
 
   const statusItems: StatusRowData[] = [
@@ -303,10 +315,26 @@ export default function SiennaTab() {
     const bestEventQuarter = eventQuarterTotals.indexOf(Math.max(...eventQuarterTotals));
 
     kpis.push(
-      { label: "Avg Monthly Revenue", value: L(Math.round(fyTotal/12)), sub: "Per month", status: "green" },
-      { label: "Annual HR Cost", value: L(fyHR), sub: `${((fyHR/fyTotal)*100).toFixed(1)}% of revenue`, status: "amber" },
-      { label: "Annual COGS", value: L(fyCOGS), sub: `${((fyCOGS/fyTotal)*100).toFixed(1)}% COGS ratio`, status: "green" },
-      { label: "Delivery Commissions", value: L(fyDelivery), sub: `${((fyDelivery/fyTotal)*100).toFixed(1)}% of revenue`, status: "amber" },
+      {
+        label: "Avg Monthly Revenue", value: L(Math.round(fyTotal/12)), sub: "Per month", status: "green",
+        definition: "Annual F&B revenue divided by 12.",
+        ...freshness,
+      },
+      {
+        label: "Annual HR Cost", value: L(fyHR), sub: `${((fyHR/fyTotal)*100).toFixed(1)}% of revenue`, status: "amber",
+        definition: "Total HR/payroll cost for F&B for the fiscal year.",
+        ...freshness,
+      },
+      {
+        label: "Annual COGS", value: L(fyCOGS), sub: `${((fyCOGS/fyTotal)*100).toFixed(1)}% COGS ratio`, status: "green",
+        definition: "Total raw material cost for F&B for the fiscal year.",
+        ...freshness,
+      },
+      {
+        label: "Delivery Commissions", value: L(fyDelivery), sub: `${((fyDelivery/fyTotal)*100).toFixed(1)}% of revenue`, status: "amber",
+        definition: "Total commissions paid to delivery platforms for the fiscal year.",
+        ...freshness,
+      },
     );
 
     statusItems.push(

@@ -14,6 +14,7 @@ import { useReferenceData } from "@/hooks/useReferenceData";
 import { useSalesRecords } from "@/hooks/useSalesRecords";
 import { useFabYear } from "@/hooks/useFabYear";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { computeChannelBreakdown } from "@/data/storeSalesData";
 import { targetSeries } from "@/data/revenueTargets";
 import { MONTHS, L, lastValidIdx, fyLabel, monthPeriodIds } from "@/data/seriesKernel";
@@ -78,6 +79,7 @@ function GroupOverview() {
   const FAB2627 = useFabYear("2026-2027");
   const FAB2526 = useFabYear("2025-2026");
   const { data: combinedTargets2627 } = useRevenueTargets({ category: ["store", "fnb"], fiscalYear: ["2026-2027"] });
+  const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly", "cepl", "sienna"]);
 
   if (!fys || !fy || !overview || !fnbStoreHistory) return <PageSpinner />;
 
@@ -219,24 +221,44 @@ function GroupOverview() {
     ? ((CUR.totals.fbSales / prevTotals.fbSales) - 1) * 100 : null;
 
   const kpis: KpiData[] = [
-    { label: `F&B Revenue (${CUR.label})`, value: L(CUR.totals.fbSales), sub: `${fbMargin.toFixed(1)}% net margin`, status: "green" },
+    {
+      label: `F&B Revenue (${CUR.label})`, value: L(CUR.totals.fbSales), sub: `${fbMargin.toFixed(1)}% net margin`, status: "green",
+      definition: "Total F&B sales across all departments for the fiscal year.",
+      ...freshness,
+    },
     {
       label: `Store Revenue (${CUR.label})`, value: L(CUR.totals.storeSales),
       sub: prevFY && storeGrowthVsPrevYear != null
         ? `${storeGrowthVsPrevYear >= 0 ? "+" : ""}${storeGrowthVsPrevYear.toFixed(0)}% vs ${fyLabel(prevFY)}`
         : "No prior year to compare",
       status: "green",
+      definition: "Total Store sales for the fiscal year.",
+      ...freshness,
     },
-    { label: "F&B Net Profit (FY)", value: L(CUR.totals.fbPL), sub: `${fbMargin.toFixed(1)}% margin`, status: "green" },
-    { label: "Store Net P&L (FY)", value: L(CUR.totals.storePL), sub: `${storeMargin.toFixed(1)}% margin`, status: CUR.totals.storePL > 0 ? "green" : "amber" },
+    {
+      label: "F&B Net Profit (FY)", value: L(CUR.totals.fbPL), sub: `${fbMargin.toFixed(1)}% margin`, status: "green",
+      definition: "F&B's net profit for the fiscal year, after all costs.",
+      ...freshness,
+    },
+    {
+      label: "Store Net P&L (FY)", value: L(CUR.totals.storePL), sub: `${storeMargin.toFixed(1)}% margin`, status: CUR.totals.storePL > 0 ? "green" : "amber",
+      definition: "Store's net profit or loss for the fiscal year, after all costs.",
+      ...freshness,
+    },
   ];
   if (CUR.hasMonthlyDetail && LATEST_IDX >= 0) {
     kpis.push(
-      { label: `F&B Revenue (${latestMonthLabel})`, value: L(CUR.fb.sales[LATEST_IDX]), sub: `${CUR.fb.plPct[LATEST_IDX]}% net margin`, status: "green" },
+      {
+        label: `F&B Revenue (${latestMonthLabel})`, value: L(CUR.fb.sales[LATEST_IDX]), sub: `${CUR.fb.plPct[LATEST_IDX]}% net margin`, status: "green",
+        definition: "F&B sales for the most recent month with data.",
+        ...freshness,
+      },
       {
         label: `Store Revenue (${latestMonthLabel})`, value: L(CUR.store.sales[LATEST_IDX]),
         sub: `${(CUR.store.plPct[LATEST_IDX] as number) > 0 ? "+" : ""}${CUR.store.plPct[LATEST_IDX]}% margin`,
         status: (CUR.store.plPct[LATEST_IDX] as number) > 0 ? "green" : "amber",
+        definition: "Store sales for the most recent month with data.",
+        ...freshness,
       },
     );
   }

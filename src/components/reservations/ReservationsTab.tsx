@@ -558,10 +558,10 @@ export default function ReservationsTab() {
       {view === "day" ? (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KpiCard label="Reservations Today" value={activeCount} />
-            <KpiCard label="Covers Booked" value={coversBooked} />
-            <KpiCard label="Locations" value={locations.length} />
-            <KpiCard label="Tables" value={tables.length} />
+            <KpiCard label="Reservations Today" value={activeCount} definition="Active reservations for today." />
+            <KpiCard label="Covers Booked" value={coversBooked} definition="Total guest count across today's reservations." />
+            <KpiCard label="Locations" value={locations.length} definition="Dining locations configured for reservations." />
+            <KpiCard label="Tables" value={tables.length} definition="Tables configured across all locations." />
           </div>
 
           <DashCard

@@ -87,10 +87,10 @@ export default function LeaveTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total Requests" value={leaves.length} />
-        <KpiCard label="Pending Approval" value={pending} status={pending > 0 ? "amber" : "green"} />
-        <KpiCard label="Approved Leaves" value={approved} status="green" />
-        <KpiCard label="Total Days Approved" value={totalDays} sub="This month" />
+        <KpiCard label="Total Requests" value={leaves.length} definition="All leave requests on record." />
+        <KpiCard label="Pending Approval" value={pending} status={pending > 0 ? "amber" : "green"} definition="Leave requests awaiting a manager decision." />
+        <KpiCard label="Approved Leaves" value={approved} status="green" definition="Leave requests that have been approved." />
+        <KpiCard label="Total Days Approved" value={totalDays} sub="This month" definition="Total approved leave days falling in the current month." />
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

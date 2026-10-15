@@ -6,6 +6,7 @@ import PageSpinner from "@/components/dashboard/PageSpinner";
 import { useFabMonthly } from "@/hooks/useFabMonthly";
 import { useAllOutlets } from "@/hooks/useAllOutlets";
 import { useCafeEarlyWeekly } from "@/hooks/useCafeEarlyWeekly";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { MONTHS, L, sum } from "@/data/seriesKernel";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
@@ -19,6 +20,7 @@ export default function BarPage() {
   const fab = useFabMonthly();
   const outlets = useAllOutlets();
   const early = useCafeEarlyWeekly();
+  const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly"]);
 
   const view = useMemo(() => {
     if (!fab || !outlets || !early) return null;
@@ -26,10 +28,26 @@ export default function BarPage() {
     const liquorTotal = sum(liquorMix.map((x) => x.value));
     return {
       kpis: [
-        { label: "Retail & Bar Revenue (FY)", value: `₹${L(sum(fab.retailBarSales))}`, sub: "F&B P&L line, FY 2025-26", status: "green" },
-        { label: "Liquor Sales (Sep–Jan)", value: `₹${L(sum(byOutlet.total.liquor))}`, sub: "Weekly outlet detail" },
-        { label: "Liquor Sales (Apr–Aug)", value: `₹${L(sum(early.weekly.liquor))}`, sub: "Whole-cafe weekly detail" },
-        { label: "Cocktail Share", value: liquorTotal ? `${((liquorMix[0]?.value / liquorTotal) * 100).toFixed(0)}%` : "-", sub: "Of liquor revenue since Sep", status: "green" },
+        {
+          label: "Retail & Bar Revenue (FY)", value: `₹${L(sum(fab.retailBarSales))}`, sub: "F&B P&L line, FY 2025-26", status: "green",
+          definition: "The F&B P&L's Retail & Bar line (includes retail items alongside the bar) for the fiscal year.",
+          ...freshness,
+        },
+        {
+          label: "Liquor Sales (Sep–Jan)", value: `₹${L(sum(byOutlet.total.liquor))}`, sub: "Weekly outlet detail",
+          definition: "Liquor sales from September onward, split by outlet, from the weekly cafe workbook.",
+          ...freshness,
+        },
+        {
+          label: "Liquor Sales (Apr–Aug)", value: `₹${L(sum(early.weekly.liquor))}`, sub: "Whole-cafe weekly detail",
+          definition: "Liquor sales April through August, before outlet-level detail started, from the weekly cafe workbook.",
+          ...freshness,
+        },
+        {
+          label: "Cocktail Share", value: liquorTotal ? `${((liquorMix[0]?.value / liquorTotal) * 100).toFixed(0)}%` : "-", sub: "Of liquor revenue since Sep", status: "green",
+          definition: "Cocktails' share of total liquor revenue since September, when the liquor line started splitting by type.",
+          ...freshness,
+        },
       ] satisfies KpiData[],
       monthly: MONTHS.map((m, i) => ({ month: m, "Retail & Bar Sales": fab.retailBarSales[i] })),
       weekly: weeks.map((w, i) => ({
@@ -40,7 +58,7 @@ export default function BarPage() {
       })),
       liquorMix,
     };
-  }, [fab, outlets, early]);
+  }, [fab, outlets, early, freshness]);
 
   if (!view) return <PageSpinner />;
   const { kpis, monthly, weekly, liquorMix: LIQUOR_MIX } = view;

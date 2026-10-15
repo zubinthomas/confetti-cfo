@@ -6,6 +6,7 @@ import PageSpinner from "@/components/dashboard/PageSpinner";
 import { useFabMonthly } from "@/hooks/useFabMonthly";
 import { useAllOutlets } from "@/hooks/useAllOutlets";
 import { useCafeEarlyWeekly } from "@/hooks/useCafeEarlyWeekly";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { MONTHS, L, sum } from "@/data/seriesKernel";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
@@ -16,6 +17,7 @@ export default function EventsPage() {
   const fab = useFabMonthly();
   const outlets = useAllOutlets();
   const early = useCafeEarlyWeekly();
+  const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly"]);
 
   const view = useMemo(() => {
     if (!fab || !outlets || !early) return null;
@@ -23,18 +25,38 @@ export default function EventsPage() {
     const bestMonthIdx = fab.eventCatering.indexOf(Math.max(...fab.eventCatering));
     return {
       kpis: [
-        { label: "Event & Catering (FY)", value: `₹${L(fyEvents)}`, sub: `${((fyEvents / sum(fab.totalRevenue)) * 100).toFixed(1)}% of F&B revenue`, status: "green" },
-        { label: "Event Sales (Sep–Jan)", value: `₹${L(sum(outlets.outlets.total.events))}`, sub: "Weekly cafe workbook detail" },
-        { label: "Event Sales (Apr–Aug)", value: `₹${L(sum(early.weekly.eventSales))}`, sub: "Whole-cafe weekly detail" },
-        { label: "Best Month", value: MONTHS[bestMonthIdx], sub: `₹${L(fab.eventCatering[bestMonthIdx])}`, status: "green" },
-        { label: "Durga Puja 2025", value: `₹${L(outlets.durgaPuja.totalSales)}`, sub: `₹${L(outlets.durgaPuja.pl)} P&L over the two festival weeks`, status: "green" },
+        {
+          label: "Event & Catering (FY)", value: `₹${L(fyEvents)}`, sub: `${((fyEvents / sum(fab.totalRevenue)) * 100).toFixed(1)}% of F&B revenue`, status: "green",
+          definition: "The F&B P&L's Event & Catering Receipt line for the fiscal year.",
+          ...freshness,
+        },
+        {
+          label: "Event Sales (Sep–Jan)", value: `₹${L(sum(outlets.outlets.total.events))}`, sub: "Weekly cafe workbook detail",
+          definition: "Event sales from September onward, from the weekly cafe workbook's by-outlet detail.",
+          ...freshness,
+        },
+        {
+          label: "Event Sales (Apr–Aug)", value: `₹${L(sum(early.weekly.eventSales))}`, sub: "Whole-cafe weekly detail",
+          definition: "Event sales April through August, before the outlet split, from the weekly cafe workbook.",
+          ...freshness,
+        },
+        {
+          label: "Best Month", value: MONTHS[bestMonthIdx], sub: `₹${L(fab.eventCatering[bestMonthIdx])}`, status: "green",
+          definition: "The month with the highest Event & Catering revenue.",
+          ...freshness,
+        },
+        {
+          label: "Durga Puja 2025", value: `₹${L(outlets.durgaPuja.totalSales)}`, sub: `₹${L(outlets.durgaPuja.pl)} P&L over the two festival weeks`, status: "green",
+          definition: "Total sales and net P&L across the two Durga Puja 2025 festival weeks, already included in the regular weekly figures.",
+          ...freshness,
+        },
       ] satisfies KpiData[],
       monthly: MONTHS.map((m, i) => ({ month: m, "Event & Catering Revenue": fab.eventCatering[i] })),
       weekly: outlets.weeks.map((w, i) => ({ week: w.short, "Event Sales": outlets.outlets.total.events[i] })),
       earlyWeekly: early.weeks.map((w, i) => ({ week: w.short, "Event Sales": early.weekly.eventSales[i] })),
       eventsBreakdown: outlets.eventsBreakdown,
     };
-  }, [fab, outlets, early]);
+  }, [fab, outlets, early, freshness]);
 
   if (!view) return <PageSpinner />;
   const { kpis, monthly, weekly, earlyWeekly, eventsBreakdown: EVENTS_BREAKDOWN } = view;

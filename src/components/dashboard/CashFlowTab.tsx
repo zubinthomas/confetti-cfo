@@ -9,6 +9,7 @@ import { CASH_GAPS, cashFlowExportSheets, type CashFlowYearData } from "@/data/c
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useCashFlowYear } from "@/hooks/useCashFlowYear";
 import { useFyParam } from "@/hooks/useFyParam";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { MONTHS, L, sum, fyLabel } from "@/data/seriesKernel";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
@@ -78,12 +79,34 @@ function FullDetail({ CUR }: { CUR: CashFlowYearData }) {
   const worstIdx = CUR.net.indexOf(Math.min(...CUR.net));
   const negativeMonths = CUR.net.filter((v) => v < 0).length;
 
+  const freshness = useImportFreshness(["cepl", "fnbMonthly", "fnbWeekly"]);
+
   const kpis: KpiData[] = [
-    { label: `Money In (${CUR.label})`, value: `₹${L(fyIn)}`, sub: "All six departments' sales", status: "green" },
-    { label: `Money Out (${CUR.label})`, value: `₹${L(fyOut)}`, sub: "All reported expenses", status: "amber" },
-    { label: `Net (${CUR.label})`, value: `₹${L(fyNet)}`, sub: `${((fyNet / fyIn) * 100).toFixed(1)}% of inflows`, status: fyNet >= 0 ? "green" : "red" },
-    { label: "Cash-negative Months", value: `${negativeMonths}/12`, sub: negativeMonths ? `Worst: ${MONTHS[worstIdx]} (₹${L(CUR.net[worstIdx])})` : "None", status: negativeMonths > 3 ? "red" : negativeMonths ? "amber" : "green" },
-    { label: "Best Month", value: MONTHS[bestIdx], sub: `₹${L(CUR.net[bestIdx])} net`, status: "green" },
+    {
+      label: `Money In (${CUR.label})`, value: `₹${L(fyIn)}`, sub: "All six departments' sales", status: "green",
+      definition: "Total inflows (sales) across all six departments for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: `Money Out (${CUR.label})`, value: `₹${L(fyOut)}`, sub: "All reported expenses", status: "amber",
+      definition: "Total outflows (reported expenses) across all six departments for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: `Net (${CUR.label})`, value: `₹${L(fyNet)}`, sub: `${((fyNet / fyIn) * 100).toFixed(1)}% of inflows`, status: fyNet >= 0 ? "green" : "red",
+      definition: "Money in minus money out for the fiscal year, on a P&L basis.",
+      ...freshness,
+    },
+    {
+      label: "Cash-negative Months", value: `${negativeMonths}/12`, sub: negativeMonths ? `Worst: ${MONTHS[worstIdx]} (₹${L(CUR.net[worstIdx])})` : "None", status: negativeMonths > 3 ? "red" : negativeMonths ? "amber" : "green",
+      definition: "How many months had more money out than in.",
+      ...freshness,
+    },
+    {
+      label: "Best Month", value: MONTHS[bestIdx], sub: `₹${L(CUR.net[bestIdx])} net`, status: "green",
+      definition: "The month with the highest net cash position.",
+      ...freshness,
+    },
   ];
 
   const monthly = MONTHS.map((m, i) => ({

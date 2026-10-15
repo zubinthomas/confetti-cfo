@@ -15,6 +15,7 @@ import { targetSeries } from "@/data/revenueTargets";
 import { UNAVAILABLE_METRICS, type StoreFnbTargetPace } from "@/data/leadershipOverview";
 import { L, pct, sum, buildFrIndex, monthPeriodIds } from "@/data/seriesKernel";
 import type { CashFlowYearData } from "@/data/cashFlowFinancials";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 
 // Leadership's single landing view: the five standing questions from the
 // client spec's "Executive leadership overview" (how's the business now /
@@ -163,30 +164,52 @@ function Detail({
   const cashNegativeMonths = cashHasDetail ? cashFlow!.net.filter((v) => v < 0).length : 0;
   const cashFyNet = cashHasDetail ? sum(cashFlow!.inflows) - sum(cashFlow!.outflows) : 0;
 
+  // Three freshness groups, not one blanket page-level source - this page
+  // composites genuinely different pipelines (see the footnote below), so a
+  // single "Tally" badge on every card would misrepresent the cash and
+  // targets cards.
+  const plFreshness = useImportFreshness(["tally"]);
+  const cashFreshness = useImportFreshness(["cepl", "fnbMonthly", "fnbWeekly"]);
+  const storeFnbFreshness = useImportFreshness(["sienna", "cepl", "fnbMonthly", "fnbWeekly", "target"]);
+
   const kpis: KpiData[] = [
-    { label: "Company Revenue (FY, Tally)", value: `₹${L(fyRevenue)}`, href: `/finance/profit-loss?fy=${companyPLFy}` },
+    {
+      label: "Company Revenue (FY, Tally)",
+      value: `₹${L(fyRevenue)}`,
+      href: `/finance/profit-loss?fy=${companyPLFy}`,
+      definition: "Total company-wide revenue for the fiscal year, from the Tally agent's consolidated Profit & Loss push.",
+      ...plFreshness,
+    },
     {
       label: "Net Margin (FY, Tally)",
       value: pct(fyNetMarginPct),
       status: fyNetMarginPct >= 0 ? "green" : "red",
       href: `/finance/profit-loss?fy=${companyPLFy}`,
+      definition: "Net profit as a percentage of company-wide revenue for the fiscal year, from the Tally P&L.",
+      ...plFreshness,
     },
     {
       label: `Total Assets${balanceSheetAsOfLabel ? ` (${balanceSheetAsOfLabel})` : ""}`,
       value: balanceSheet ? `₹${L(balanceSheet.totalAssets)}` : "Not available",
       href: balanceSheet ? "/finance/balance-sheet" : undefined,
+      definition: "Total assets on the company balance sheet as of the latest Tally sync, before liabilities are subtracted.",
+      ...plFreshness,
     },
     {
       label: "Balance Check",
       value: balanceSheet ? (bsNearZero ? "Balanced" : `₹${L(balanceSheet.imbalance)} gap`) : "Not available",
       status: balanceSheet ? (bsNearZero ? "green" : "amber") : null,
       href: balanceSheet ? "/finance/balance-sheet" : undefined,
+      definition: "Confirms the balance sheet balances - total assets should equal total liabilities plus equity. A non-zero gap usually means data is still mid-import or a ledger entry is missing.",
+      ...plFreshness,
     },
     {
       label: `Group Cash Net${cashFlow ? ` (${cashFlow.label}, P&L basis)` : ""}`,
       value: cashHasDetail ? `₹${L(cashFyNet)}` : "Not available",
       status: cashHasDetail ? (cashFyNet >= 0 ? "green" : "red") : null,
       href: cashHasDetail ? `/cashflow?fy=${cashFlow!.fy}` : undefined,
+      definition: "Cash inflows minus outflows across all departments for the fiscal year, on a P&L (not bank-balance) basis - same figure as the Cash Flow page.",
+      ...cashFreshness,
     },
     {
       label: "Store + F&B vs Target (FY 26-27)",
@@ -194,6 +217,8 @@ function Detail({
       sub: "Store + F&B retail/outlet scope only",
       status: storeFnbTarget ? (storeFnbTarget.gap >= 0 ? "green" : "amber") : null,
       href: "/store?fy=2026-2027",
+      definition: "Actual Store and F&B retail/outlet revenue for FY 26-27 against the FY 26-27 target plan, elapsed months only. Not the same revenue figure as Company Revenue above.",
+      ...storeFnbFreshness,
     },
   ];
 

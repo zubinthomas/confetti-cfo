@@ -14,6 +14,7 @@ import { useReferenceData } from "@/hooks/useReferenceData";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFyParam } from "@/hooks/useFyParam";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 import type { StatusRowData } from "./StatusRow";
@@ -110,37 +111,53 @@ function DeptDetail({ data, label }: { data: DeptFinancials; label: string }) {
   const worstMonthIdx = minIdx(data.netPL);
   const profitableMonths = data.netPL.filter((v) => v != null && v > 0).length;
 
+  const freshness = useImportFreshness(["cepl"]);
+
   const kpis: KpiData[] = [
-    { label: `Revenue (${label})`, value: `₹${L(fyRevenue)}` },
+    {
+      label: `Revenue (${label})`, value: `₹${L(fyRevenue)}`,
+      definition: "Total department sales for the fiscal year.",
+      ...freshness,
+    },
     {
       label: "Gross Margin (FY)",
       value: `${fyGrossMarginPct.toFixed(1)}%`,
       sub: "Revenue − raw material/purchase cost",
       status: fyGrossMarginPct >= 40 ? "green" : fyGrossMarginPct >= 20 ? "amber" : "red",
+      definition: "Gross profit (revenue minus raw material/purchase cost) as a percentage of revenue.",
+      ...freshness,
     },
     {
       label: "Net Margin (FY)",
       value: pct(fyNetMarginPct),
       sub: "After all expenses",
       status: fyNetMarginPct >= 0 ? "green" : "red",
+      definition: "Net profit as a percentage of revenue, after HR and operating costs.",
+      ...freshness,
     },
     {
       label: "Profitable Months",
       value: `${profitableMonths}/12`,
       sub: profitableMonths >= 6 ? "Majority profitable" : "Majority loss-making",
       status: profitableMonths >= 6 ? "green" : "red",
+      definition: "How many of the fiscal year's 12 months had a positive net P&L.",
+      ...freshness,
     },
     {
       label: "Best Month",
       value: bestMonthIdx >= 0 ? MONTHS[bestMonthIdx] : "-",
       sub: bestMonthIdx >= 0 ? `₹${L(data.netPL[bestMonthIdx])} net P&L` : "",
       status: "green",
+      definition: "The month with the highest net P&L for the fiscal year.",
+      ...freshness,
     },
     {
       label: "Weakest Month",
       value: worstMonthIdx >= 0 ? MONTHS[worstMonthIdx] : "-",
       sub: worstMonthIdx >= 0 ? `₹${L(data.netPL[worstMonthIdx])} net P&L` : "",
       status: "red",
+      definition: "The month with the lowest net P&L for the fiscal year.",
+      ...freshness,
     },
   ];
 

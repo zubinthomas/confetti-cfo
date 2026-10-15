@@ -4,12 +4,14 @@ import DashCard from "./DashCard";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
 import { useConsignmentData } from "@/hooks/useConsignmentData";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { L } from "@/data/seriesKernel";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function ConsignmentPage() {
   const CONSIGNMENT = useConsignmentData();
   const [fyIdx, setFyIdx] = useState<number | null>(null);
+  const freshness = useImportFreshness(["sienna"]);
   if (!CONSIGNMENT) return <PageSpinner />;
   const activeIdx = fyIdx ?? CONSIGNMENT.length - 2; // default: current FY 25-26
   const year = CONSIGNMENT[activeIdx];
@@ -18,10 +20,26 @@ export default function ConsignmentPage() {
   const topVendors = year.vendors.slice(0, 10).map((v) => ({ name: v.name.split("/")[0].trim(), value: v.total }));
 
   const kpis: KpiData[] = [
-    { label: `Consignment Sales (${year.label})`, value: `₹${L(year.total)}`, sub: `${year.vendors.length} active partners`, status: "green" },
-    { label: "Est. Commission Earned", value: `₹${L(year.commission)}`, sub: "At each partner's listed rate" },
-    { label: "Top Partner", value: year.vendors[0] ? year.vendors[0].name.split("/")[0].trim() : "-", sub: year.vendors[0] ? `₹${L(year.vendors[0].total)}` : "", status: "green" },
-    { label: "Sienna × Other Brands", value: `₹${L(otherBrands.reduce((a, v) => a + v.total, 0))}`, sub: `${otherBrands.length} brand collaborations` },
+    {
+      label: `Consignment Sales (${year.label})`, value: `₹${L(year.total)}`, sub: `${year.vendors.length} active partners`, status: "green",
+      definition: "Total sales of consignment and partner-brand goods for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: "Est. Commission Earned", value: `₹${L(year.commission)}`, sub: "At each partner's listed rate",
+      definition: "Commission owed to partner vendors, estimated at each partner's own listed commission rate.",
+      ...freshness,
+    },
+    {
+      label: "Top Partner", value: year.vendors[0] ? year.vendors[0].name.split("/")[0].trim() : "-", sub: year.vendors[0] ? `₹${L(year.vendors[0].total)}` : "", status: "green",
+      definition: "The partner vendor with the highest sales for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: "Sienna × Other Brands", value: `₹${L(otherBrands.reduce((a, v) => a + v.total, 0))}`, sub: `${otherBrands.length} brand collaborations`,
+      definition: "Sales from brand collaborations (not consignment), for the fiscal year.",
+      ...freshness,
+    },
   ];
 
   return (

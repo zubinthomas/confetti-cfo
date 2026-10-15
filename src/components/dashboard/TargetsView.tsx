@@ -9,6 +9,7 @@ import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import { MONTHS, L } from "@/data/seriesKernel";
 import { projectionSeries, computeGap } from "@/data/revenueTargets";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import type { Period } from "@/data/types";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -73,19 +74,35 @@ export default function TargetsView({
     [fyLabel]: projection[i],
   }));
 
+  const freshness = useImportFreshness(["target"]);
+
   const kpis: KpiData[] = [];
   if (currentIdx >= 0) {
     const t = target[currentIdx];
     const p = projection[currentIdx];
     const g = gap[currentIdx];
     kpis.push(
-      { label: `${MONTHS[currentIdx]} Target`, value: L(t), status: "green" },
-      { label: `${MONTHS[currentIdx]} Actual (so far)`, value: L(actual[currentIdx]), status: "amber" },
-      { label: `${MONTHS[currentIdx]} Projection`, value: L(p), status: "amber" },
+      {
+        label: `${MONTHS[currentIdx]} Target`, value: L(t), status: "green",
+        definition: `${categoryLabel}'s target for this month, from the FY target plan.`,
+        ...freshness,
+      },
+      {
+        label: `${MONTHS[currentIdx]} Actual (so far)`, value: L(actual[currentIdx]), status: "amber",
+        definition: `${categoryLabel}'s actual booked revenue for this month so far.`,
+        ...freshness,
+      },
+      {
+        label: `${MONTHS[currentIdx]} Projection`, value: L(p), status: "amber",
+        definition: "A day-elapsed run-rate estimate for this month, based on actual performance so far.",
+        ...freshness,
+      },
       {
         label: "Gap vs Target",
         value: g == null ? "-" : `${g >= 0 ? "+" : ""}${L(g)}`,
         status: g == null ? null : g >= 0 ? "green" : "red",
+        definition: "This month's projection minus its target.",
+        ...freshness,
       },
     );
   }
@@ -98,13 +115,27 @@ export default function TargetsView({
   const fyProjectionTotal = projection.reduce((a, b) => a + (b || 0), 0);
   const fyGapTotal = fyProjectionTotal - fyTargetTotal;
   kpis.push(
-    { label: "FY Target", value: L(fyTargetTotal), sub: fyLabel, status: "green" },
-    { label: "FY Actual to Date", value: L(fyActualToDateTotal), sub: "Booked so far", status: "amber" },
-    { label: "FY Projection", value: L(fyProjectionTotal), sub: "Full year, actual + estimated", status: "amber" },
+    {
+      label: "FY Target", value: L(fyTargetTotal), sub: fyLabel, status: "green",
+      definition: `${categoryLabel}'s full fiscal year target total, from the FY target plan.`,
+      ...freshness,
+    },
+    {
+      label: "FY Actual to Date", value: L(fyActualToDateTotal), sub: "Booked so far", status: "amber",
+      definition: `${categoryLabel}'s actual revenue booked so far this fiscal year.`,
+      ...freshness,
+    },
+    {
+      label: "FY Projection", value: L(fyProjectionTotal), sub: "Full year, actual + estimated", status: "amber",
+      definition: "Full-year projected revenue: actual-to-date plus an estimate for the remaining months.",
+      ...freshness,
+    },
     {
       label: "FY Gap vs Target",
       value: `${fyGapTotal >= 0 ? "+" : ""}${L(fyGapTotal)}`,
       status: fyGapTotal >= 0 ? "green" : "red",
+      definition: "The full-year projection minus the full-year target.",
+      ...freshness,
     },
   );
 

@@ -576,10 +576,10 @@ export default function GuestRegister({
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="On premises now" value={onPremises?.length ?? "—"} />
-        <KpiCard label="Covers on premises" value={coversOnPremises} />
-        <KpiCard label="Seated now" value={seatedNow} />
-        <KpiCard label="Guests today" value={dayHistory?.length ?? "—"} />
+        <KpiCard label="On premises now" value={onPremises?.length ?? "—"} definition="Guests currently checked in and on premises." />
+        <KpiCard label="Covers on premises" value={coversOnPremises} definition="Total guest count currently on premises." />
+        <KpiCard label="Seated now" value={seatedNow} definition="Guests currently seated at a table." />
+        <KpiCard label="Guests today" value={dayHistory?.length ?? "—"} definition="All guests checked in today, including those who have since left." />
       </div>
 
       <DashCard

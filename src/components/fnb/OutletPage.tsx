@@ -6,6 +6,7 @@ import PageSpinner from "@/components/dashboard/PageSpinner";
 import { type OutletKey } from "@/data/outletData";
 import { L, sum } from "@/data/seriesKernel";
 import { useOutletData } from "@/hooks/useOutletData";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import type { KpiData } from "@/components/dashboard/KpiCard";
 import {
   ComposedChart, AreaChart, Area, BarChart, Bar, Line,
@@ -21,6 +22,7 @@ interface OutletPageProps {
 
 export default function OutletPage({ outletKey, heading, description, children }: OutletPageProps) {
   const outletData = useOutletData(outletKey);
+  const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly"]);
   if (!outletData) return <PageSpinner />;
   const { weeks, outlet: data, total } = outletData;
 
@@ -34,11 +36,31 @@ export default function OutletPage({ outletKey, heading, description, children }
     (best, v, i) => (v != null && (best === -1 || v > data.totalSales[best]) ? i : best), -1);
 
   const kpis: KpiData[] = [
-    { label: "Revenue (Sep–Jan)", value: `₹${L(totalRevenue)}`, sub: `${weeksWithData} weeks of data`, status: "green" },
-    { label: "Avg Weekly Revenue", value: `₹${L(weeksWithData ? totalRevenue / weeksWithData : 0)}` },
-    { label: "Net P&L (Sep–Jan)", value: `₹${L(totalPL)}`, sub: `${margin.toFixed(1)}% margin`, status: totalPL >= 0 ? "green" : "red" },
-    { label: "Share of F&B outlets", value: `${share.toFixed(1)}%`, sub: "Of all-outlet revenue" },
-    { label: "Best Week", value: bestIdx >= 0 ? weeks[bestIdx].short : "-", sub: bestIdx >= 0 ? `₹${L(data.totalSales[bestIdx])}` : "" , status: "green" },
+    {
+      label: "Revenue (Sep–Jan)", value: `₹${L(totalRevenue)}`, sub: `${weeksWithData} weeks of data`, status: "green",
+      definition: `Total ${heading} revenue across the weeks reported so far, from the weekly outlet P&L.`,
+      ...freshness,
+    },
+    {
+      label: "Avg Weekly Revenue", value: `₹${L(weeksWithData ? totalRevenue / weeksWithData : 0)}`,
+      definition: "Revenue averaged across the weeks with data.",
+      ...freshness,
+    },
+    {
+      label: "Net P&L (Sep–Jan)", value: `₹${L(totalPL)}`, sub: `${margin.toFixed(1)}% margin`, status: totalPL >= 0 ? "green" : "red",
+      definition: `Net profit or loss for ${heading} across the weeks reported so far.`,
+      ...freshness,
+    },
+    {
+      label: "Share of F&B outlets", value: `${share.toFixed(1)}%`, sub: "Of all-outlet revenue",
+      definition: `${heading}'s share of total revenue across all F&B outlets, for the weeks with data.`,
+      ...freshness,
+    },
+    {
+      label: "Best Week", value: bestIdx >= 0 ? weeks[bestIdx].short : "-", sub: bestIdx >= 0 ? `₹${L(data.totalSales[bestIdx])}` : "" , status: "green",
+      definition: "The week with the highest revenue.",
+      ...freshness,
+    },
   ];
 
   const weekly = weeks.map((w, i) => ({

@@ -8,6 +8,7 @@ import TargetsView from "./TargetsView";
 import type { ExportSheet } from "@/lib/dataExport";
 import { useStoreData, STORE_FYS } from "@/hooks/useStoreData";
 import { useFyParam } from "@/hooks/useFyParam";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useSalesRecords } from "@/hooks/useSalesRecords";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
@@ -56,6 +57,7 @@ export default function StoreTab() {
   const { data: ref } = useReferenceData();
   const { data: sales2627 } = useSalesRecords({ fiscalYear: ["2026-2027"] });
   const { data: storeTargets2627 } = useRevenueTargets({ category: ["store"], fiscalYear: ["2026-2027"] });
+  const freshness = useImportFreshness(["sienna", "cepl"]);
 
   if (!storeData || !fy) return <PageSpinner />;
 
@@ -242,16 +244,38 @@ export default function StoreTab() {
     && (STORE.hrCost[hrCostMinIdx] as number) < hrCostOthersAvg * 0.5;
 
   const kpis: KpiData[] = [
-    { label: "HP Store Revenue (FY)",   value: L(t["HP Store"]),   sub: `${((t["HP Store"]/t["Total"])*100).toFixed(0)}% of total`, status: "green" },
-    { label: "Corporate Sales (FY)",    value: L(t["Corporate"]),  sub: `${((t["Corporate"]/t["Total"])*100).toFixed(0)}% of total`, status: "amber" },
-    { label: "Total Store Revenue (FY)",value: L(t["Total"]),      sub: FY.label, status: "green" },
-    { label: "Apr–May FY26-27",         value: L(FY27.totals["Total"]), sub: `${(((hp27)/(hp26Apr+hp26May)-1)*100).toFixed(0)}% HP YoY`, status: "green" },
-    { label: "Online Sales (FY)",       value: L(t["Online"]),     sub: `${((t["Online"]/t["Total"])*100).toFixed(1)}% share`, status: "amber" },
+    {
+      label: "HP Store Revenue (FY)",   value: L(t["HP Store"]),   sub: `${((t["HP Store"]/t["Total"])*100).toFixed(0)}% of total`, status: "green",
+      definition: "HP Store channel's total sales for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: "Corporate Sales (FY)",    value: L(t["Corporate"]),  sub: `${((t["Corporate"]/t["Total"])*100).toFixed(0)}% of total`, status: "amber",
+      definition: "Corporate channel sales for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: "Total Store Revenue (FY)",value: L(t["Total"]),      sub: FY.label, status: "green",
+      definition: "Total Store sales across all channels for the fiscal year.",
+      ...freshness,
+    },
+    {
+      label: "Apr–May FY26-27",         value: L(FY27.totals["Total"]), sub: `${(((hp27)/(hp26Apr+hp26May)-1)*100).toFixed(0)}% HP YoY`, status: "green",
+      definition: "HP Store sales for April and May of FY 26-27, the only months with actuals so far.",
+      ...freshness,
+    },
+    {
+      label: "Online Sales (FY)",       value: L(t["Online"]),     sub: `${((t["Online"]/t["Total"])*100).toFixed(1)}% share`, status: "amber",
+      definition: "Online channel sales for the fiscal year.",
+      ...freshness,
+    },
   ];
   if (STORE.hasMonthlyDetail) {
     kpis.splice(4, 0, {
       label: "Annual HR % of Revenue", value: `${((storeHR/storeFYPL)*100).toFixed(1)}%`,
       sub: hrH2Avg < hrH1Avg ? "Improving H2" : "Higher in H2", status: "amber",
+      definition: "HR cost as a percentage of total Store sales for the fiscal year.",
+      ...freshness,
     });
   }
 

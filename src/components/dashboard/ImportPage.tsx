@@ -19,19 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { localDay } from "@/lib/localDay";
-
-const KIND_LABELS: Record<ImportBatch["kind"], string> = {
-  cepl: "CEPL P&L",
-  cafe: "Cafe Weekly P&L",
-  sienna: "Sienna Store Sales",
-  hr: "HR Mastersheet",
-  target: "FY Target Plan",
-  fnbMonthly: "Monthly F&B P&L",
-  fnbWeekly: "Weekly F&B P&L",
-  tally: "Tally sync",
-  potteryProduction: "Pottery Production Log",
-  shiftRoster: "Weekly Shift Roster",
-};
+import { IMPORT_KIND_LABELS as KIND_LABELS } from "@/data/importKinds";
 
 const STATUS_STYLE: Record<ImportBatch["status"], string> = {
   preview: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",

@@ -178,10 +178,10 @@ export default function RecruitmentTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total Applicants" value={items.length} />
-        <KpiCard label="Active Pipeline" value={items.filter(i => !["Hired","Rejected"].includes(i.stage)).length} status="amber" />
-        <KpiCard label="Hired" value={items.filter(i => i.stage === "Hired").length} status="green" />
-        <KpiCard label="Rejected" value={items.filter(i => i.stage === "Rejected").length} status="red" />
+        <KpiCard label="Total Applicants" value={items.length} definition="All applicants on record, across every stage." />
+        <KpiCard label="Active Pipeline" value={items.filter(i => !["Hired","Rejected"].includes(i.stage)).length} status="amber" definition="Applicants still in process - not yet hired or rejected." />
+        <KpiCard label="Hired" value={items.filter(i => i.stage === "Hired").length} status="green" definition="Applicants who reached the Hired stage." />
+        <KpiCard label="Rejected" value={items.filter(i => i.stage === "Rejected").length} status="red" definition="Applicants who reached the Rejected stage." />
       </div>
 
       {/* Pipeline stages summary */}

@@ -8,6 +8,7 @@ import type { ExportSheet } from "@/lib/dataExport";
 import { getProductionSummary, type ProductionSummary } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
 import { useFyParam } from "@/hooks/useFyParam";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 
 function shortDateTick(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -67,6 +68,7 @@ export default function ProductionOpsSection() {
     [allPivoted],
   );
   const [fy, setFy] = useFyParam(availableFys);
+  const freshness = useImportFreshness(["potteryProduction"]);
 
   const chartData = useMemo(
     () => (fy ? allPivoted.filter((d) => fyOf(String(d.date)) === fy) : []),
@@ -198,10 +200,26 @@ export default function ProductionOpsSection() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total Pieces" value={fyKpis.totalPieces.toLocaleString()} />
-        <KpiCard label="Days Covered" value={fyKpis.daysCovered} />
-        <KpiCard label="Avg / Day" value={fyKpis.avgPerDay.toLocaleString()} />
-        <KpiCard label="Busiest Stage" value={fyKpis.busiestStage ? STAGE_LABELS[fyKpis.busiestStage] : "-"} />
+        <KpiCard
+          label="Total Pieces" value={fyKpis.totalPieces.toLocaleString()}
+          definition="Total pieces logged across all stages for the fiscal year. A piece logged at multiple stages counts at each stage."
+          {...freshness}
+        />
+        <KpiCard
+          label="Days Covered" value={fyKpis.daysCovered}
+          definition="How many distinct days have production log entries for the fiscal year."
+          {...freshness}
+        />
+        <KpiCard
+          label="Avg / Day" value={fyKpis.avgPerDay.toLocaleString()}
+          definition="Total pieces divided by days covered."
+          {...freshness}
+        />
+        <KpiCard
+          label="Busiest Stage" value={fyKpis.busiestStage ? STAGE_LABELS[fyKpis.busiestStage] : "-"}
+          definition="The production stage (throwing, finishing, glazing, firing) with the most pieces logged for the fiscal year."
+          {...freshness}
+        />
       </div>
 
       <DashCard

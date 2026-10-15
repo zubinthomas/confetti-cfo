@@ -24,7 +24,7 @@ export type DecisionSource =
 export interface ImportBatch {
   id: number;
   filename: string;
-  kind: "cepl" | "cafe" | "sienna" | "hr" | "target" | "fnbMonthly" | "fnbWeekly" | "tally" | "potteryProduction" | "shiftRoster";
+  kind: "cepl" | "cafe" | "sienna" | "hr" | "target" | "fnbMonthly" | "fnbWeekly" | "tally" | "potteryProduction" | "shiftRoster" | "orders";
   status: "preview" | "committed" | "discarded";
   uploadedAt: string;
   committedAt: string | null;
