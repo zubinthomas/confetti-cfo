@@ -3,7 +3,7 @@
 // string id + ISO-8601 created_date.
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, getTableColumns, inArray } from 'drizzle-orm';
-import type { PgTableWithColumns } from 'drizzle-orm/pg-core';
+import { getTableConfig, type PgTableWithColumns } from 'drizzle-orm/pg-core';
 import { db, ready, schema } from './db/client.ts';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -43,12 +43,30 @@ function fieldMaps(table: AnyPgTable) {
   return { toProp, toApi };
 }
 
+// DB column names (snake_case) that reference another table's row via a
+// foreign key. A form's blank state for an optional relation (e.g.
+// `manager_id: ""`) sends an empty string, not undefined - that's a real
+// value, not an absent key, so it doesn't fall through to NULL on its own.
+// An empty string isn't NULL either, so Postgres checks it against the FK
+// and rejects it (no row has id = ''). Treat "" as "unset" here, only for
+// these columns, so free-text fields keep storing "" as-is.
+function fkColumnNames(table: AnyPgTable): Set<string> {
+  const names = new Set<string>();
+  for (const fk of getTableConfig(table).foreignKeys) {
+    for (const col of fk.reference().columns) {
+      names.add((col as { name: string }).name);
+    }
+  }
+  return names;
+}
+
 function toRow(table: AnyPgTable, data: Record<string, unknown>) {
   const { toProp } = fieldMaps(table);
+  const fkNames = fkColumnNames(table);
   const row: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data)) {
     const prop = toProp[k];
-    if (prop) row[prop] = v;
+    if (prop) row[prop] = v === '' && fkNames.has(k) ? null : v;
   }
   return row;
 }
