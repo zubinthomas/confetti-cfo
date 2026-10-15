@@ -1,7 +1,86 @@
 import React, { useEffect, useState } from "react";
 import DashCard from "./DashCard";
 import { listSettings, type Setting, type SettingCategory } from "@/api/settingsApi";
+import { listBackups, createBackup, type BackupInfo } from "@/api/backupsApi";
+import { useAuth } from "@/lib/AuthContext";
 import { Loader2, Lock } from "lucide-react";
+
+function BackupsCard() {
+  const { can } = useAuth();
+  const canRead = can("Backup", "read");
+  const canWrite = can("Backup", "write");
+  const [backups, setBackups] = useState<BackupInfo[] | null>(null);
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const load = () => {
+    listBackups().then(setBackups).catch((err: Error) => setError(err.message || "Failed to load backups"));
+  };
+
+  useEffect(() => {
+    if (canRead) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canRead]);
+
+  if (!canRead) return null;
+
+  const backupNow = async () => {
+    setError("");
+    setCreating(true);
+    try {
+      await createBackup();
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create backup");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <DashCard
+      title="Backups"
+      action={
+        canWrite && (
+          <button
+            onClick={backupNow}
+            disabled={creating}
+            className="text-sm px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+          >
+            {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Back up now
+          </button>
+        )
+      }
+    >
+      {error && <p className="text-sm text-destructive mb-2">{error}</p>}
+      {!backups ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading backups…
+        </div>
+      ) : backups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No backups yet.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-muted-foreground border-b border-border text-xs">
+              <th className="py-1.5 pr-3 font-medium">Created</th>
+              <th className="py-1.5 font-medium">Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {backups.map((b) => (
+              <tr key={b.filename} className="border-b border-border last:border-0">
+                <td className="py-2 pr-3 text-foreground">{new Date(b.createdAt).toLocaleString()}</td>
+                <td className="py-2 text-muted-foreground">{(b.sizeBytes / 1024 / 1024).toFixed(1)} MB</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </DashCard>
+  );
+}
 
 const CATEGORY_LABELS: Record<SettingCategory, string> = {
   server: "Server",
@@ -92,6 +171,7 @@ export default function SettingsPage() {
         These mirror <code className="font-mono">server/.env</code> and are read-only for now - edit
         the file directly and restart the server to change them. Secret values are masked.
       </div>
+      <BackupsCard />
       {CATEGORY_ORDER.filter((c) => byCategory.has(c)).map((category) => (
         <DashCard
           key={category}

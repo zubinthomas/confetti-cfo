@@ -59,6 +59,11 @@ try {
 const client = new PGlite(DATA_DIR, { extensions: { btree_gist } });
 export const db = drizzle(client, { schema });
 
+// Exposed for server/db/backup.ts's dumpDataDir() call (a PGlite-instance
+// method, not reachable through the Drizzle wrapper) and for
+// server/db/restore.ts to know where to materialize a restored backup.
+export { client, DATA_DIR };
+
 let migrated: Promise<void> | null = null;
 /** Apply pending migrations once per process before first use, then seed the
  *  RBAC permission catalog/default roles and the two default reservation

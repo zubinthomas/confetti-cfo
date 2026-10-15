@@ -31,6 +31,8 @@ import rosterRoutes from './routes/roster.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { startCalendarScheduler } from './calendar/scheduler.ts';
 import { startImportBatchPruneScheduler } from './import/pruneScheduler.ts';
+import { startBackupScheduler } from './db/backupScheduler.ts';
+import backupsRoutes from './routes/backups.ts';
 import { config } from 'dotenv';
 
 config()
@@ -77,6 +79,7 @@ app.use('/api/employees', offboardingRoutes);
 app.use('/api/employees', onboardingRoutes);
 app.use('/api/ops', opsDataRoutes);
 app.use('/api/roster', rosterRoutes);
+app.use('/api/backups', backupsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
@@ -86,6 +89,7 @@ const server = app.listen(PORT, () => {
   startSheetsScheduler();
   startCalendarScheduler();
   startImportBatchPruneScheduler();
+  startBackupScheduler();
 });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
