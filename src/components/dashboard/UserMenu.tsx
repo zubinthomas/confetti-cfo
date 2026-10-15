@@ -16,8 +16,10 @@ const THEME_OPTIONS = [
   { value: "system", label: "System", icon: Monitor },
 ];
 
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
+function initials(name: string | null | undefined) {
+  const trimmed = name?.trim();
+  if (!trimmed) return "?";
+  return trimmed.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
 }
 
 export default function UserMenu() {
@@ -35,7 +37,7 @@ export default function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
-          <p className="text-sm font-medium text-foreground">{user.full_name}</p>
+          <p className="text-sm font-medium text-foreground">{user.full_name || user.email}</p>
           <p className="text-xs font-normal text-muted-foreground">{user.email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
