@@ -505,7 +505,7 @@ export default function HeadcountTab() {
     setError("");
     setSaving(true);
     try {
-      const payload = { ...form, monthly_salary: Number(form.monthly_salary) || 0 };
+      const payload = canPayrollWrite ? { ...form, monthly_salary: Number(form.monthly_salary) || 0 } : form;
       if (form.id) await Employee.update(form.id, payload);
       else await Employee.create(payload);
       setShowForm(false);
@@ -622,7 +622,7 @@ export default function HeadcountTab() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard label="Total Employees" value={employees.length} sub={`${employees.filter(e=>e.status==="Active").length} active`} status="green" definition="All employees on record, including inactive ones." />
-        <KpiCard label="Total Payroll / mo" value={`₹${(totalPayroll/100000).toFixed(1)}L`} sub="All divisions" status={totalPayroll/100000 > 8.4 ? "red" : "green"} definition="Total monthly payroll cost across all divisions, as currently set per employee." />
+        {canPayrollRead && <KpiCard label="Total Payroll / mo" value={`₹${(totalPayroll/100000).toFixed(1)}L`} sub="All divisions" status={totalPayroll/100000 > 8.4 ? "red" : "green"} definition="Total monthly payroll cost across all divisions, as currently set per employee." />}
         <KpiCard label="On Leave" value={employees.filter(e=>e.status==="On Leave").length} sub="Today" status="amber" definition="Employees currently marked On Leave." />
         <KpiCard label="Contract Staff" value={employees.filter(e=>e.employment_type==="Contract").length} sub="Contractors" definition="Employees with a Contract employment type." />
       </div>
@@ -728,7 +728,7 @@ export default function HeadcountTab() {
                   {sortableHeader("Role", "role")}
                   {sortableHeader("Type", "employment_type")}
                   {sortableHeader("Status", "status")}
-                  {sortableHeader("Salary/mo", "monthly_salary")}
+                  {canPayrollRead && sortableHeader("Salary/mo", "monthly_salary")}
                   <th className="text-left py-2 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -743,7 +743,7 @@ export default function HeadcountTab() {
                     <td className="py-2.5 pr-4 text-muted-foreground">{emp.role}</td>
                     <td className="py-2.5 pr-4 text-muted-foreground">{emp.employment_type}</td>
                     <td className="py-2.5 pr-4"><span className={`text-xs font-medium ${statusColor[emp.status] || ""}`}>{emp.status}</span></td>
-                    <td className="py-2.5 pr-4 text-muted-foreground">{emp.monthly_salary ? `₹${emp.monthly_salary.toLocaleString()}` : "-"}</td>
+                    {canPayrollRead && <td className="py-2.5 pr-4 text-muted-foreground">{emp.monthly_salary ? `₹${emp.monthly_salary.toLocaleString()}` : "-"}</td>}
                     <td className="py-2.5">
                       <div className="flex gap-2">
                         {canWrite && <button onClick={() => { setForm({ ...emp }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>}
@@ -790,7 +790,7 @@ export default function HeadcountTab() {
               <FormField label="Employment Type" name="employment_type" options={EMPLOYMENT_TYPES} value={form.employment_type ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={STATUSES} value={form.status ?? ""} onChange={updateField} />
               <FormField label="Joining Date" name="joining_date" type="date" value={form.joining_date ?? ""} onChange={updateField} />
-              <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary ?? ""} onChange={updateField} />
+              {canPayrollWrite && <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary ?? ""} onChange={updateField} />}
               <FormField label="Phone" name="phone" value={form.phone ?? ""} onChange={updateField} />
               <FormField label="Email" name="email" type="email" value={form.email ?? ""} onChange={updateField} />
               <FormField label="Aadhar Number" name="aadhar_number" value={form.aadhar_number ?? ""} onChange={updateField} />

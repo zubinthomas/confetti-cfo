@@ -63,6 +63,8 @@ const HIRE_EMPTY = { full_name: "", employee_id: "", division: "", role: "", emp
 // Pre-fills from the recruitment's own fields - the applicant fills most of
 // this in already, hiring just carries it over into a real employee record.
 function HireModal({ recruitment, divisionOptions, onClose, onHired }: { recruitment: any; divisionOptions: readonly string[]; onClose: () => void; onHired: () => void }) {
+  const { can } = useAuth();
+  const canSetSalary = can("PayrollRecord", "write");
   const [form, setForm] = useState({
     ...HIRE_EMPTY,
     full_name: recruitment.applicant_name || "",
@@ -82,7 +84,7 @@ function HireModal({ recruitment, divisionOptions, onClose, onHired }: { recruit
     setError("");
     setSaving(true);
     try {
-      await hireApplicant(recruitment.id, { ...form, monthly_salary: Number(form.monthly_salary) || 0 });
+      await hireApplicant(recruitment.id, canSetSalary ? { ...form, monthly_salary: Number(form.monthly_salary) || 0 } : form);
       onHired();
       onClose();
     } catch (err) {
@@ -106,7 +108,7 @@ function HireModal({ recruitment, divisionOptions, onClose, onHired }: { recruit
           <FormField label="Role / Designation *" name="role" value={form.role} onChange={updateField} />
           <FormField label="Employment Type" name="employment_type" options={["Full-time", "Part-time", "Contract", "Intern"]} value={form.employment_type} onChange={updateField} />
           <FormField label="Joining Date" name="joining_date" type="date" value={form.joining_date} onChange={updateField} />
-          <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary} onChange={updateField} />
+          {canSetSalary && <FormField label="Monthly Salary (₹)" name="monthly_salary" type="number" value={form.monthly_salary} onChange={updateField} />}
           <FormField label="Phone" name="phone" value={form.phone} onChange={updateField} />
           <FormField label="Email" name="email" type="email" value={form.email} onChange={updateField} />
         </div>

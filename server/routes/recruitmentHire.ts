@@ -5,7 +5,9 @@
 import { Router } from 'express';
 import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
 import { getUserDivisionScope } from '../db/divisionScope.ts';
+import { hasPermission } from '../db/permissions.ts';
 import { hireApplicant, HireError } from '../db/recruitmentHire.ts';
+import { dropSalaryIfUnauthorized, stripSalaryIfUnauthorized } from './entities.ts';
 
 const router = Router();
 router.use(authMiddleware);
@@ -15,7 +17,9 @@ const status = (err: unknown) => (err instanceof HireError ? 400 : 500);
 
 /** POST /api/recruitment/:id/hire - body is the new employee's fields, same
  *  snake_case shape as Employee.create(). Requires write on both
- *  Recruitment (advancing the pipeline) and Employee (creating the row). */
+ *  Recruitment (advancing the pipeline) and Employee (creating the row).
+ *  monthly_salary additionally needs PayrollRecord:write - see entities.ts's
+ *  dropSalaryIfUnauthorized. */
 router.post(
   '/:id/hire',
   requirePermission('Recruitment', 'write'),
@@ -26,7 +30,9 @@ router.post(
       if (scope.length > 0 && !scope.includes(req.body?.division)) {
         return res.status(403).json({ message: `You can only hire into: ${scope.join(', ')}` });
       }
-      const result = await hireApplicant(req.params.id, req.body ?? {});
+      const body = dropSalaryIfUnauthorized(req.body ?? {}, await hasPermission(req.user!.id, 'PayrollRecord', 'write'));
+      const result = await hireApplicant(req.params.id, body);
+      await stripSalaryIfUnauthorized(req.user!.id, [result.employee]);
       res.status(201).json(result);
     } catch (err) {
       res.status(status(err)).json({ message: message(err) });
