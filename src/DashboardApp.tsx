@@ -11,7 +11,7 @@
 // first visit to a route into a chunk-download-then-fetch waterfall, which
 // felt like paying the old "one big load" cost on almost every navigation.
 import React, { lazy, useEffect } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from '@/lib/PageNotFound';
 import RequirePermission from '@/components/RequirePermission';
 import DashboardShell from '@/components/dashboard/DashboardShell';
@@ -50,10 +50,13 @@ const LEADERSHIP_ROLE_NAME = 'Leadership';
 // (auth.me() hasn't resolved yet via AuthContext's checkUserAuth) - this
 // falls back to OverviewTab harmlessly until it loads, then re-renders once,
 // same load-order behavior the nav's own can()-gated links already have.
+// Redirects to the real /leadership route rather than rendering the page
+// inline at "/", so the URL (and DashboardShell's pathname-keyed header
+// title) actually reflects what's on screen.
 function HomeRouter() {
   const { user } = useAuth();
   const isLeadership = user?.roles.some((r) => r.name === LEADERSHIP_ROLE_NAME) ?? false;
-  return isLeadership ? <LeadershipCommandCentre /> : <OverviewTab />;
+  return isLeadership ? <Navigate to="/leadership" replace /> : <OverviewTab />;
 }
 
 export default function DashboardApp() {

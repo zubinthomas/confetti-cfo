@@ -11,7 +11,7 @@ import { useOverviewYear } from "@/hooks/useOverviewYear";
 import { useCashFlowYear } from "@/hooks/useCashFlowYear";
 import { computeCompanyPL, resolveCplBu, resolveCplLi, type CompanyPL } from "@/data/companyPL";
 import { computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi, type BalanceSheet } from "@/data/balanceSheet";
-import { targetSeries, computeGap } from "@/data/revenueTargets";
+import { targetSeries } from "@/data/revenueTargets";
 import { UNAVAILABLE_METRICS, type StoreFnbTargetPace } from "@/data/leadershipOverview";
 import { L, pct, sum, buildFrIndex, monthPeriodIds } from "@/data/seriesKernel";
 import type { CashFlowYearData } from "@/data/cashFlowFinancials";
@@ -89,11 +89,30 @@ export default function LeadershipCommandCentre() {
   const { data: targets2627 } = useRevenueTargets({ category: ["store", "fnb"], fiscalYear: ["2026-2027"] });
   const targetPeriodIds = ref ? monthPeriodIds(ref.periods, "2026-2027") : [];
   const storeFnbTarget: StoreFnbTargetPace | null = useMemo(() => {
-    if (!overviewYear || !targets2627 || !ref) return null;
-    const actual = overviewYear.cur.totals.fbSales + overviewYear.cur.totals.storeSales;
-    const target = sum(targetSeries(targets2627, "store", targetPeriodIds)) + sum(targetSeries(targets2627, "fnb", targetPeriodIds));
-    return { actual, target, gap: computeGap(actual, target) ?? actual - target };
-  }, [overviewYear, targets2627, ref, targetPeriodIds]);
+    if (!overviewYear || !targets2627) return null;
+    const storeTarget = targetSeries(targets2627, "store", targetPeriodIds);
+    const fnbTarget = targetSeries(targets2627, "fnb", targetPeriodIds);
+    const { fb, store, totals, hasMonthlyDetail } = overviewYear.cur;
+
+    if (hasMonthlyDetail) {
+      // Compare actual-to-date against target-to-date (the same elapsed
+      // months only) - summing the full-year target against a still-partial
+      // actual would always read as "behind," regardless of real pacing.
+      let actual = 0, target = 0;
+      for (let i = 0; i < targetPeriodIds.length; i++) {
+        if (fb.sales[i] == null && store.sales[i] == null) continue;
+        actual += (fb.sales[i] ?? 0) + (store.sales[i] ?? 0);
+        target += (storeTarget[i] ?? 0) + (fnbTarget[i] ?? 0);
+      }
+      return { actual, target, gap: actual - target };
+    }
+
+    // Annual-only fallback: totals are already full-year figures, so the
+    // full-year target sum is the correct comparison here.
+    const actual = totals.fbSales + totals.storeSales;
+    const target = sum(storeTarget) + sum(fnbTarget);
+    return { actual, target, gap: actual - target };
+  }, [overviewYear, targets2627, targetPeriodIds]);
 
   if (!ref || companyPLFys === undefined) return <PageSpinner />;
 
