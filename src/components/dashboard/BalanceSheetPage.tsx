@@ -5,7 +5,8 @@ import PLRow from "./PLRow";
 import PageSpinner from "./PageSpinner";
 import { L, buildFrIndex } from "@/data/seriesKernel";
 import {
-  computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi, type BalanceSheet,
+  allAsOfPeriods, computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi,
+  type BalanceSheet, type BsLineTrendPoint,
 } from "@/data/balanceSheet";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
@@ -33,12 +34,17 @@ export default function BalanceSheetPage() {
     return latestAsOfPeriod(ref.periods, bsBu, records);
   }, [ref, records, bsBu]);
 
+  const asOfPeriods = useMemo(() => {
+    if (!ref || !records || bsBu < 0) return [];
+    return allAsOfPeriods(ref.periods, bsBu, records);
+  }, [ref, records, bsBu]);
+
   const data = useMemo(() => {
     if (!ref || !records || !asOf || bsBu < 0) return null;
     const idx = buildFrIndex(records);
     const li = resolveBsLi(ref.lineItems);
-    return computeBalanceSheet(idx, bsBu, li, asOf.id);
-  }, [ref, records, asOf, bsBu]);
+    return computeBalanceSheet(idx, bsBu, li, asOf.id, asOfPeriods);
+  }, [ref, records, asOf, bsBu, asOfPeriods]);
 
   if (!ref || asOf === undefined) return <PageSpinner />;
 
@@ -80,12 +86,22 @@ function BsDetail({ data }: { data: BalanceSheet }) {
     },
   ];
 
+  const formatTrend = (trend: BsLineTrendPoint[]) => {
+    if (trend.length < 2) return [];
+    return trend.map((pt, i) => {
+      const prev = i > 0 ? trend[i - 1].value : null;
+      const delta = pt.value != null && prev != null ? pt.value - prev : null;
+      const deltaStr = delta == null ? "" : delta === 0 ? " (no change)" : ` (${delta > 0 ? "+" : ""}₹${L(delta)})`;
+      return { label: pt.endDate, value: `₹${L(pt.value ?? 0)}${deltaStr}` };
+    });
+  };
+
   const assetRows: PLRowData[] = [
-    ...data.lines.assets.map((r) => ({ label: r.name, value: `₹${L(r.value ?? 0)}` })),
+    ...data.lines.assets.map((r) => ({ label: r.name, value: `₹${L(r.value ?? 0)}`, details: formatTrend(r.trend) })),
     { label: "Total Assets", value: `₹${L(data.totalAssets)}`, isTotal: true },
   ];
   const liabilityRows: PLRowData[] = [
-    ...data.lines.liabilityEquity.map((r) => ({ label: r.name, value: `₹${L(r.value ?? 0)}` })),
+    ...data.lines.liabilityEquity.map((r) => ({ label: r.name, value: `₹${L(r.value ?? 0)}`, details: formatTrend(r.trend) })),
     { label: "Total Liabilities & Equity", value: `₹${L(data.totalLiabilityEquity)}`, isTotal: true },
   ];
 
@@ -107,7 +123,7 @@ function BsDetail({ data }: { data: BalanceSheet }) {
       {data.lines.unclassified.length > 0 && (
         <DashCard title="Unclassified - needs review">
           {data.lines.unclassified.map((r) => (
-            <PLRow key={r.name} label={r.name} value={`₹${L(r.value ?? 0)}`} />
+            <PLRow key={r.name} label={r.name} value={`₹${L(r.value ?? 0)}`} details={formatTrend(r.trend)} />
           ))}
           <p className="text-xs text-muted-foreground mt-3">
             These line items don&rsquo;t have a confirmed Asset / Liability &amp; Equity

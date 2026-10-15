@@ -69,24 +69,35 @@ export function resolveBsLi(lineItems: LineItem[]): BsLi {
   return { assets, liabilityEquity, unclassified };
 }
 
-/** The most recent "as of" snapshot period that this business unit has any record for. */
-export function latestAsOfPeriod(periods: Period[], buId: number, records: FinancialRecord[]): Period | null {
+/** Every "as of" snapshot period this business unit has records for, oldest first. */
+export function allAsOfPeriods(periods: Period[], buId: number, records: FinancialRecord[]): Period[] {
   const periodById = new Map(periods.map((p) => [p.id, p]));
   const candidateIds = new Set(
     records.filter((r) => r.businessUnitId === buId).map((r) => r.periodId)
   );
-  let best: Period | null = null;
+  const result: Period[] = [];
   for (const pid of candidateIds) {
     const p = periodById.get(pid);
-    if (!p || p.periodType !== "custom") continue;
-    if (!best || p.endDate > best.endDate || (p.endDate === best.endDate && p.id > best.id)) best = p;
+    if (p && p.periodType === "custom") result.push(p);
   }
-  return best;
+  return result.sort((a, b) => a.endDate.localeCompare(b.endDate) || a.id - b.id);
+}
+
+/** The most recent "as of" snapshot period that this business unit has any record for. */
+export function latestAsOfPeriod(periods: Period[], buId: number, records: FinancialRecord[]): Period | null {
+  return allAsOfPeriods(periods, buId, records).at(-1) ?? null;
+}
+
+export interface BsLineTrendPoint {
+  periodId: number;
+  endDate: string;
+  value: number | null;
 }
 
 export interface BsRow {
   name: string;
   value: number | null;
+  trend: BsLineTrendPoint[];
 }
 
 export interface BalanceSheet {
@@ -100,10 +111,14 @@ export interface BalanceSheet {
   };
 }
 
-function rowsFor(idx: FrIndex, buId: number, periodId: number, items: BsLineItem[], sign: 1 | -1): BsRow[] {
+function rowsFor(idx: FrIndex, buId: number, periodId: number, items: BsLineItem[], sign: 1 | -1, asOfPeriods: Period[]): BsRow[] {
   return items.map((item) => {
     const raw = frGet(idx, buId, periodId, item.id);
-    return { name: item.name, value: raw == null ? null : raw * sign };
+    const trend = asOfPeriods.map((p) => {
+      const v = frGet(idx, buId, p.id, item.id);
+      return { periodId: p.id, endDate: p.endDate, value: v == null ? null : v * sign };
+    });
+    return { name: item.name, value: raw == null ? null : raw * sign, trend };
   });
 }
 
@@ -119,10 +134,10 @@ const sumRows = (rows: BsRow[]): number => rows.reduce((a, r) => a + (r.value ??
 // liability-classified ledgers (e.g. an overpaid "Salary Payable") can
 // legitimately carry the opposite sign in real data, and the unclassified
 // bucket's true nature isn't known well enough to flip with confidence.
-export function computeBalanceSheet(idx: FrIndex, buId: number, li: BsLi, periodId: number): BalanceSheet {
-  const assets = rowsFor(idx, buId, periodId, li.assets, -1);
-  const liabilityEquity = rowsFor(idx, buId, periodId, li.liabilityEquity, 1);
-  const unclassified = rowsFor(idx, buId, periodId, li.unclassified, 1);
+export function computeBalanceSheet(idx: FrIndex, buId: number, li: BsLi, periodId: number, asOfPeriods: Period[] = []): BalanceSheet {
+  const assets = rowsFor(idx, buId, periodId, li.assets, -1, asOfPeriods);
+  const liabilityEquity = rowsFor(idx, buId, periodId, li.liabilityEquity, 1, asOfPeriods);
+  const unclassified = rowsFor(idx, buId, periodId, li.unclassified, 1, asOfPeriods);
   const totalAssets = sumRows(assets);
   const totalLiabilityEquity = sumRows(liabilityEquity);
   return {
