@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { ClipboardList } from "lucide-react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
@@ -44,9 +46,20 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          {heading} · {label}
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            {heading} · {label}
+          </p>
+          {deptKey === "pottery" && (
+            <Link
+              to="/ops/production"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              Daily production log
+            </Link>
+          )}
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {fys.map((y) => (
             <button
