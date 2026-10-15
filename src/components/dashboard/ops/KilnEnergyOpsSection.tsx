@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Brush, ResponsiveContainer } from "recharts";
 import { Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
+import ExportButtons from "@/components/dashboard/ExportButtons";
+import type { ExportSheet } from "@/lib/dataExport";
 import { getKilnSummary, type KilnSummary, type DailyKilnLoad, type DailyFiringType } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
 
@@ -160,9 +162,26 @@ export default function KilnEnergyOpsSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Kiln &amp; energy
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Kiln &amp; energy
+          </p>
+          <ExportButtons
+            filenameBase={`kiln-energy-${fy}`}
+            sheets={[
+              {
+                name: "Kiln loads",
+                columns: ["Date", ...KILN_ORDER],
+                rows: chartData.map((row) => [String(row.date), ...KILN_ORDER.map((k) => (row[k] as number | undefined) ?? null)]),
+              },
+              {
+                name: "Firing type mix",
+                columns: ["Date", ...FIRING_TYPE_ORDER],
+                rows: chartData.map((row) => [String(row.date), ...FIRING_TYPE_ORDER.map((t) => (row[t] as number | undefined) ?? null)]),
+              },
+            ] satisfies ExportSheet[]}
+          />
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {availableFys.map((y) => (
             <button

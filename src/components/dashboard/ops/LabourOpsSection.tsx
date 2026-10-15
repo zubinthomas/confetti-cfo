@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
+import ExportButtons from "@/components/dashboard/ExportButtons";
+import type { ExportSheet } from "@/lib/dataExport";
 import { getLabourSummary, type LabourSummary } from "@/api/opsApi";
 
 function weekdayLabel(iso: string): string {
@@ -54,23 +56,33 @@ export default function LabourOpsSection() {
 
   return (
     <div className="space-y-6">
-      {data.weeks.length > 1 && (
-        <div className="flex gap-1.5 flex-wrap">
-          {data.weeks.map((w) => (
-            <button
-              key={w}
-              onClick={() => setSelectedWeek(w)}
-              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                w === data.week
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              Week of {w}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <ExportButtons
+          filenameBase={`labour-${data.week ?? "roster"}`}
+          sheets={[
+            { name: "Daily headcount", columns: ["Date", "Day", "Total"], rows: dailyTotals.map((d) => [d.date, d.label, d.total]) },
+            { name: "By functional area", columns: ["Functional Area", "Person-days"], rows: areaTotals.map(([area, count]) => [area, count]) },
+            { name: "Weekly offs", columns: ["Day", "Count"], rows: data.weeklyOffs.map((w) => [w.weeklyOffDay, w.count]) },
+          ] satisfies ExportSheet[]}
+        />
+        {data.weeks.length > 1 && (
+          <div className="flex gap-1.5 flex-wrap">
+            {data.weeks.map((w) => (
+              <button
+                key={w}
+                onClick={() => setSelectedWeek(w)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  w === data.week
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                Week of {w}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <p className="text-sm text-muted-foreground">
         Planned staffing by functional area and day, from the weekly roster - not actual attendance

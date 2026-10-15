@@ -2,10 +2,11 @@ import React, { useMemo } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
+import ExportButtons from "./ExportButtons";
 import PageSpinner from "./PageSpinner";
 import { L, buildFrIndex } from "@/data/seriesKernel";
 import {
-  allAsOfPeriods, computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi,
+  allAsOfPeriods, balanceSheetExportSheets, computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi,
   type BalanceSheet, type BsLineTrendPoint,
 } from "@/data/balanceSheet";
 import { useReferenceData } from "@/hooks/useReferenceData";
@@ -61,9 +62,12 @@ export default function BalanceSheetPage() {
 
   return (
     <div className="space-y-6">
-      <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-        Balance Sheet · As of {asOf.endDate}
-      </p>
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Balance Sheet · As of {asOf.endDate}
+        </p>
+        <ExportButtons filenameBase={`balance-sheet-as-of-${asOf.endDate}`} sheets={balanceSheetExportSheets(data)} />
+      </div>
       <BsDetail data={data} />
     </div>
   );

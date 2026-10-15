@@ -3,6 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, Brush, ResponsiveContainer } from
 import { Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
+import ExportButtons from "@/components/dashboard/ExportButtons";
+import type { ExportSheet } from "@/lib/dataExport";
 import { getProductionSummary, type ProductionSummary } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
 
@@ -163,9 +165,21 @@ export default function ProductionOpsSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Daily production
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Daily production
+          </p>
+          <ExportButtons
+            filenameBase={`production-ops-${fy}`}
+            sheets={[{
+              name: "Daily production",
+              columns: ["Date", ...STAGE_ORDER.map((s) => STAGE_LABELS[s])],
+              rows: chartData.map((row) => [
+                String(row.date), ...STAGE_ORDER.map((s) => (row[s] as number | undefined) ?? null),
+              ]),
+            } satisfies ExportSheet]}
+          />
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {availableFys.map((y) => (
             <button

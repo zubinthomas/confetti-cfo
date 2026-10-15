@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
+import ExportButtons from "./ExportButtons";
 import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
+import type { ExportSheet } from "@/lib/dataExport";
 import { useStoreData, STORE_FYS } from "@/hooks/useStoreData";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useSalesRecords } from "@/hooks/useSalesRecords";
@@ -165,6 +167,22 @@ export default function StoreTab() {
   const STORE = storeFinancialsByFy[fy];
   const CATEGORIES = categoriesByFy[fy];
 
+  const salesSheet: ExportSheet = {
+    name: "Sales by channel",
+    columns: ["Month", ...Object.keys(FY.channels)],
+    rows: FY.months.map((m, i) => [m, ...Object.keys(FY.channels).map((ch) => FY.channels[ch][i])]),
+  };
+  const storeExportSheets: ExportSheet[] = STORE.hasMonthlyDetail
+    ? [salesSheet, {
+        name: "Department financials",
+        columns: ["Month", "Total Sales", "Raw Material", "Trading Items", "Direct Expenses", "HR Cost", "Site Cost", "Total Expense", "P&L", "P&L %"],
+        rows: MONTHS.map((m, i) => [
+          m, STORE.totalSales[i], STORE.rawMaterial[i], STORE.tradingItems[i], STORE.directExpenses[i],
+          STORE.hrCost[i], STORE.siteCost[i], STORE.totalExpense[i], STORE.profitLoss[i], STORE.plPct[i],
+        ]),
+      }]
+    : [salesSheet];
+
   const t = FY.totals;
   const pieData = Object.entries(t)
     .filter(([k]) => k !== "Total" && k !== "JP Store")
@@ -279,9 +297,12 @@ export default function StoreTab() {
     <div className="space-y-6">
       <div>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Sienna Store - Sales Analysis · {FY.label}
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Sienna Store - Sales Analysis · {FY.label}
+            </p>
+            <ExportButtons filenameBase={`store-${fy}`} sheets={storeExportSheets} />
+          </div>
           {fyChipRow}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

@@ -5,10 +5,11 @@ import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import StatusRow from "./StatusRow";
+import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
 import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
-import { computeDeptFinancials, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
+import { computeDeptFinancials, deptFinancialsExportSheets, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
@@ -58,6 +59,9 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
               <ClipboardList className="w-3.5 h-3.5" />
               Daily production log
             </Link>
+          )}
+          {data.hasMonthlyDetail && (
+            <ExportButtons filenameBase={`${deptKey}-${fy}`} sheets={deptFinancialsExportSheets(data)} />
           )}
         </div>
         <div className="flex gap-1.5 flex-wrap">

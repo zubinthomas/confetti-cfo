@@ -7,6 +7,7 @@
 // of flagging ambiguous Tally mappings instead of guessing wrong.
 import { frGet, type FrIndex } from "./seriesKernel";
 import type { BusinessUnit, FinancialRecord, LineItem, Period } from "./types";
+import type { ExportSheet } from "@/lib/dataExport";
 
 export const CEPL_ID = 1;
 const BS_UNIT_NAME = "Balance Sheet";
@@ -146,4 +147,26 @@ export function computeBalanceSheet(idx: FrIndex, buId: number, li: BsLi, period
     imbalance: totalAssets - totalLiabilityEquity,
     lines: { assets, liabilityEquity, unclassified },
   };
+}
+
+const SECTION_LABELS = { assets: "Assets", liabilityEquity: "Liabilities & Equity", unclassified: "Unclassified" } as const;
+
+export function balanceSheetExportSheets(bs: BalanceSheet): ExportSheet[] {
+  const sections = Object.keys(SECTION_LABELS) as (keyof typeof SECTION_LABELS)[];
+
+  const snapshot: ExportSheet = {
+    name: "Balance Sheet",
+    columns: ["Section", "Line", "Value"],
+    rows: sections.flatMap((s) => bs.lines[s].map((r) => [SECTION_LABELS[s], r.name, r.value])),
+  };
+
+  const trend: ExportSheet = {
+    name: "Trend",
+    columns: ["Section", "Line", "As Of", "Value"],
+    rows: sections.flatMap((s) =>
+      bs.lines[s].flatMap((r) => r.trend.map((pt) => [SECTION_LABELS[s], r.name, pt.endDate, pt.value])),
+    ),
+  };
+
+  return [snapshot, trend];
 }

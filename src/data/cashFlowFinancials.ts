@@ -15,6 +15,7 @@
 // surface instead of invented numbers.
 import { MONTHS, frGet, sum, fyLabel, type FrIndex } from "./seriesKernel";
 import type { BusinessUnit, LineItem } from "./types";
+import type { ExportSheet } from "@/lib/dataExport";
 import { computeFabMonthly, resolveFnbBu, resolveFabLi, type FabLi } from "./fabData";
 import { computeStoreYear, resolveStoreBu, resolveStoreLi, type StoreLi } from "./storeFinancials";
 import { computeDeptFinancials, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptLi } from "./deptFinancials";
@@ -123,6 +124,25 @@ export function computeCashFlowForFY(
 // payables, loan schedule or opening cash, so true cash-position /
 // working-capital metrics are NOT derivable - the Cash Flow page and the AI
 // context builder surface this list instead of inventing numbers.
+export function cashFlowExportSheets(data: CashFlowYearData): ExportSheet[] {
+  const monthly: ExportSheet = {
+    name: "Monthly",
+    columns: ["Month", "Inflows", "Outflows", "Net", "Cumulative"],
+    rows: data.months.map((m, i) => [m, data.inflows[i], data.outflows[i], data.net[i], data.cumulative[i]]),
+  };
+
+  const outflows: ExportSheet = {
+    name: "Outflow categories",
+    columns: ["Category", ...data.months, "Total"],
+    rows: [
+      ...data.outflowCategories.map((c) => [c.label, ...c.monthly, c.total]),
+      [data.gstMemo.label, ...data.gstMemo.monthly, data.gstMemo.total],
+    ],
+  };
+
+  return [monthly, outflows];
+}
+
 export const CASH_GAPS = [
   "Opening / current bank balance",
   "Accounts receivable & collection timing",

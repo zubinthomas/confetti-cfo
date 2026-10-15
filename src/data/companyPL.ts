@@ -13,6 +13,7 @@
 // would double it back into a profit.
 import { MONTHS, frGet, series, sum, type FrIndex, type Series } from "./seriesKernel";
 import type { BusinessUnit, LineItem } from "./types";
+import type { ExportSheet } from "@/lib/dataExport";
 
 export const CEPL_ID = 1;
 const CPL_UNIT_NAME = "Profit & Loss";
@@ -107,3 +108,32 @@ export function computeCompanyPL(idx: FrIndex, buId: number, lineItems: LineItem
 }
 
 export const CPL_MONTHS = MONTHS;
+
+const BREAKDOWN_CATEGORY_LABELS: Record<keyof CompanyPL["lineItemBreakdown"], string> = {
+  revenue: "Revenue",
+  cogs: "Direct / COGS expenses",
+  hrCost: "HR / payroll costs",
+  operatingCost: "Operating costs",
+  other: "Other income",
+};
+
+export function companyPLExportSheets(data: CompanyPL): ExportSheet[] {
+  const monthly: ExportSheet = {
+    name: "Monthly P&L",
+    columns: ["Month", "Revenue", "COGS", "HR Cost", "Operating Cost", "Other", "Gross Profit", "Total Expenses", "Net P&L"],
+    rows: MONTHS.map((m, i) => [
+      m, data.revenue[i], data.cogs[i], data.hrCost[i], data.operatingCost[i],
+      data.other[i], data.grossProfit[i], data.totalExpenses[i], data.netPL[i],
+    ]),
+  };
+
+  const breakdown: ExportSheet = {
+    name: "Line item breakdown",
+    columns: ["Category", "Line Item", "Total"],
+    rows: (Object.keys(data.lineItemBreakdown) as (keyof CompanyPL["lineItemBreakdown"])[]).flatMap((cat) =>
+      data.lineItemBreakdown[cat].map((item) => [BREAKDOWN_CATEGORY_LABELS[cat], item.name, item.total]),
+    ),
+  };
+
+  return [monthly, breakdown];
+}

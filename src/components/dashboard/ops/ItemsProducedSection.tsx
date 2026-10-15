@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
+import ExportButtons from "@/components/dashboard/ExportButtons";
 import { getItemsSummary, type ItemsSummary } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
 
@@ -68,9 +69,15 @@ export default function ItemsProducedSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Items produced
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Items produced
+          </p>
+          <ExportButtons
+            filenameBase={`items-produced-${fy}`}
+            sheets={[{ name: "Items produced", columns: ["Item", "Quantity"], rows: itemTotals.map((i) => [i.label, i.qty]) }]}
+          />
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {availableFys.map((y) => (
             <button

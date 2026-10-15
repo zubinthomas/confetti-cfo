@@ -14,6 +14,7 @@
 // name from live reference data - see the header note in fabData.ts for why.
 import { MONTHS, frGet, series, sum, type FrIndex, type Series } from "./seriesKernel";
 import type { BusinessUnit, LineItem } from "./types";
+import type { ExportSheet } from "@/lib/dataExport";
 
 export const CEPL_ID = 1;
 
@@ -109,4 +110,15 @@ export function computeDeptFinancials(
     netPL,
     netMarginPct,
   };
+}
+
+export function deptFinancialsExportSheets(data: DeptFinancials): ExportSheet[] {
+  return [{
+    name: "Monthly",
+    columns: ["Month", "Revenue", "COGS", "Gross Profit", "Gross Margin %", "Total Expenses", "Other Opex", "Net P&L", "Net Margin %"],
+    rows: data.months.map((m, i) => [
+      m, data.revenue[i], data.cogs[i], data.grossProfit[i], data.grossMarginPct[i],
+      data.totalExpenses[i], data.opexOther[i], data.netPL[i], data.netMarginPct[i],
+    ]),
+  }];
 }

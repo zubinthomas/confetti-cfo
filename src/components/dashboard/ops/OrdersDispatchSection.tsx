@@ -3,6 +3,8 @@ import { Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import ExportButtons from "@/components/dashboard/ExportButtons";
+import type { ExportSheet } from "@/lib/dataExport";
 import { getOrdersSummary, type OrdersSummary, type OrderLine } from "@/api/opsApi";
 
 const PIPELINE = ["green", "drawing", "bisque", "glazeApp", "glazeFiring", "ready"] as const;
@@ -99,12 +101,25 @@ export default function OrdersDispatchSection() {
     );
   }
 
+  const orderExportSheet: ExportSheet = {
+    name: "Order lines",
+    columns: ["Client", "Item", "Size", "Colour", "Order Qty", "Current Stage", "Dispatch Date", "Status", "Remarks"],
+    rows: filtered.map((o) => {
+      const stage = currentStage(o);
+      const status = isReady(o) ? "Ready" : isOverdue(o, today) ? "Overdue" : isDueSoon(o, today, in7) ? "Due soon" : "On track";
+      return [o.client, o.itemName, o.size, o.colour, o.orderQty, stage ? STAGE_LABEL[stage] : "Not started", o.dispatchDate, status, o.remarks];
+    }),
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Client orders
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Client orders
+          </p>
+          <ExportButtons filenameBase={`orders-${client}`} sheets={[orderExportSheet]} />
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {["All", ...clients].map((c) => (
             <button

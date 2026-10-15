@@ -2,10 +2,11 @@ import React, { useMemo, useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
+import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
 import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
-import { computeCompanyPL, resolveCplBu, resolveCplLi, type CompanyPL, type LineItemTotal } from "@/data/companyPL";
+import { computeCompanyPL, companyPLExportSheets, resolveCplBu, resolveCplLi, type CompanyPL, type LineItemTotal } from "@/data/companyPL";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import type { KpiData } from "./KpiCard";
@@ -77,9 +78,12 @@ export default function ProfitLossPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Company Profit &amp; Loss · {label}
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Company Profit &amp; Loss · {label}
+          </p>
+          <ExportButtons filenameBase={`profit-loss-${fy}`} sheets={companyPLExportSheets(data)} />
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {fys.map((y) => (
             <button

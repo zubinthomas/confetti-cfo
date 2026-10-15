@@ -2,9 +2,10 @@ import React, { useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
+import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
-import { CASH_GAPS, type CashFlowYearData } from "@/data/cashFlowFinancials";
+import { CASH_GAPS, cashFlowExportSheets, type CashFlowYearData } from "@/data/cashFlowFinancials";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useCashFlowYear } from "@/hooks/useCashFlowYear";
 import { MONTHS, L, sum, fyLabel } from "@/data/seriesKernel";
@@ -28,9 +29,14 @@ export default function CashFlowTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Group Money In / Money Out · {CUR.label} (P&L basis)
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Group Money In / Money Out · {CUR.label} (P&L basis)
+          </p>
+          {CUR.hasFullDetail && (
+            <ExportButtons filenameBase={`cash-flow-${fy}`} sheets={cashFlowExportSheets(CUR)} />
+          )}
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {fys.map((y) => (
             <button
