@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 const statusColors = {
   green: "text-emerald-600 dark:text-emerald-400",
@@ -13,11 +14,14 @@ export interface KpiData {
   value: React.ReactNode;
   sub?: React.ReactNode;
   status?: KpiStatus | null;
+  /** When set, the whole card links to this route (e.g. a drill-down into detail). */
+  href?: string;
 }
 
-export default function KpiCard({ label, value, sub = null, status = null }: KpiData) {
-  return (
-    <div className="min-w-0 bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-shadow">
+export default function KpiCard({ label, value, sub = null, status = null, href }: KpiData) {
+  const className = `block min-w-0 bg-card rounded-xl border border-border p-4 hover:shadow-sm transition-shadow${href ? " hover:border-primary/40" : ""}`;
+  const body = (
+    <>
       <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase mb-1.5">
         {label}
       </p>
@@ -29,6 +33,9 @@ export default function KpiCard({ label, value, sub = null, status = null }: Kpi
           {sub}
         </p>
       )}
-    </div>
+    </>
   );
+
+  if (href) return <Link to={href} className={className}>{body}</Link>;
+  return <div className={className}>{body}</div>;
 }

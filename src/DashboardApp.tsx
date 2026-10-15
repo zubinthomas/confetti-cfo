@@ -16,6 +16,8 @@ import PageNotFound from '@/lib/PageNotFound';
 import RequirePermission from '@/components/RequirePermission';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import OverviewTab from '@/components/dashboard/OverviewTab';
+import LeadershipCommandCentre from '@/components/dashboard/LeadershipCommandCentre';
+import { useAuth } from '@/lib/AuthContext';
 import RoadmapPage from '@/components/dashboard/RoadmapPage';
 import SiennaTab from '@/components/dashboard/SiennaTab';
 import StoreTab from '@/components/dashboard/StoreTab';
@@ -42,6 +44,18 @@ const AIQueriesTab = lazy(() => import('@/components/dashboard/AIQueriesTab'));
 const ImportPage = lazy(() => import('@/components/dashboard/ImportPage'));
 const TallyPage = lazy(() => import('@/components/dashboard/TallyPage'));
 
+const LEADERSHIP_ROLE_NAME = 'Leadership';
+
+// Chooses the default landing page by role. `user` is null on first paint
+// (auth.me() hasn't resolved yet via AuthContext's checkUserAuth) - this
+// falls back to OverviewTab harmlessly until it loads, then re-renders once,
+// same load-order behavior the nav's own can()-gated links already have.
+function HomeRouter() {
+  const { user } = useAuth();
+  const isLeadership = user?.roles.some((r) => r.name === LEADERSHIP_ROLE_NAME) ?? false;
+  return isLeadership ? <LeadershipCommandCentre /> : <OverviewTab />;
+}
+
 export default function DashboardApp() {
   useEffect(() => {
     const prefetch = () => {
@@ -61,7 +75,8 @@ export default function DashboardApp() {
     <Routes>
       <Route element={<DashboardShell />}>
         <Route element={<RequirePermission requires={[{ resource: 'FinancialRecord', action: 'read' }]} />}>
-          <Route index element={<OverviewTab />} />
+          <Route index element={<HomeRouter />} />
+          <Route path="leadership" element={<LeadershipCommandCentre />} />
           <Route path="fnb" element={<SiennaTab />} />
           <Route path="fnb/cafe" element={<CafePage />} />
           <Route path="fnb/restaurant" element={<RestaurantPage />} />
