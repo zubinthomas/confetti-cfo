@@ -7,6 +7,7 @@ import ExportButtons from "@/components/dashboard/ExportButtons";
 import type { ExportSheet } from "@/lib/dataExport";
 import { getProductionSummary, type ProductionSummary } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
+import { useFyParam } from "@/hooks/useFyParam";
 
 function shortDateTick(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -47,7 +48,6 @@ function pivotDaily(daily: ProductionSummary["daily"]) {
 export default function ProductionOpsSection() {
   const [data, setData] = useState<ProductionSummary | null>(null);
   const [error, setError] = useState("");
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -66,7 +66,7 @@ export default function ProductionOpsSection() {
     () => [...new Set(allPivoted.map((d) => fyOf(String(d.date))))].sort(),
     [allPivoted],
   );
-  const fy = selectedFy ?? availableFys.at(-1);
+  const [fy, setFy] = useFyParam(availableFys);
 
   const chartData = useMemo(
     () => (fy ? allPivoted.filter((d) => fyOf(String(d.date)) === fy) : []),
@@ -184,7 +184,7 @@ export default function ProductionOpsSection() {
           {availableFys.map((y) => (
             <button
               key={y}
-              onClick={() => setSelectedFy(y)}
+              onClick={() => setFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

@@ -6,6 +6,7 @@ import ExportButtons from "@/components/dashboard/ExportButtons";
 import type { ExportSheet } from "@/lib/dataExport";
 import { getKilnSummary, type KilnSummary, type DailyKilnLoad, type DailyFiringType } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
+import { useFyParam } from "@/hooks/useFyParam";
 
 function shortDateTick(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -53,7 +54,6 @@ function pivotDaily(kilnLoads: DailyKilnLoad[], firingTypes: DailyFiringType[]) 
 export default function KilnEnergyOpsSection() {
   const [data, setData] = useState<KilnSummary | null>(null);
   const [error, setError] = useState("");
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -75,7 +75,7 @@ export default function KilnEnergyOpsSection() {
     () => [...new Set(allPivoted.map((d) => fyOf(String(d.date))))].sort(),
     [allPivoted],
   );
-  const fy = selectedFy ?? availableFys.at(-1);
+  const [fy, setFy] = useFyParam(availableFys);
 
   const chartData = useMemo(
     () => (fy ? allPivoted.filter((d) => fyOf(String(d.date)) === fy) : []),
@@ -186,7 +186,7 @@ export default function KilnEnergyOpsSection() {
           {availableFys.map((y) => (
             <button
               key={y}
-              onClick={() => setSelectedFy(y)}
+              onClick={() => setFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

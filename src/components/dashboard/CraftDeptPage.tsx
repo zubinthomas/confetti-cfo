@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ClipboardList } from "lucide-react";
 import KpiCard from "./KpiCard";
@@ -12,6 +12,7 @@ import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIn
 import { computeDeptFinancials, deptFinancialsExportSheets, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useFyParam } from "@/hooks/useFyParam";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
@@ -24,8 +25,7 @@ import {
 export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; heading: string }) {
   const { data: ref } = useReferenceData();
   const fys = useOverviewFiscalYears();
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? fys?.at(-1);
+  const [fy, setFy] = useFyParam(fys);
 
   const deptBu = ref ? resolveDeptBu(ref.businessUnits) : null;
   const { data: records } = useFinancialRecords({
@@ -53,7 +53,7 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
           </p>
           {deptKey === "pottery" && (
             <Link
-              to="/ops/production"
+              to={`/ops/production?fy=${fy}`}
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
               <ClipboardList className="w-3.5 h-3.5" />
@@ -68,7 +68,7 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
           {fys.map((y) => (
             <button
               key={y}
-              onClick={() => setSelectedFy(y)}
+              onClick={() => setFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
@@ -7,6 +7,7 @@ import TargetsView from "./TargetsView";
 import LeadershipCommandCentre from "./LeadershipCommandCentre";
 import { useAuth } from "@/lib/AuthContext";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useFyParam } from "@/hooks/useFyParam";
 import { useOverviewYear } from "@/hooks/useOverviewYear";
 import { useFnbStoreHistory } from "@/hooks/useFnbStoreHistory";
 import { useReferenceData } from "@/hooks/useReferenceData";
@@ -59,8 +60,10 @@ function GroupOverview() {
   // does), so it's excluded here to avoid double-counting it as a duplicate
   // chip and to keep the default landing year on the last complete one.
   const realFys = fys?.filter((y) => y !== "2026-2027");
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? realFys?.at(-1) ?? fys?.at(-1);
+  const [fy, setFy] = useFyParam(
+    realFys && [...realFys, "2026-2027"],
+    realFys?.at(-1) ?? fys?.at(-1),
+  );
   const isTargetsFy = fy === "2026-2027";
   const fyIdx = fys && fy ? fys.indexOf(fy) : -1;
   const prevFY = fys && fyIdx > 0 ? fys[fyIdx - 1] : null;
@@ -83,7 +86,7 @@ function GroupOverview() {
       {[...(realFys ?? []), "2026-2027"].map((y) => (
         <button
           key={y}
-          onClick={() => setSelectedFy(y)}
+          onClick={() => setFy(y)}
           className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
             y === fy
               ? "bg-primary text-primary-foreground border-primary"

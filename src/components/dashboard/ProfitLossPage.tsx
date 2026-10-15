@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
@@ -7,6 +7,7 @@ import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
 import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
 import { computeCompanyPL, companyPLExportSheets, resolveCplBu, resolveCplLi, type CompanyPL, type LineItemTotal } from "@/data/companyPL";
+import { useFyParam } from "@/hooks/useFyParam";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import type { KpiData } from "./KpiCard";
@@ -48,8 +49,7 @@ export default function ProfitLossPage() {
     return [...set].sort();
   }, [ref, records, cplBu]);
 
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? fys?.at(-1);
+  const [fy, setFy] = useFyParam(fys);
 
   const data = useMemo(() => {
     if (!ref || !records || !fy || cplBu < 0) return null;
@@ -88,7 +88,7 @@ export default function ProfitLossPage() {
           {fys.map((y) => (
             <button
               key={y}
-              onClick={() => setSelectedFy(y)}
+              onClick={() => setFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

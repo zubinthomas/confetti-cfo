@@ -164,12 +164,12 @@ function Detail({
   const cashFyNet = cashHasDetail ? sum(cashFlow!.inflows) - sum(cashFlow!.outflows) : 0;
 
   const kpis: KpiData[] = [
-    { label: "Company Revenue (FY, Tally)", value: `₹${L(fyRevenue)}`, href: "/finance/profit-loss" },
+    { label: "Company Revenue (FY, Tally)", value: `₹${L(fyRevenue)}`, href: `/finance/profit-loss?fy=${companyPLFy}` },
     {
       label: "Net Margin (FY, Tally)",
       value: pct(fyNetMarginPct),
       status: fyNetMarginPct >= 0 ? "green" : "red",
-      href: "/finance/profit-loss",
+      href: `/finance/profit-loss?fy=${companyPLFy}`,
     },
     {
       label: `Total Assets${balanceSheetAsOfLabel ? ` (${balanceSheetAsOfLabel})` : ""}`,
@@ -186,14 +186,14 @@ function Detail({
       label: `Group Cash Net${cashFlow ? ` (${cashFlow.label}, P&L basis)` : ""}`,
       value: cashHasDetail ? `₹${L(cashFyNet)}` : "Not available",
       status: cashHasDetail ? (cashFyNet >= 0 ? "green" : "red") : null,
-      href: cashHasDetail ? "/cashflow" : undefined,
+      href: cashHasDetail ? `/cashflow?fy=${cashFlow!.fy}` : undefined,
     },
     {
       label: "Store + F&B vs Target (FY 26-27)",
       value: storeFnbTarget ? `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)}` : "Not available",
       sub: "Store + F&B retail/outlet scope only",
       status: storeFnbTarget ? (storeFnbTarget.gap >= 0 ? "green" : "amber") : null,
-      href: "/store",
+      href: "/store?fy=2026-2027",
     },
   ];
 

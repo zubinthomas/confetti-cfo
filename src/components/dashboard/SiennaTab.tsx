@@ -6,6 +6,7 @@ import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
 import { MenuMixCard } from "@/components/fnb/OutletPage";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
+import { useFyParam } from "@/hooks/useFyParam";
 import { useFabYear } from "@/hooks/useFabYear";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
@@ -53,8 +54,8 @@ export default function SiennaTab() {
   // history-list row, and - since it'd otherwise be the newest entry - the
   // page's default landing year instead of the last complete one).
   const realFys = fys?.filter((y) => y !== "2026-2027");
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? realFys?.at(-1) ?? fys?.at(-1);
+  const fyChips = realFys && [...realFys, "2026-2027"];
+  const [fy, setFy] = useFyParam(fyChips, realFys?.at(-1) ?? fys?.at(-1));
   const isTargetsFy = fy === "2026-2027";
   const FAB = useFabYear(fy);
 
@@ -107,13 +108,12 @@ export default function SiennaTab() {
       ]
     : [];
 
-  const fyChips = [...realFys!, "2026-2027"];
   const fyChipRow = (
     <div className="flex gap-1.5 flex-wrap">
-      {fyChips.map((y) => (
+      {fyChips!.map((y) => (
         <button
           key={y}
-          onClick={() => setSelectedFy(y)}
+          onClick={() => setFy(y)}
           className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
             y === fy
               ? "bg-primary text-primary-foreground border-primary"

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
@@ -8,6 +8,7 @@ import PageSpinner from "./PageSpinner";
 import { CASH_GAPS, cashFlowExportSheets, type CashFlowYearData } from "@/data/cashFlowFinancials";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useCashFlowYear } from "@/hooks/useCashFlowYear";
+import { useFyParam } from "@/hooks/useFyParam";
 import { MONTHS, L, sum, fyLabel } from "@/data/seriesKernel";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
@@ -20,8 +21,7 @@ const CAT_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4", "#10b
 
 export default function CashFlowTab() {
   const fys = useOverviewFiscalYears();
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
-  const fy = selectedFy ?? fys?.at(-1);
+  const [fy, setFy] = useFyParam(fys);
   const CUR = useCashFlowYear(fy);
 
   if (!fys || !fy || !CUR) return <PageSpinner />;
@@ -41,7 +41,7 @@ export default function CashFlowTab() {
           {fys.map((y) => (
             <button
               key={y}
-              onClick={() => setSelectedFy(y)}
+              onClick={() => setFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

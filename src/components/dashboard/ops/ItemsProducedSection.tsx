@@ -5,6 +5,7 @@ import DashCard from "@/components/dashboard/DashCard";
 import ExportButtons from "@/components/dashboard/ExportButtons";
 import { getItemsSummary, type ItemsSummary } from "@/api/opsApi";
 import { fyOf, fyLabel } from "@/components/dashboard/ops/fiscalYear";
+import { useFyParam } from "@/hooks/useFyParam";
 
 // Product names are free text, hand-typed per row - real duplicates differ
 // only in case/whitespace ("cup" vs "Cup"). Grouping key folds those
@@ -19,7 +20,6 @@ function normalizeProductName(raw: string): { key: string; label: string } {
 export default function ItemsProducedSection() {
   const [data, setData] = useState<ItemsSummary | null>(null);
   const [error, setError] = useState("");
-  const [selectedFy, setSelectedFy] = useState<string | null>(null);
 
   useEffect(() => {
     getItemsSummary()
@@ -31,7 +31,7 @@ export default function ItemsProducedSection() {
     if (!data) return [];
     return [...new Set(data.items.map((r) => fyOf(r.date)))].sort();
   }, [data]);
-  const fy = selectedFy ?? availableFys.at(-1);
+  const [fy, setFy] = useFyParam(availableFys);
 
   const itemTotals = useMemo(() => {
     if (!data || !fy) return [];
@@ -82,7 +82,7 @@ export default function ItemsProducedSection() {
           {availableFys.map((y) => (
             <button
               key={y}
-              onClick={() => setSelectedFy(y)}
+              onClick={() => setFy(y)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                 y === fy
                   ? "bg-primary text-primary-foreground border-primary"

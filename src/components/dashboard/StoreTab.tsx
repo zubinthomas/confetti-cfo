@@ -7,6 +7,7 @@ import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
 import type { ExportSheet } from "@/lib/dataExport";
 import { useStoreData, STORE_FYS } from "@/hooks/useStoreData";
+import { useFyParam } from "@/hooks/useFyParam";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useSalesRecords } from "@/hooks/useSalesRecords";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
@@ -46,7 +47,7 @@ const STORE_FY_CHIPS = [...STORE_FYS, "2026-2027"];
 export default function StoreTab() {
   const storeData = useStoreData();
   const [view, setView] = useState("channels");
-  const [fy, setFy] = useState(STORE_FYS.at(-1)!);
+  const [fy, setFy] = useFyParam(STORE_FY_CHIPS, STORE_FYS.at(-1));
   const isTargetsFy = fy === "2026-2027";
 
   // FY26-27 Targets data - deliberately NOT reusing useStoreData's
@@ -56,7 +57,7 @@ export default function StoreTab() {
   const { data: sales2627 } = useSalesRecords({ fiscalYear: ["2026-2027"] });
   const { data: storeTargets2627 } = useRevenueTargets({ category: ["store"], fiscalYear: ["2026-2027"] });
 
-  if (!storeData) return <PageSpinner />;
+  if (!storeData || !fy) return <PageSpinner />;
 
   const { siennaStore, storeSalesByFy, categoriesByFy, storeHistory, aprilByFy, storeFinancialsByFy } = storeData;
 
