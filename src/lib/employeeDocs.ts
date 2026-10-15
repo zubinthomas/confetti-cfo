@@ -3,7 +3,12 @@
 // and MyProfile.tsx (an employee, for themselves only). No server
 // involvement: jsPDF builds the file directly in the browser and triggers
 // a download.
-import { jsPDF } from "jspdf";
+//
+// jsPDF is imported dynamically inside each generator below, not at module
+// scope - a static import here would pull jsPDF (plus its optional
+// html2canvas/dompurify deps, ~225KB combined, neither ever used by this
+// file) into every user's initial load just because HeadcountTab/MyProfile
+// import this module, even for users who never click "Download."
 
 const COMPANY_NAME = "Confetti Exports";
 
@@ -63,6 +68,7 @@ async function urlToImageData(url: string): Promise<{ dataUrl: string; format: s
 }
 
 export async function generateSalarySlip(employee: EmployeeDocInfo, record: PayrollSlipRecord) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 20;
@@ -154,6 +160,7 @@ export async function generateSalarySlip(employee: EmployeeDocInfo, record: Payr
 }
 
 export async function generateIdCard(employee: EmployeeDocInfo) {
+  const { jsPDF } = await import("jspdf");
   // CR80 card size (standard ID card), landscape.
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [85.6, 54] });
   const w = 85.6;

@@ -13,15 +13,19 @@ import { Navigate } from 'react-router-dom';
 import Login from '@/pages/Login';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
-import HR from '@/pages/HR';
-import Compliance from '@/pages/Compliance';
 import AcceptInvite from '@/pages/AcceptInvite';
-import MyProfile from '@/pages/MyProfile';
-import InventoryPage from '@/pages/Inventory';
-import ReservationsPage from '@/pages/Reservations';
 import { useReferenceData } from '@/hooks/useReferenceData';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
+// Code-split - none of these are visited by every user on every load, but
+// until now they shipped in the main bundle regardless. HR/MyProfile also
+// pull in jsPDF (see employeeDocs.ts) which no longer needs to load unless
+// one of these actually mounts.
+const HR = lazy(() => import('@/pages/HR'));
+const Compliance = lazy(() => import('@/pages/Compliance'));
+const MyProfile = lazy(() => import('@/pages/MyProfile'));
+const InventoryPage = lazy(() => import('@/pages/Inventory'));
+const ReservationsPage = lazy(() => import('@/pages/Reservations'));
 
 const Splash = ({ message }: { message?: string }) => (
   <div className="fixed inset-0 flex flex-col items-center justify-center gap-3">
@@ -101,22 +105,22 @@ const AuthenticatedApp = () => {
           { resource: 'LeaveRequest', action: 'read' },
           { resource: 'Recruitment', action: 'read' },
         ]} />}>
-          <Route path="/hr" element={<HR />} />
+          <Route path="/hr" element={<Suspense fallback={<Splash />}><HR /></Suspense>} />
         </Route>
         <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
-          <Route path="/compliance" element={<Compliance />} />
+          <Route path="/compliance" element={<Suspense fallback={<Splash />}><Compliance /></Suspense>} />
         </Route>
         <Route element={<RequirePermission requires={[{ resource: 'Inventory', action: 'read' }]} />}>
-          <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/inventory" element={<Suspense fallback={<Splash />}><InventoryPage /></Suspense>} />
         </Route>
         <Route element={<RequirePermission requires={[{ resource: 'Reservation', action: 'read' }]} />}>
-          <Route path="/reservations" element={<ReservationsPage />} />
+          <Route path="/reservations" element={<Suspense fallback={<Splash />}><ReservationsPage /></Suspense>} />
         </Route>
         {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
             Renders its own "not linked" message for anyone who navigates here
             without an employee link. Kept outside ReferenceDataGate below since
             it doesn't need the financial reference-data prerequisite. */}
-        <Route path="/me" element={<MyProfile />} />
+        <Route path="/me" element={<Suspense fallback={<Splash />}><MyProfile /></Suspense>} />
         {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
         <Route path="/*" element={<ReferenceDataGate />} />
       </Route>
