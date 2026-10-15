@@ -30,6 +30,7 @@ import opsDataRoutes from './routes/opsData.ts';
 import rosterRoutes from './routes/roster.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { startCalendarScheduler } from './calendar/scheduler.ts';
+import { startImportBatchPruneScheduler } from './import/pruneScheduler.ts';
 import { config } from 'dotenv';
 
 config()
@@ -84,6 +85,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Express server running on http://localhost:${PORT}`);
   startSheetsScheduler();
   startCalendarScheduler();
+  startImportBatchPruneScheduler();
 });
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
