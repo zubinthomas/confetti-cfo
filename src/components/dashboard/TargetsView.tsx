@@ -7,6 +7,8 @@
 import React from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
+import TargetRevisionPanel from "./TargetRevisionPanel";
+import TrackerImportBadge from "./TrackerImportBadge";
 import { MONTHS, L } from "@/data/seriesKernel";
 import { projectionSeries, computeGap } from "@/data/revenueTargets";
 import { useImportFreshness } from "@/hooks/useImportFreshness";
@@ -44,10 +46,15 @@ export interface TargetsViewProps {
   // multi-business callers (Overview) whose `actual` may sum only whichever
   // business has data for a given month.
   growthRateActual?: (number | null)[];
+  // The raw revenue_targets category ("store"|"fnb") this view's `target`
+  // series comes from - needed for the revision-history/revise action on the
+  // current month's Target card. Omitted by Overview's combined Store+F&B
+  // view, whose target is a derived sum with no single row to revise.
+  category?: "store" | "fnb";
 }
 
 export default function TargetsView({
-  categoryLabel, fyLabel, periods, periodIds, actual, target, priorYearLabel, priorYearActual, growthRateActual,
+  categoryLabel, fyLabel, periods, periodIds, actual, target, priorYearLabel, priorYearActual, growthRateActual, category,
 }: TargetsViewProps) {
   const today = new Date();
   const { series: projection, growthRateSource } = projectionSeries(actual, priorYearActual, target, periods, periodIds, today, growthRateActual);
@@ -100,7 +107,8 @@ export default function TargetsView({
       {
         label: "Gap vs Target",
         value: g == null ? "-" : `${g >= 0 ? "+" : ""}${L(g)}`,
-        status: g == null ? null : g >= 0 ? "green" : "red",
+        sub: g == null ? "No target set" : undefined,
+        status: g == null ? "grey" : g >= 0 ? "green" : "red",
         definition: "This month's projection minus its target.",
         ...freshness,
       },
@@ -150,9 +158,23 @@ export default function TargetsView({
         </div>
       )}
 
+      <div className="flex justify-end">
+        <TrackerImportBadge freshness={freshness} />
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
+
+      {category && currentIdx >= 0 && (
+        <div className="flex justify-end -mt-3">
+          <TargetRevisionPanel
+            periodId={periodIds[currentIdx]}
+            category={category}
+            label={`${MONTHS[currentIdx]} ${categoryLabel} Target`}
+          />
+        </div>
+      )}
 
       <DashCard title={`${categoryLabel} - Target vs Projection (${fyLabel})`}>
         <p className="text-xs text-muted-foreground -mt-1 mb-2">

@@ -5,6 +5,7 @@ import StatusRow, { type StatusRowData } from "./StatusRow";
 import ExportButtons from "./ExportButtons";
 import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
+import TrackerImportBadge from "./TrackerImportBadge";
 import type { ExportSheet } from "@/lib/dataExport";
 import { useStoreData, STORE_FYS } from "@/hooks/useStoreData";
 import { useFyParam } from "@/hooks/useFyParam";
@@ -118,14 +119,18 @@ export default function StoreTab() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Sienna Store - Sales Analysis · FY 26-27
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Sienna Store - Sales Analysis · FY 26-27
+            </p>
+            <TrackerImportBadge freshness={freshness} />
+          </div>
           {fyChipRow}
         </div>
         {ref && sales2627 && storeTargets2627 ? (
           <TargetsView
             categoryLabel="Store"
+            category="store"
             fyLabel="FY 26-27"
             periods={ref.periods}
             periodIds={targetsPeriodIds}
@@ -327,6 +332,7 @@ export default function StoreTab() {
               Sienna Store - Sales Analysis · {FY.label}
             </p>
             <ExportButtons filenameBase={`store-${fy}`} sheets={storeExportSheets} />
+            <TrackerImportBadge freshness={freshness} />
           </div>
           {fyChipRow}
         </div>

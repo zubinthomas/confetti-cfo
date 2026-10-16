@@ -1,9 +1,14 @@
 import React, { useMemo } from "react";
+import { Link } from "react-router-dom";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
-import StatusRow, { type StatusRowData } from "./StatusRow";
+import StatusBadge from "./StatusBadge";
+import type { StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
+import ReconciledBadge from "./ReconciledBadge";
+import ExceptionAssignmentPanel from "./ExceptionAssignmentPanel";
 import { useReferenceData } from "@/hooks/useReferenceData";
+import { useExceptionAssignments } from "@/hooks/useExceptionAssignments";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
@@ -15,6 +20,7 @@ import { targetSeries } from "@/data/revenueTargets";
 import { UNAVAILABLE_METRICS, type StoreFnbTargetPace } from "@/data/leadershipOverview";
 import { L, pct, sum, buildFrIndex, monthPeriodIds } from "@/data/seriesKernel";
 import type { CashFlowYearData } from "@/data/cashFlowFinancials";
+import type { Period } from "@/data/types";
 import { useImportFreshness } from "@/hooks/useImportFreshness";
 
 // Leadership's single landing view: the five standing questions from the
@@ -136,6 +142,7 @@ export default function LeadershipCommandCentre() {
       companyPLFy={companyPLFy}
       balanceSheet={balanceSheet}
       balanceSheetAsOfLabel={bsAsOf ? bsAsOf.endDate : null}
+      bsAsOf={bsAsOf ?? null}
       cashFlow={cashFlow ?? null}
       storeFnbTarget={storeFnbTarget}
     />
@@ -143,12 +150,13 @@ export default function LeadershipCommandCentre() {
 }
 
 function Detail({
-  companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel, cashFlow, storeFnbTarget,
+  companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel, bsAsOf, cashFlow, storeFnbTarget,
 }: {
   companyPL: CompanyPL;
   companyPLFy: string;
   balanceSheet: BalanceSheet | null;
   balanceSheetAsOfLabel: string | null;
+  bsAsOf: Period | null;
   cashFlow: CashFlowYearData | null;
   storeFnbTarget: StoreFnbTargetPace | null;
 }) {
@@ -191,6 +199,8 @@ function Detail({
     {
       label: `Total Assets${balanceSheetAsOfLabel ? ` (${balanceSheetAsOfLabel})` : ""}`,
       value: balanceSheet ? `₹${L(balanceSheet.totalAssets)}` : "Not available",
+      sub: balanceSheet ? undefined : "Not available",
+      status: balanceSheet ? undefined : "grey",
       href: balanceSheet ? "/finance/balance-sheet" : undefined,
       definition: "Total assets on the company balance sheet as of the latest Tally sync, before liabilities are subtracted.",
       ...plFreshness,
@@ -198,7 +208,8 @@ function Detail({
     {
       label: "Balance Check",
       value: balanceSheet ? (bsNearZero ? "Balanced" : `₹${L(balanceSheet.imbalance)} gap`) : "Not available",
-      status: balanceSheet ? (bsNearZero ? "green" : "amber") : null,
+      sub: balanceSheet ? undefined : "Not available",
+      status: balanceSheet ? (bsNearZero ? "green" : "amber") : "grey",
       href: balanceSheet ? "/finance/balance-sheet" : undefined,
       definition: "Confirms the balance sheet balances - total assets should equal total liabilities plus equity. A non-zero gap usually means data is still mid-import or a ledger entry is missing.",
       ...plFreshness,
@@ -206,7 +217,8 @@ function Detail({
     {
       label: `Group Cash Net${cashFlow ? ` (${cashFlow.label}, P&L basis)` : ""}`,
       value: cashHasDetail ? `₹${L(cashFyNet)}` : "Not available",
-      status: cashHasDetail ? (cashFyNet >= 0 ? "green" : "red") : null,
+      sub: cashHasDetail ? undefined : "Not available",
+      status: cashHasDetail ? (cashFyNet >= 0 ? "green" : "red") : "grey",
       href: cashHasDetail ? `/cashflow?fy=${cashFlow!.fy}` : undefined,
       definition: "Cash inflows minus outflows across all departments for the fiscal year, on a P&L (not bank-balance) basis - same figure as the Cash Flow page.",
       ...cashFreshness,
@@ -214,55 +226,111 @@ function Detail({
     {
       label: "Store + F&B vs Target (FY 26-27)",
       value: storeFnbTarget ? `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)}` : "Not available",
-      sub: "Store + F&B retail/outlet scope only",
-      status: storeFnbTarget ? (storeFnbTarget.gap >= 0 ? "green" : "amber") : null,
+      sub: storeFnbTarget ? "Store + F&B retail/outlet scope only" : "Not available",
+      status: storeFnbTarget ? (storeFnbTarget.gap >= 0 ? "green" : "amber") : "grey",
       href: "/store?fy=2026-2027",
       definition: "Actual Store and F&B retail/outlet revenue for FY 26-27 against the FY 26-27 target plan, elapsed months only. Not the same revenue figure as Company Revenue above.",
       ...storeFnbFreshness,
     },
   ];
 
-  const healthChecks: StatusRowData[] = [
+  // The three items below carry a reason/action/owner/deadline (Section 2's
+  // "red/amber exceptions carry a structured record") - scoped to this page's
+  // go-fix-it list specifically, not the other StatusRow call sites, which
+  // are page-local stats with no real destination to send someone to.
+  // "Company net margin" stays a bare StatusRowData: it has no separate page
+  // to link to (this page already is the company-margin view).
+  type HealthCheckItem = { row: StatusRowData; exceptionKey?: string; reason?: string; href?: string };
+  const { data: exceptionAssignments } = useExceptionAssignments();
+  const hasAssignment = (key: string) => exceptionAssignments?.some((a) => a.exceptionKey === key
+    && (a.ownerUserId != null || a.deadline != null || a.note != null));
+
+  const healthChecks: HealthCheckItem[] = [
     {
-      label: `Company net margin (${companyPLFy})`,
-      status: fyNetMarginPct >= 0 ? "green" : "red",
-      value: `${fyNetMarginPct.toFixed(1)}% - ${fyNetMarginPct >= 0 ? "profitable" : "loss-making"}`,
+      row: {
+        label: `Company net margin (${companyPLFy})`,
+        status: fyNetMarginPct >= 0 ? "green" : "red",
+        value: `${fyNetMarginPct.toFixed(1)}% - ${fyNetMarginPct >= 0 ? "profitable" : "loss-making"}`,
+      },
     },
   ];
   if (balanceSheet) {
     healthChecks.push({
-      label: "Balance Sheet check",
-      status: bsNearZero ? "green" : "amber",
-      value: bsNearZero ? "Balanced" : `₹${L(balanceSheet.imbalance)} gap`,
+      row: {
+        label: "Balance Sheet check",
+        status: bsNearZero ? "green" : "amber",
+        value: bsNearZero ? "Balanced" : `₹${L(balanceSheet.imbalance)} gap`,
+      },
+      exceptionKey: "balance-sheet-check",
+      reason: bsNearZero ? undefined : "Known reconciliation gap in Current Assets, traced to Sundry Debtors/Advance sub-ledgers with no parseable closing balance in Tally - see the Balance Sheet page.",
+      href: "/finance/balance-sheet",
     });
   }
   if (cashHasDetail) {
     healthChecks.push({
-      label: `Cash-negative months (${cashFlow!.label})`,
-      status: cashNegativeMonths > 3 ? "red" : cashNegativeMonths ? "amber" : "green",
-      value: `${cashNegativeMonths}/12`,
+      row: {
+        label: `Cash-negative months (${cashFlow!.label})`,
+        status: cashNegativeMonths > 3 ? "red" : cashNegativeMonths ? "amber" : "green",
+        value: `${cashNegativeMonths}/12`,
+      },
+      exceptionKey: "cash-negative-months",
+      href: `/cashflow?fy=${cashFlow!.fy}`,
     });
   }
   if (storeFnbTarget) {
     healthChecks.push({
-      label: "Store + F&B revenue vs target",
-      status: storeFnbTarget.gap >= 0 ? "green" : "amber",
-      value: `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)} vs target`,
+      row: {
+        label: "Store + F&B revenue vs target",
+        status: storeFnbTarget.gap >= 0 ? "green" : "amber",
+        value: `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)} vs target`,
+      },
+      exceptionKey: "store-fnb-vs-target",
+      href: "/store?fy=2026-2027",
     });
   }
 
   return (
     <div className="space-y-6">
-      <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase mb-3">
-        Leadership Command Centre
-      </p>
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Leadership Command Centre
+        </p>
+        <ReconciledBadge period={bsAsOf} />
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
       <DashCard title="Where to Intervene">
-        {healthChecks.map((s) => <StatusRow key={s.label} {...s} />)}
+        {healthChecks.map((item, i) => {
+          const showExtra = !!item.exceptionKey
+            && (item.row.status !== "green" || hasAssignment(item.exceptionKey));
+          return (
+            <div
+              key={item.row.label}
+              className={i < healthChecks.length - 1 ? "border-b border-border" : ""}
+            >
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-sm text-muted-foreground">{item.row.label}</span>
+                <StatusBadge status={item.row.status}>{item.row.value}</StatusBadge>
+              </div>
+              {showExtra && (
+                <div className="pb-3 -mt-1 space-y-1.5">
+                  {item.reason && <p className="text-xs text-muted-foreground">{item.reason}</p>}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {item.href && (
+                      <Link to={item.href} className="text-xs text-primary hover:underline shrink-0">
+                        View details
+                      </Link>
+                    )}
+                    <ExceptionAssignmentPanel exceptionKey={item.exceptionKey!} />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </DashCard>
 
       <DashCard title="Not Yet Available">

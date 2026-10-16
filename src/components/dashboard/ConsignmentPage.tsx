@@ -3,6 +3,7 @@ import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
+import TrackerImportBadge from "./TrackerImportBadge";
 import { useConsignmentData } from "@/hooks/useConsignmentData";
 import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { L } from "@/data/seriesKernel";
@@ -45,9 +46,12 @@ export default function ConsignmentPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Store - Consignment & Partner Brands
-        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Store - Consignment & Partner Brands
+          </p>
+          <TrackerImportBadge freshness={freshness} />
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {CONSIGNMENT.map((y, i) => (
             <button

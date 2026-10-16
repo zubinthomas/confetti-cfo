@@ -5,6 +5,7 @@ import PLRow from "./PLRow";
 import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
+import TrackerImportBadge from "./TrackerImportBadge";
 import FormField from "@/components/hr/FormField";
 import { CASH_GAPS, cashFlowExportSheets, type CashFlowYearData } from "@/data/cashFlowFinancials";
 import { computeCashForecast } from "@/data/cashForecast";
@@ -40,6 +41,7 @@ export default function CashFlowTab() {
   const fys = useOverviewFiscalYears();
   const [fy, setFy] = useFyParam(fys);
   const CUR = useCashFlowYear(fy);
+  const freshness = useImportFreshness(["cepl", "fnbMonthly", "fnbWeekly"]);
 
   if (!fys || !fy || !CUR) return <PageSpinner />;
 
@@ -50,6 +52,7 @@ export default function CashFlowTab() {
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Group Money In / Money Out · {CUR.label} (P&L basis)
           </p>
+          <TrackerImportBadge freshness={freshness} />
           {CUR.hasFullDetail && (
             <ExportButtons filenameBase={`cash-flow-${fy}`} sheets={cashFlowExportSheets(CUR)} />
           )}

@@ -4,6 +4,7 @@ import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import ExportButtons from "./ExportButtons";
 import PageSpinner from "./PageSpinner";
+import ReconciledBadge from "./ReconciledBadge";
 import { L, buildFrIndex } from "@/data/seriesKernel";
 import {
   allAsOfPeriods, balanceSheetExportSheets, computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi,
@@ -11,7 +12,7 @@ import {
 } from "@/data/balanceSheet";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
-import { useImportFreshness } from "@/hooks/useImportFreshness";
+import { useImportFreshness, downgradeIfStale } from "@/hooks/useImportFreshness";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 
@@ -67,6 +68,7 @@ export default function BalanceSheetPage() {
         <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           Balance Sheet · As of {asOf.endDate}
         </p>
+        <ReconciledBadge period={asOf} showAction />
         <ExportButtons filenameBase={`balance-sheet-as-of-${asOf.endDate}`} sheets={balanceSheetExportSheets(data)} />
       </div>
       <BsDetail data={data} />
@@ -80,7 +82,7 @@ function BsDetail({ data }: { data: BalanceSheet }) {
 
   const freshness = useImportFreshness(["tally"]);
 
-  const kpis: KpiData[] = [
+  const rawKpis: KpiData[] = [
     {
       label: "Total Assets",
       value: `₹${L(data.totalAssets)}`,
@@ -104,6 +106,7 @@ function BsDetail({ data }: { data: BalanceSheet }) {
       ...freshness,
     },
   ];
+  const kpis: KpiData[] = rawKpis.map((k) => ({ ...k, status: downgradeIfStale(k.status, freshness) }));
 
   const formatTrend = (trend: BsLineTrendPoint[]) => {
     if (trend.length < 2) return [];

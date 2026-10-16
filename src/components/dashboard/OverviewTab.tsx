@@ -5,6 +5,7 @@ import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
 import LeadershipCommandCentre from "./LeadershipCommandCentre";
+import TrackerImportBadge from "./TrackerImportBadge";
 import { useAuth } from "@/lib/AuthContext";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFyParam } from "@/hooks/useFyParam";
@@ -108,9 +109,12 @@ function GroupOverview() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Group Snapshot - FY 26-27
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Group Snapshot - FY 26-27
+            </p>
+            <TrackerImportBadge freshness={freshness} />
+          </div>
           {fyChipRow}
         </div>
         {ref && sales2627 && sales2526 && FAB2627 && FAB2526 && combinedTargets2627 ? (() => {
@@ -224,6 +228,7 @@ function GroupOverview() {
     {
       label: `F&B Revenue (${CUR.label})`, value: L(CUR.totals.fbSales), sub: `${fbMargin.toFixed(1)}% net margin`, status: "green",
       definition: "Total F&B sales across all departments for the fiscal year.",
+      href: `/fnb?fy=${fy}`,
       ...freshness,
     },
     {
@@ -233,16 +238,19 @@ function GroupOverview() {
         : "No prior year to compare",
       status: "green",
       definition: "Total Store sales for the fiscal year.",
+      href: `/store?fy=${fy}`,
       ...freshness,
     },
     {
       label: "F&B Net Profit (FY)", value: L(CUR.totals.fbPL), sub: `${fbMargin.toFixed(1)}% margin`, status: "green",
       definition: "F&B's net profit for the fiscal year, after all costs.",
+      href: `/fnb?fy=${fy}`,
       ...freshness,
     },
     {
       label: "Store Net P&L (FY)", value: L(CUR.totals.storePL), sub: `${storeMargin.toFixed(1)}% margin`, status: CUR.totals.storePL > 0 ? "green" : "amber",
       definition: "Store's net profit or loss for the fiscal year, after all costs.",
+      href: `/store?fy=${fy}`,
       ...freshness,
     },
   ];
@@ -251,6 +259,7 @@ function GroupOverview() {
       {
         label: `F&B Revenue (${latestMonthLabel})`, value: L(CUR.fb.sales[LATEST_IDX]), sub: `${CUR.fb.plPct[LATEST_IDX]}% net margin`, status: "green",
         definition: "F&B sales for the most recent month with data.",
+        href: `/fnb?fy=${fy}`,
         ...freshness,
       },
       {
@@ -258,6 +267,7 @@ function GroupOverview() {
         sub: `${(CUR.store.plPct[LATEST_IDX] as number) > 0 ? "+" : ""}${CUR.store.plPct[LATEST_IDX]}% margin`,
         status: (CUR.store.plPct[LATEST_IDX] as number) > 0 ? "green" : "amber",
         definition: "Store sales for the most recent month with data.",
+        href: `/store?fy=${fy}`,
         ...freshness,
       },
     );
@@ -289,9 +299,12 @@ function GroupOverview() {
       {/* KPIs */}
       <div>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Group Snapshot - {CUR.label}
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Group Snapshot - {CUR.label}
+            </p>
+            <TrackerImportBadge freshness={freshness} />
+          </div>
           {fyChipRow}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

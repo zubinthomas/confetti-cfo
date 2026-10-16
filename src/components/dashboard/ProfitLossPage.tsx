@@ -5,12 +5,13 @@ import PLRow from "./PLRow";
 import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
-import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
+import ReconciledBadge from "./ReconciledBadge";
+import { MONTHS, L, pct, sum, maxIdx, minIdx, lastValidIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
 import { computeCompanyPL, companyPLExportSheets, resolveCplBu, resolveCplLi, type CompanyPL, type LineItemTotal } from "@/data/companyPL";
 import { useFyParam } from "@/hooks/useFyParam";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
-import { useImportFreshness } from "@/hooks/useImportFreshness";
+import { useImportFreshness, downgradeIfStale } from "@/hooks/useImportFreshness";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 import {
@@ -76,6 +77,13 @@ export default function ProfitLossPage() {
 
   const label = fyLabel(fy);
 
+  // Reconciliation is period-level, but this page shows a whole fiscal year
+  // at once - key the badge/action off the most recent month that actually
+  // has data, since that's the close people are actually waiting on.
+  const fyPeriodIds = monthPeriodIds(ref.periods, fy);
+  const latestMonthIdx = lastValidIdx(data.netPL);
+  const currentPeriod = latestMonthIdx >= 0 ? ref.periods.find((p) => p.id === fyPeriodIds[latestMonthIdx]) : undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
@@ -83,6 +91,7 @@ export default function ProfitLossPage() {
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Company Profit &amp; Loss · {label}
           </p>
+          <ReconciledBadge period={currentPeriod} showAction />
           <ExportButtons filenameBase={`profit-loss-${fy}`} sheets={companyPLExportSheets(data)} />
         </div>
         <div className="flex gap-1.5 flex-wrap">
@@ -127,7 +136,7 @@ function PLDetail({ data, label }: { data: CompanyPL; label: string }) {
 
   const freshness = useImportFreshness(["tally"]);
 
-  const kpis: KpiData[] = [
+  const rawKpis: KpiData[] = [
     {
       label: `Revenue (${label})`,
       value: `₹${L(fyRevenue)}`,
@@ -183,6 +192,7 @@ function PLDetail({ data, label }: { data: CompanyPL; label: string }) {
       ...freshness,
     },
   ];
+  const kpis: KpiData[] = rawKpis.map((k) => ({ ...k, status: downgradeIfStale(k.status, freshness) }));
 
   const formatDetail = (items: LineItemTotal[]) =>
     items.map((it) => ({ label: it.name, value: `₹${L(it.total)}` }));

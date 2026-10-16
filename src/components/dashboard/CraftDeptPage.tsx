@@ -8,6 +8,7 @@ import StatusRow from "./StatusRow";
 import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
+import TrackerImportBadge from "./TrackerImportBadge";
 import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, fyDateRange, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
 import { computeDeptFinancials, deptFinancialsExportSheets, resolveDeptBu, resolveDeptLi, DEPT_BU_NAMES, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
 import { computeTheoreticalCogs, computeCogsVariance, type CogsVarianceResult } from "@/data/cogsVariance";
@@ -43,6 +44,8 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
     return computeDeptFinancials(idx, deptBu[deptKey], deptLi, deptKey, monthPeriodIds(ref.periods, fy));
   }, [ref, records, fy, deptKey, deptBu]);
 
+  const freshness = useImportFreshness(["cepl"]);
+
   if (!ref || !fys || !fy || !data) return <PageSpinner />;
 
   const label = fyLabel(fy);
@@ -54,6 +57,7 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             {heading} · {label}
           </p>
+          <TrackerImportBadge freshness={freshness} />
           {deptKey === "pottery" && (
             <Link
               to={`/ops/production?fy=${fy}`}
@@ -179,7 +183,7 @@ function DeptDetail({ data, label, deptKey, fy }: { data: DeptFinancials; label:
       sub: variance?.theoretical != null
         ? `₹${L(variance.theoretical)} theoretical vs ₹${L(fyCogs)} actual`
         : "No items tagged to this department yet",
-      status: variance?.variancePct == null ? undefined : Math.abs(variance.variancePct) <= 10 ? "green" : Math.abs(variance.variancePct) <= 25 ? "amber" : "red",
+      status: variance?.variancePct == null ? "grey" : Math.abs(variance.variancePct) <= 10 ? "green" : Math.abs(variance.variancePct) <= 25 ? "amber" : "red",
       definition: "Actual reported COGS vs. the inventory ledger's own quantity × cost for \"out\" transactions on items tagged to this department. Includes any waste recorded as a plain stock-out, since the ledger has no separate waste/spoilage category - a wide variance can mean waste, miscosted items, or items not yet tagged with a financial department.",
     },
   ];

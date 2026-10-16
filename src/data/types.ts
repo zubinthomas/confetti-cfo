@@ -12,6 +12,8 @@ export interface Period {
   label: string;
   fiscalYear: string;  // e.g. "2025-2026"
   isSpecialEvent: boolean;
+  reconciledAt: string | null; // ISO-8601; null = provisional
+  reconciledByUserId: number | null;
 }
 export type LineItemCategory = "revenue" | "cogs" | "hr_cost" | "operating_cost" | "subtotal" | "other";
 export interface LineItem {
@@ -60,4 +62,25 @@ export interface RevenueTarget {
   periodId: number;
   category: "store" | "fnb";
   targetAmount: number;
+}
+export interface RevenueTargetRevision {
+  id: string;
+  periodId: number;
+  category: "store" | "fnb";
+  targetAmount: number;
+  note: string | null;
+  createdDate: string; // ISO-8601
+  createdByName: string | null;
+  createdByEmail: string | null;
+}
+export interface ExceptionAssignment {
+  id: number;
+  exceptionKey: string;
+  ownerUserId: number | null;
+  ownerName: string | null;
+  ownerEmail: string | null;
+  deadline: string | null; // YYYY-MM-DD
+  note: string | null;
+  updatedByUserId: number | null;
+  updatedAt: string | null; // ISO-8601
 }

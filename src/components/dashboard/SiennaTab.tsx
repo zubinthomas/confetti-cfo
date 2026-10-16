@@ -4,6 +4,7 @@ import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
 import PageSpinner from "./PageSpinner";
 import TargetsView from "./TargetsView";
+import TrackerImportBadge from "./TrackerImportBadge";
 import { MenuMixCard } from "@/components/fnb/OutletPage";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFyParam } from "@/hooks/useFyParam";
@@ -154,9 +155,12 @@ export default function SiennaTab() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Sienna F&B - Monthly P&L · FY 26-27
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Sienna F&B - Monthly P&L · FY 26-27
+            </p>
+            <TrackerImportBadge freshness={freshness} />
+          </div>
           {fyChipRow}
         </div>
 
@@ -186,6 +190,7 @@ export default function SiennaTab() {
           ref && FAB2627 && FAB2526 && fnbTargets2627 ? (
             <TargetsView
               categoryLabel="F&B"
+              category="fnb"
               fyLabel="FY 26-27"
               periods={ref.periods}
               periodIds={targetsPeriodIds2627}
@@ -363,7 +368,7 @@ export default function SiennaTab() {
         sub: cogsVariance?.theoretical != null
           ? `${L(cogsVariance.theoretical)} theoretical vs ${L(fyCOGS)} actual`
           : "No items tagged to F&B yet",
-        status: cogsVariance?.variancePct == null ? undefined : Math.abs(cogsVariance.variancePct) <= 10 ? "green" : Math.abs(cogsVariance.variancePct) <= 25 ? "amber" : "red",
+        status: cogsVariance?.variancePct == null ? "grey" : Math.abs(cogsVariance.variancePct) <= 10 ? "green" : Math.abs(cogsVariance.variancePct) <= 25 ? "amber" : "red",
         definition: "Actual reported raw-material cost vs. the inventory ledger's own quantity × cost for \"out\" transactions on items tagged to F&B. Includes any waste recorded as a plain stock-out, since the ledger has no separate waste/spoilage category - a wide variance can mean waste, miscosted items, or items not yet tagged with a financial department.",
       },
     );
@@ -426,9 +431,12 @@ export default function SiennaTab() {
     <div className="space-y-6">
       <div>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Sienna F&B - Monthly P&L · {FAB.label}
-          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+              Sienna F&B - Monthly P&L · {FAB.label}
+            </p>
+            <TrackerImportBadge freshness={freshness} />
+          </div>
           {fyChipRow}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
