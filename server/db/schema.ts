@@ -50,6 +50,16 @@ export const periods = pgTable('periods', {
   label: text('label').notNull(),
   fiscalYear: text('fiscal_year').notNull(),
   isSpecialEvent: boolean('is_special_event').notNull(),
+  // Null = provisional (the default for every period, including all
+  // existing ones - no backfill). Set only via PATCH /api/periods/:id/reconcile
+  // (server/routes/periods.ts) - a manual, period-level close-off, not a
+  // per-financial-record flag (financial_records carries no link back to the
+  // import batch that produced it, so a finer-grained version isn't
+  // buildable without much bigger surgery). Un-reconciling (nulling both
+  // back out) is supported - Tally data can still be amended after a
+  // premature mark.
+  reconciledAt: text('reconciled_at'),
+  reconciledByUserId: integer('reconciled_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
 });
 
 export const lineItems = pgTable('line_items', {
@@ -80,6 +90,42 @@ export const revenueTargets = pgTable('revenue_targets', {
   targetAmount: doublePrecision('target_amount').notNull(),
 }, (t) => [
   uniqueIndex('revenue_targets_natural_key').on(t.periodId, t.category),
+]);
+
+// Append-only version history for revenue_targets - every change to a
+// (period, category) target appends a row here, whether it came from a
+// workbook import (server/import/merge.ts) or a manual revision (POST
+// /api/revenue-targets/:periodId/:category/revise, gated by RevenueTarget:
+// write). revenue_targets itself stays exactly as today (the "current" row,
+// natural-key upsert) - this is purely additive, same append-only philosophy
+// as inventory_transactions/bank_balance_entries. createdByUserId is null for
+// import-driven rows (no single person to attribute a workbook commit to).
+export const revenueTargetRevisions = pgTable('revenue_target_revisions', {
+  id: text('id').primaryKey(),
+  periodId: integer('period_id').notNull().references(() => periods.id, { onDelete: 'cascade' }),
+  category: revenueTargetCategoryEnum('category').notNull(),
+  targetAmount: doublePrecision('target_amount').notNull(),
+  note: text('note'),
+  createdDate: text('created_date').notNull(),
+  createdByUserId: integer('created_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+});
+
+// Current owner/deadline/note for a named recurring exception (e.g. a
+// Leadership Command Centre "Where to Intervene" item) - one mutable row per
+// exceptionKey, same "current state" shape as periods.reconciledAt rather
+// than a per-occurrence ticket log. Clearing an assignment means nulling its
+// fields back out via PATCH /api/exceptions/:key/assign, not deleting the
+// row (same convention as periods/bank accounts).
+export const exceptionAssignments = pgTable('exception_assignments', {
+  id: serial('id').primaryKey(),
+  exceptionKey: text('exception_key').notNull(),
+  ownerUserId: integer('owner_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  deadline: text('deadline'), // YYYY-MM-DD, nullable
+  note: text('note'),
+  updatedByUserId: integer('updated_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+  updatedAt: text('updated_at'),
+}, (t) => [
+  uniqueIndex('exception_assignments_key').on(t.exceptionKey),
 ]);
 
 export const categories = pgTable('categories', {

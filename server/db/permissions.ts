@@ -16,6 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
+  'Period', 'RevenueTarget', 'ExceptionAssignment',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -32,7 +33,13 @@ const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveReque
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
 // BankAccount: bank accounts aren't deletable, only deactivated (isActive on
 // the schema row) - no delete action is ever granted, same as Backup/Integration.
-const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount'];
+// Period: a period is marked/unmarked reconciled, never deleted either.
+// RevenueTarget: the one deliberate exception to revenueTargets.ts's
+// "writes only via Import" rule - a manual target revision, never deleted
+// (the revision history itself is append-only, see revenue_target_revisions).
+// ExceptionAssignment: clearing an assignment means nulling its fields, not
+// deleting the row - same convention as Period/BankAccount.
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
   ...FULL_CRUD.flatMap((resource) => ACTIONS.map((action) => ({ resource, action }))),

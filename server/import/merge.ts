@@ -8,6 +8,7 @@
 //   salesRecord: (period, category, channel) · consignment: (period, vendor)
 // Existing rows keep their labels/categories (no churn on re-import); only
 // numeric values update, and only when they differ.
+import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { db, ready, schema } from '../db/client.ts';
 import { classifyLineItem, type ParsedWorkbook, type RecordChange } from './types.ts';
@@ -131,7 +132,7 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
 
   const pendingRows: Record<string, Record<string, unknown>[]> = {
     businessUnits: [], periods: [], lineItems: [], categories: [], channels: [], vendors: [],
-    financialRecords: [], salesRecords: [], consignmentRecords: [], revenueTargets: [],
+    financialRecords: [], salesRecords: [], consignmentRecords: [], revenueTargets: [], revenueTargetRevisions: [],
   };
 
   const resolveUnit = (name: string, unitType: 'department' | 'outlet') => {
@@ -325,10 +326,18 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
       pendingRows.revenueTargets.push({ id: nextTarget(), periodId, category: r.category, targetAmount: r.amount });
       stats.revenueTargets.creates++;
       details.revenueTargets.push({ action: 'create', description, fields: [{ field: 'targetAmount', from: null, to: r.amount }] });
+      pendingRows.revenueTargetRevisions.push({
+        id: randomUUID(), periodId, category: r.category, targetAmount: r.amount,
+        note: null, createdDate: new Date().toISOString(), createdByUserId: null,
+      });
     } else if (!Object.is(existing.targetAmount, r.amount)) {
       updates.push({ table: 'revenueTargets', id: existing.id, set: { targetAmount: r.amount } });
       stats.revenueTargets.updates++;
       details.revenueTargets.push({ action: 'update', description, fields: [{ field: 'targetAmount', from: existing.targetAmount, to: r.amount }] });
+      pendingRows.revenueTargetRevisions.push({
+        id: randomUUID(), periodId, category: r.category, targetAmount: r.amount,
+        note: null, createdDate: new Date().toISOString(), createdByUserId: null,
+      });
     } else {
       stats.revenueTargets.unchanged++;
     }
@@ -340,7 +349,7 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
 
   const INSERT_ORDER: (keyof typeof pendingRows)[] = [
     'businessUnits', 'periods', 'lineItems', 'categories', 'channels', 'vendors',
-    'financialRecords', 'salesRecords', 'consignmentRecords', 'revenueTargets',
+    'financialRecords', 'salesRecords', 'consignmentRecords', 'revenueTargets', 'revenueTargetRevisions',
   ];
   const ops: ((tx: Tx) => Promise<void>)[] = [];
   for (const ins of inserts) {
