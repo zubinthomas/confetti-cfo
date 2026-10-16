@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { listRoadmap, type RoadmapItem, type RoadmapStatus } from "@/api/roadmapApi";
 import StatusBadge from "./StatusBadge";
+import TimeLogPanel from "./TimeLogPanel";
 import { Loader2 } from "lucide-react";
 
 const COLUMNS: { status: RoadmapStatus; label: string; badge: "green" | "amber" | "red" }[] = [
@@ -63,6 +64,8 @@ export default function RoadmapPage() {
 
   return (
     <>
+      <TimeLogPanel />
+
       {/* Below md, three side-by-side columns don't fit - swap to a chiclet
           selector over a single column instead of stacking all three. */}
       <div className="md:hidden space-y-4">

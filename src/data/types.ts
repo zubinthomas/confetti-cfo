@@ -84,3 +84,12 @@ export interface ExceptionAssignment {
   updatedByUserId: number | null;
   updatedAt: string | null; // ISO-8601
 }
+export interface TimeLogEntry {
+  id: number;
+  date: string; // YYYY-MM-DD
+  hours: number;
+  note: string | null;
+  createdByUserId: number | null;
+  createdByName: string | null;
+  createdByEmail: string | null;
+}

@@ -16,7 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
-  'Period', 'RevenueTarget', 'ExceptionAssignment',
+  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -29,7 +29,7 @@ export type Perm = { resource: Resource; action: Action };
  *  assertGrantable below. */
 export class PermissionGrantError extends Error {}
 
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role'];
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
 // BankAccount: bank accounts aren't deletable, only deactivated (isActive on
 // the schema row) - no delete action is ever granted, same as Backup/Integration.

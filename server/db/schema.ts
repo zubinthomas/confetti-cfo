@@ -1068,3 +1068,15 @@ export const orderLines = pgTable('order_lines', {
 }, (t) => [
   uniqueIndex('order_lines_match_key').on(t.matchKey),
 ]);
+
+// Engagement-hours log against the spec's 60h/month delivery budget (section
+// 11 of implementation-guidelines-gap-analysis.md) - discrete, correctable
+// entries, not a "current state" upsert, so unlike periods/exception_assignments
+// a row can be deleted outright (see TimeLog in server/db/permissions.ts).
+export const timeLogEntries = pgTable('time_log_entries', {
+  id: serial('id').primaryKey(),
+  date: text('date').notNull(), // YYYY-MM-DD
+  hours: doublePrecision('hours').notNull(),
+  note: text('note'),
+  createdByUserId: integer('created_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+});
