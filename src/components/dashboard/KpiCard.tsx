@@ -8,9 +8,16 @@ const statusColors = {
   green: "text-emerald-600 dark:text-emerald-400",
   amber: "text-amber-600 dark:text-amber-400",
   red: "text-red-600 dark:text-red-400",
+  // Distinct from the plain text-muted-foreground fallback a card gets when
+  // no status is set at all - "grey" is a real, deliberate signal (no data
+  // exists to compute this metric), not the absence of one. Never use green/
+  // amber/red for a figure that can't be computed, and never leave grey
+  // metrics looking identical to an ordinary unstyled one - that's the
+  // dashboard-wide convention this status exists to enforce.
+  grey: "text-muted-foreground/60 italic",
 };
 
-export type KpiStatus = "green" | "amber" | "red";
+export type KpiStatus = "green" | "amber" | "red" | "grey";
 
 export interface KpiData {
   label: string;

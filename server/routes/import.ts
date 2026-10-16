@@ -30,14 +30,31 @@ type BatchSummaryInput = Pick<typeof schema.importBatches.$inferSelect,
   'id' | 'filename' | 'kind' | 'status' | 'uploadedAt' | 'committedAt' | 'issues' | 'stats'
   | 'sourceType' | 'sheetSourceId' | 'tallySourceId' | 'contentHash' | 'decisionSource'>;
 
-// also used by routes/sheets.ts - keeps the heavy parsed payload out of responses
-export const batchSummary = (b: BatchSummaryInput, decidedByEmail: string | null = null) => ({
+// also used by routes/sheets.ts and tallyAgent.ts - keeps the heavy parsed
+// payload out of responses. sourceStale is only ever computed by GET
+// /batches below (the one response path dashboard KPI cards actually read
+// via useImportFreshness) - every other caller here returns a batch right
+// after its own upload/commit/discard action, where staleness isn't a
+// meaningful thing to report, so it defaults to null (not applicable).
+export const batchSummary = (b: BatchSummaryInput, decidedByEmail: string | null = null, sourceStale: boolean | null = null) => ({
   id: b.id, filename: b.filename, kind: b.kind, status: b.status,
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
   issues: b.issues, stats: b.stats,
   sourceType: b.sourceType, sheetSourceId: b.sheetSourceId, tallySourceId: b.tallySourceId,
-  contentHash: b.contentHash, decisionSource: b.decisionSource, decidedByEmail,
+  contentHash: b.contentHash, decisionSource: b.decisionSource, decidedByEmail, sourceStale,
 });
+
+// A Tally-sourced batch is stale once its source has gone quiet for 5x its
+// own configured sync interval - loose enough that a single slow/retried
+// cycle doesn't false-positive, while still catching an agent that's really
+// been down a while. Non-Tally batches (upload/sheet) have no heartbeat
+// concept, hence null rather than false - "not applicable," not "fresh."
+function computeSourceStale(sourceType: string, lastSeenAt: string | null, syncIntervalMinutes: number | null, now: number): boolean | null {
+  if (sourceType !== 'tally') return null;
+  if (lastSeenAt == null) return true;
+  const intervalMs = (syncIntervalMinutes ?? 15) * 60 * 1000;
+  return now - new Date(lastSeenAt).getTime() > 5 * intervalMs;
+}
 
 /** POST /api/import/upload - parse + validate a workbook, store a preview batch. */
 router.post('/upload', requirePermission('Import', 'write'), upload.single('file'), async (req, res) => {
@@ -112,10 +129,17 @@ router.get('/batches', requirePermission('Import', 'read'), async (_req, res) =>
     contentHash: schema.importBatches.contentHash,
     decisionSource: schema.importBatches.decisionSource,
     decidedByEmail: schema.users.email,
+    tallyLastSeenAt: schema.tallySources.lastSeenAt,
+    tallySyncIntervalMinutes: schema.tallySources.syncIntervalMinutes,
   }).from(schema.importBatches)
     .leftJoin(schema.users, eq(schema.users.id, schema.importBatches.decidedByUserId))
+    .leftJoin(schema.tallySources, eq(schema.tallySources.id, schema.importBatches.tallySourceId))
     .orderBy(desc(schema.importBatches.id));
-  res.json(rows.map((r) => batchSummary(r, r.decidedByEmail)));
+  const now = Date.now();
+  res.json(rows.map((r) => batchSummary(
+    r, r.decidedByEmail,
+    computeSourceStale(r.sourceType, r.tallyLastSeenAt, r.tallySyncIntervalMinutes, now),
+  )));
 });
 
 /** POST /api/import/:id/commit */

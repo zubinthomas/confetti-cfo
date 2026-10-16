@@ -36,6 +36,10 @@ export interface ImportBatch {
   contentHash: string | null;
   decisionSource: DecisionSource | null;
   decidedByEmail: string | null;
+  // Only ever set by GET /import/batches (what useImportFreshness reads) -
+  // null means "not a Tally batch" (no heartbeat concept applies), not
+  // "fresh." See server/routes/import.ts's computeSourceStale.
+  sourceStale: boolean | null;
 }
 
 /** A workbook that failed validation: no batch was created on the server. */

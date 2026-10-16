@@ -30,6 +30,15 @@ const SYNC_STATUS_CHIP: Record<NonNullable<TallySource["lastSyncStatus"]>, { lab
   error: { label: "error", cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 };
 
+// Mirrors server/routes/import.ts's computeSourceStale (5x the source's own
+// interval) - a paused source is quiet on purpose, so it's never flagged.
+function isStale(s: TallySource): boolean {
+  if (s.syncMode === "paused") return false;
+  if (!s.lastSeenAt) return true;
+  const intervalMs = s.syncIntervalMinutes * 60 * 1000;
+  return Date.now() - new Date(s.lastSeenAt).getTime() > 5 * intervalMs;
+}
+
 function NewApiKeyBanner({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => void }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -262,6 +271,11 @@ function SourcesCard({
                     {s.lastSyncStatus && (
                       <span className={`text-[11px] px-2 py-0.5 rounded-full ${SYNC_STATUS_CHIP[s.lastSyncStatus].cls}`}>
                         {SYNC_STATUS_CHIP[s.lastSyncStatus].label}
+                      </span>
+                    )}
+                    {isStale(s) && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                        stale
                       </span>
                     )}
                   </div>
