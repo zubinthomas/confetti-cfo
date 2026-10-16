@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 
 use roxmltree::Document;
 
-use crate::types::{LedgerBalance, LedgerRange, PeriodLedgerAmount, TallyGroup, TrialBalanceGroup};
+use crate::types::{LedgerBalance, LedgerRange, PeriodLedgerAmount, RawBill, TallyGroup, TrialBalanceGroup};
 
 #[derive(Debug)]
 pub enum TallyError {
@@ -451,6 +451,132 @@ pub fn parse_group_hierarchy(xml: &str) -> Result<Vec<TallyGroup>, TallyError> {
     Ok(out)
 }
 
+/// Builds the ENVELOPE request for one of Tally's built-in bill-wise
+/// Outstandings reports - `report_id` is `"Bills Receivable"` or `"Bills
+/// Payable"`. Confirmed working 2026-10-16 against the real JP Office
+/// install (see agent/scripts/check_bill_wise_raw.ps1): same `TYPE=Data`
+/// report-export shape as `build_trial_balance_request`/
+/// `build_period_report_request`, with `EXPLODEFLAG=Yes` so it returns
+/// individual bill rows rather than just a total. Neither report ID is
+/// cleanly scoped by receivable/payable nature on this install - both
+/// return a mix of Sundry Debtors, Sundry Creditors, and Fixed Assets
+/// ledgers (any ledger with bill-by-bill tracking enabled, company-wide) -
+/// callers classify each bill by its own ledger's group instead of trusting
+/// which report it came from (see `classify_bills` in main.rs).
+pub fn build_bills_request(report_id: &str, company: Option<&str>) -> String {
+    let company_var = company
+        .map(|c| format!("<SVCURRENTCOMPANY>{}</SVCURRENTCOMPANY>", xml_escape(c)))
+        .unwrap_or_default();
+    format!(
+        r#"<ENVELOPE>
+ <HEADER>
+  <VERSION>1</VERSION>
+  <TALLYREQUEST>Export</TALLYREQUEST>
+  <TYPE>Data</TYPE>
+  <ID>{report_id}</ID>
+ </HEADER>
+ <BODY>
+  <DESC>
+   <STATICVARIABLES>
+    <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+    <EXPLODEFLAG>Yes</EXPLODEFLAG>
+    {company_var}
+   </STATICVARIABLES>
+  </DESC>
+ </BODY>
+</ENVELOPE>"#,
+        report_id = xml_escape(report_id),
+    )
+}
+
+/// Reads a leaf element's text, trimmed, treating an empty/missing tag as
+/// `None` rather than an empty string - matches the empty-means-absent
+/// convention used throughout this file for optional date/text fields.
+fn leaf_text(node: &roxmltree::Node) -> Option<String> {
+    node.text().map(str::trim).filter(|t| !t.is_empty()).map(str::to_string)
+}
+
+/// Parses a "Bills Receivable"/"Bills Payable" response - confirmed
+/// 2026-10-16 against a real export (agent/scripts/check_bill_wise_raw.ps1's
+/// own capture). Like Trial Balance, there's no HEADER/BODY wrapper: one
+/// bill is a flat, strictly-ordered run of ENVELOPE-level siblings -
+/// `<BILLFIXED>` (containing `<BILLDATE>`/`<BILLREF>`/`<BILLPARTY>`)
+/// followed by `<BILLCL>` (the bill's current outstanding amount),
+/// `<BILLDUE>`, `<BILLOVERDUE>` (Tally's own days-overdue snapshot - not
+/// captured here; the app recomputes this live from `BILLDUE` instead,
+/// since a synced snapshot goes stale between sync cycles),
+/// `<BILLVCHDATE>`, `<BILLVCHTYPE>`, `<BILLVCHNUMBER>`, `<BILLVCHAMOUNT>` -
+/// then the next `<BILLFIXED>` starts the next bill. A bill with no
+/// `BILLPARTY` or no parseable `BILLCL` is skipped (logged by the caller),
+/// matching `parse_ledger_balances`'s one-bad-row-shouldn't-block-the-rest
+/// convention.
+pub fn parse_bills_response(xml: &str) -> Result<Vec<RawBill>, TallyError> {
+    let doc = Document::parse(xml).map_err(TallyError::Xml)?;
+    let children: Vec<roxmltree::Node> = doc.root_element().children().filter(|n| n.is_element()).collect();
+
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < children.len() {
+        if !children[i].has_tag_name("BILLFIXED") {
+            i += 1;
+            continue;
+        }
+        let fixed = children[i];
+        let ledger_name = child_text(&fixed, "BILLPARTY").unwrap_or_default();
+        let bill_ref = child_text(&fixed, "BILLREF").unwrap_or_default();
+        let bill_date = child_text(&fixed, "BILLDATE");
+
+        let mut closing_amount: Option<f64> = None;
+        let mut due_date = None;
+        let mut voucher_date = None;
+        let mut voucher_type = None;
+        let mut voucher_number = None;
+        let mut voucher_amount = None;
+        let mut j = i + 1;
+        while j < children.len() && !children[j].has_tag_name("BILLFIXED") {
+            let node = &children[j];
+            if node.has_tag_name("BILLCL") {
+                closing_amount = leaf_text(node).and_then(|t| parse_amount(&t));
+            } else if node.has_tag_name("BILLDUE") {
+                due_date = leaf_text(node);
+            } else if node.has_tag_name("BILLVCHDATE") {
+                voucher_date = leaf_text(node);
+            } else if node.has_tag_name("BILLVCHTYPE") {
+                voucher_type = leaf_text(node);
+            } else if node.has_tag_name("BILLVCHNUMBER") {
+                voucher_number = leaf_text(node);
+            } else if node.has_tag_name("BILLVCHAMOUNT") {
+                voucher_amount = leaf_text(node).and_then(|t| parse_amount(&t));
+            }
+            j += 1;
+        }
+
+        if ledger_name.is_empty() {
+            i = j;
+            continue;
+        }
+        let Some(closing_amount) = closing_amount else {
+            log::warn!("tally: skipping bill \"{bill_ref}\" for \"{ledger_name}\" - no parseable BILLCL");
+            i = j;
+            continue;
+        };
+
+        out.push(RawBill {
+            ledger_name,
+            bill_ref,
+            bill_date,
+            closing_amount,
+            due_date,
+            voucher_date,
+            voucher_type,
+            voucher_number,
+            voucher_amount,
+        });
+        i = j;
+    }
+    Ok(out)
+}
+
 /// Walks a ledger's immediate parent group up to its primary group, using
 /// the group hierarchy's own `parent` chain. Two terminal cases: a group
 /// whose own parent is empty or `"Primary"` IS a primary group (confirmed
@@ -690,6 +816,15 @@ impl HttpTallyGateway {
     pub fn fetch_trial_balance(&self) -> Result<Vec<TrialBalanceGroup>, TallyError> {
         let body = build_trial_balance_request(self.company_name.as_deref());
         parse_trial_balance(&self.send_export(body)?)
+    }
+
+    /// Every bill from one of Tally's "Bills Receivable"/"Bills Payable"
+    /// report exports. See `build_bills_request` for the confirmed shape and
+    /// the caveat that `report_id` doesn't cleanly scope the result by
+    /// receivable/payable nature - callers classify by ledger group instead.
+    pub fn fetch_bills(&self, report_id: &str) -> Result<Vec<RawBill>, TallyError> {
+        let body = build_bills_request(report_id, self.company_name.as_deref());
+        parse_bills_response(&self.send_export(body)?)
     }
 
     /// Every group's immediate parent - used to walk a ledger up to its
@@ -1190,5 +1325,83 @@ mod tests {
         rollup.insert("Sales Accounts".to_string(), 47848738.02);
         let trial_balance = [tb_group("Sales Accounts", 47848738.02)];
         assert!(reconcile_trial_balance_by_group(&rollup, &trial_balance, &[]).is_empty());
+    }
+
+    // Verbatim excerpt (2 of 1363 bills) from a live TallyPrime "Bills
+    // Receivable" EXPLODEFLAG=Yes export against CONFETTI EXPORTS PVT. LTD,
+    // captured 2026-10-16 via agent/scripts/check_bill_wise_raw.ps1 - not
+    // fabricated. Confirms the flat BILLFIXED/BILLCL/.../next-BILLFIXED
+    // sibling shape, that BILLVCHNUMBER can be an empty tag (treated as
+    // None, not an empty string), and the debit-negative sign convention
+    // (both are receivables, both negative, matching ClosingBalance's own
+    // convention confirmed elsewhere in this file).
+    #[test]
+    fn parses_bills_response_from_real_export() {
+        let xml = r#"<ENVELOPE>
+ <BILLFIXED>
+  <BILLDATE>31-Mar-12</BILLDATE>
+  <BILLREF>Aircondition-All</BILLREF>
+  <BILLPARTY>Aircondition-All</BILLPARTY>
+</BILLFIXED>
+ <BILLCL>-108813.05</BILLCL>
+ <BILLDUE>31-Mar-12</BILLDUE>
+ <BILLOVERDUE>5312</BILLOVERDUE>
+ <BILLVCHDATE>31-Mar-12</BILLVCHDATE>
+ <BILLVCHTYPE>Opening Balance</BILLVCHTYPE>
+ <BILLVCHNUMBER></BILLVCHNUMBER>
+ <BILLVCHAMOUNT>-108813.05</BILLVCHAMOUNT>
+ <BILLFIXED>
+  <BILLDATE>31-Mar-12</BILLDATE>
+  <BILLREF>Jodhpur Park</BILLREF>
+  <BILLPARTY>Air Condition( Jodhpur Park)</BILLPARTY>
+</BILLFIXED>
+ <BILLCL>-73292.50</BILLCL>
+ <BILLDUE>31-Mar-12</BILLDUE>
+ <BILLOVERDUE>5312</BILLOVERDUE>
+ <BILLVCHDATE>31-Mar-12</BILLVCHDATE>
+ <BILLVCHTYPE>Opening Balance</BILLVCHTYPE>
+ <BILLVCHNUMBER></BILLVCHNUMBER>
+ <BILLVCHAMOUNT>-73292.50</BILLVCHAMOUNT>
+</ENVELOPE>"#;
+        let bills = parse_bills_response(xml).unwrap();
+        assert_eq!(bills.len(), 2);
+        assert_eq!(bills[0].ledger_name, "Aircondition-All");
+        assert_eq!(bills[0].bill_ref, "Aircondition-All");
+        assert_eq!(bills[0].bill_date.as_deref(), Some("31-Mar-12"));
+        assert_eq!(bills[0].closing_amount, -108813.05);
+        assert_eq!(bills[0].due_date.as_deref(), Some("31-Mar-12"));
+        assert_eq!(bills[0].voucher_type.as_deref(), Some("Opening Balance"));
+        // An empty BILLVCHNUMBER tag is None, not Some("").
+        assert_eq!(bills[0].voucher_number, None);
+        assert_eq!(bills[0].voucher_amount, Some(-108813.05));
+        assert_eq!(bills[1].ledger_name, "Air Condition( Jodhpur Park)");
+        assert_eq!(bills[1].bill_ref, "Jodhpur Park");
+        assert_eq!(bills[1].closing_amount, -73292.50);
+    }
+
+    #[test]
+    fn parses_bills_response_skips_a_bill_with_no_parseable_bill_cl() {
+        let xml = r#"<ENVELOPE>
+ <BILLFIXED>
+  <BILLDATE>1-Apr-26</BILLDATE>
+  <BILLREF>Some Ref</BILLREF>
+  <BILLPARTY>Some Party</BILLPARTY>
+</BILLFIXED>
+ <BILLCL></BILLCL>
+ <BILLDUE>1-May-26</BILLDUE>
+</ENVELOPE>"#;
+        let bills = parse_bills_response(xml).unwrap();
+        assert!(bills.is_empty());
+    }
+
+    #[test]
+    fn bills_request_has_expected_shape() {
+        let req = build_bills_request("Bills Receivable", Some("CONFETTI EXPORTS PVT. LTD"));
+        assert!(req.contains("<TALLYREQUEST>Export</TALLYREQUEST>"));
+        assert!(req.contains("<TYPE>Data</TYPE>"));
+        assert!(req.contains("<ID>Bills Receivable</ID>"));
+        assert!(req.contains("<EXPLODEFLAG>Yes</EXPLODEFLAG>"));
+        assert!(req.contains("<SVCURRENTCOMPANY>CONFETTI EXPORTS PVT. LTD</SVCURRENTCOMPANY>"));
+        assert!(!req.to_lowercase().contains("import"));
     }
 }

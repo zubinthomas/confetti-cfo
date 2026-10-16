@@ -13,7 +13,10 @@ import { parseRoster, findRosterSheet } from './parseRoster.ts';
 import { parseOrders, findOrdersSheet } from './parseOrders.ts';
 import type { ParsedWorkbook } from './types.ts';
 
-export type WorkbookKind = ParsedWorkbook['kind'];
+// 'bills' is excluded: it's a real ParsedWorkbook kind (server/tally/sync.ts
+// builds one, merge.ts dispatches on it), but no upload ever produces one -
+// bills only arrive via the agent sync route, never a workbook detection.
+export type WorkbookKind = Exclude<ParsedWorkbook['kind'], 'bills'>;
 
 // The HR Mastersheet's sheet is just "Sheet1" (ExcelJS's default) - no
 // usable sheet-name signal like the other three kinds have, so this

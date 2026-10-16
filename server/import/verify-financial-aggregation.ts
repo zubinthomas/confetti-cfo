@@ -31,7 +31,7 @@ function workbook(records: { lineItemName: string; value: number }[]) {
       lineItemName: r.lineItemName, valueType: 'amount' as const, value: r.value,
     })),
     salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
-    productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], issues: [],
+    productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], issues: [],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }

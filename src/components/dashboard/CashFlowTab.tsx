@@ -17,6 +17,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { MONTHS, L, sum, fyLabel } from "@/data/seriesKernel";
 import { BankAccount } from "@/api/entities";
 import { listBalanceEntries, recordBalanceEntry, getCashPosition, type BankBalanceEntry, type CashPosition } from "@/api/cashApi";
+import { getOutstandingBills, type OutstandingBill } from "@/api/billsApi";
+import { computeAgeingBuckets, type AgeingBucket } from "@/data/billAgeing";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
 import { Database, Plus, X, Loader2 } from "lucide-react";
@@ -75,6 +77,8 @@ export default function CashFlowTab() {
       </div>
 
       <CashPositionSection CUR={CUR} />
+
+      <AgeingSection />
 
       {CUR.hasFullDetail ? <FullDetail CUR={CUR} /> : (
         <DashCard title={`Group cash flow - ${CUR.label}`}>
@@ -199,7 +203,8 @@ function FullDetail({ CUR }: { CUR: CashFlowYearData }) {
           </ul>
           <p className="text-xs text-muted-foreground mt-3">
             The cash position above comes from manually recorded bank balances, and its forecast is a
-            trend projection - these four items are specifically why it can't be a timing-aware one.
+            trend projection - these items are specifically why it can't be a timing-aware one on its
+            own (receivables/payables ageing is now covered separately, below).
           </p>
         </DashCard>
       </div>
@@ -399,6 +404,86 @@ function CashPositionSection({ CUR }: { CUR: CashFlowYearData }) {
           onRecorded={() => { setEntryAccount(null); load(); }}
         />
       )}
+    </>
+  );
+}
+
+const BUCKET_LABELS: Record<AgeingBucket, string> = {
+  current: "Current", "0-30": "0-30 days", "31-60": "31-60 days", "61-90": "61-90 days", "90+": "90+ days",
+};
+
+// Outstanding receivables/payables ageing, synced from Tally's bill-wise
+// reports (server/routes/bills.ts) - not a bulk-import-then-reload flow,
+// just fetch-on-mount like CashPositionSection above, since data arrives
+// via the background agent sync rather than a user-triggered commit.
+function AgeingSection() {
+  const { can } = useAuth();
+  const canRead = can("OutstandingBills", "read");
+  const [bills, setBills] = useState<OutstandingBill[] | null>(null);
+
+  useEffect(() => { if (canRead) getOutstandingBills().then(setBills); }, [canRead]);
+
+  if (!canRead) return null;
+  if (!bills) return <DashCard title="Receivables & Payables Ageing"><PageSpinner /></DashCard>;
+
+  const asOfDate = new Date().toISOString().slice(0, 10);
+  const ageing = computeAgeingBuckets(bills, asOfDate);
+
+  const kpis: KpiData[] = [
+    {
+      label: "Outstanding Receivables", value: `₹${L(ageing.receivables.totalAmount)}`,
+      sub: `${ageing.receivables.totalCount} bill${ageing.receivables.totalCount === 1 ? "" : "s"}`, status: "green",
+      definition: "Sum of every currently-outstanding receivable bill, synced from Tally.",
+    },
+    {
+      label: "Outstanding Payables", value: `₹${L(ageing.payables.totalAmount)}`,
+      sub: `${ageing.payables.totalCount} bill${ageing.payables.totalCount === 1 ? "" : "s"}`, status: "amber",
+      definition: "Sum of every currently-outstanding payable bill, synced from Tally.",
+    },
+  ];
+
+  return (
+    <>
+      <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+        Receivables & Payables Ageing (from Tally)
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+      </div>
+
+      <DashCard title="Ageing by Bucket">
+        {ageing.receivables.totalCount === 0 && ageing.payables.totalCount === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">No outstanding bills synced yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="text-left py-2 pr-4 font-medium">Bucket</th>
+                  <th className="text-left py-2 pr-4 font-medium">Receivables</th>
+                  <th className="text-left py-2 font-medium">Payables</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ageing.receivables.buckets.map((rb, i) => {
+                  const pb = ageing.payables.buckets[i];
+                  return (
+                    <tr key={rb.bucket} className="border-b border-border last:border-b-0">
+                      <td className="py-2.5 pr-4 text-foreground font-medium">{BUCKET_LABELS[rb.bucket]}</td>
+                      <td className="py-2.5 pr-4 text-muted-foreground">₹{L(rb.amount)} ({rb.count})</td>
+                      <td className="py-2.5 text-muted-foreground">₹{L(pb.amount)} ({pb.count})</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground mt-3">
+          Ageing is computed live from each bill&rsquo;s due date against today, not from Tally&rsquo;s
+          own snapshot - a bill with no due date on its voucher is counted as current.
+        </p>
+      </DashCard>
     </>
   );
 }

@@ -16,7 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
-  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog',
+  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -30,7 +30,10 @@ export type Perm = { resource: Resource; action: Action };
 export class PermissionGrantError extends Error {}
 
 const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
-const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
+// OutstandingBills: sync-sourced from Tally's bill-wise reports, same as
+// FinancialRecord - no manual-entry/dispute UI is in scope (a future
+// "mark disputed" workflow would be its own separate item).
+const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings', 'OutstandingBills'];
 // BankAccount: bank accounts aren't deletable, only deactivated (isActive on
 // the schema row) - no delete action is ever granted, same as Backup/Integration.
 // Period: a period is marked/unmarked reconciled, never deleted either.

@@ -112,7 +112,7 @@ function baseBatch(overrides: Partial<typeof schema.importBatches.$inferInsert>)
     tallySourceId: source43.id, status: 'preview', contentHash: 'unrelated',
   })).returning();
 
-  await supersedePendingForSource(db, { sourceType: 'tally', tallySourceId: source42.id }, [newer.id]);
+  await supersedePendingForSource(db, { sourceType: 'tally', tallySourceId: source42.id, kind: 'tally' }, [newer.id]);
 
   const [olderAfter] = await db.select().from(schema.importBatches).where(eq(schema.importBatches.id, older.id));
   assert.equal(olderAfter.status, 'discarded', 'the older pending preview from the same source must be superseded');

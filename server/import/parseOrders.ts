@@ -158,7 +158,7 @@ export function parseOrders(wb: ExcelJS.Workbook): ParsedWorkbook {
   const result = (): ParsedWorkbook => ({
     kind: 'orders', businessName: '', periods: [], financialRecords: [], salesRecords: [],
     consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [],
-    shiftRosterRecords: [], orderRecords: records, issues,
+    shiftRosterRecords: [], orderRecords: records, billRecords: [], issues,
   });
 
   const match = findOrdersSheet(wb);

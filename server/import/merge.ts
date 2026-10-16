@@ -16,6 +16,7 @@ import { buildEmployeeMergePlan } from './mergeEmployees.ts';
 import { buildProductionLogMergePlan } from './mergeProductionLog.ts';
 import { buildShiftRosterMergePlan } from './mergeShiftRoster.ts';
 import { buildOrdersMergePlan } from './mergeOrders.ts';
+import { buildBillsMergePlan } from './mergeBills.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -51,6 +52,13 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   }
   if (parsed.kind === 'orders') {
     const plan = await buildOrdersMergePlan(parsed.orderRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // Bills are company-wide (no business/unit/period), same reasoning as the
+  // branches above - and need their own resolve-on-drop pass that doesn't
+  // exist in the generic graph below, so they get their own matcher too.
+  if (parsed.kind === 'bills') {
+    const plan = await buildBillsMergePlan(parsed.billRecords);
     return { stats: plan.stats, details: plan.details, ops: plan.ops };
   }
   const stats: Record<string, TableStats> = {

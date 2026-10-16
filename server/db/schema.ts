@@ -395,6 +395,10 @@ export const tallySources = pgTable('tally_sources', {
   tallyGatewayUrl: text('tally_gateway_url'), // e.g. http://localhost:9001; null falls back to the agent's local config.toml
   tallyCompanyName: text('tally_company_name'), // Tally's company selector string, exactly as shown, incl. the "- (from D-Mon-YY)" suffix; null falls back to local config.toml
   tallyPeriodReportName: text('tally_period_report_name'), // Tally report ID for P&L pulls; null uses the agent's built-in default
+  // Off by default even for an existing source - an admin opts in once the
+  // bill-wise ageing sync (tally_bills, server/import/mergeBills.ts) has
+  // been reviewed for this install. See agent/src/types.rs's AgentConfig.
+  syncBills: boolean('sync_bills').notNull().default(false),
   createdAt: text('created_at').notNull(),   // ISO-8601
   lastSeenAt: text('last_seen_at'),          // ISO-8601, bumped on every authenticated agent request
   lastSyncAt: text('last_sync_at'),
@@ -442,6 +446,45 @@ export const tallyGroupMappings = pgTable('tally_group_mappings', {
   createdAt: text('created_at').notNull(), // ISO-8601
 }, (t) => [
   uniqueIndex('tally_group_mappings_source_group').on(t.tallySourceId, t.groupName),
+]);
+
+export const tallyBillNatureEnum = pgEnum('tally_bill_nature', ['receivable', 'payable']);
+export const tallyBillStatusEnum = pgEnum('tally_bill_status', ['outstanding', 'resolved']);
+
+// Per-bill receivables/payables data synced from Tally's own "Bills
+// Receivable"/"Bills Payable" report exports (agent/src/tally_client.rs's
+// fetch_bills + classify_bills) - powers the receivables/payables ageing
+// feature (Section 6 of implementation-guidelines-gap-analysis.md).
+// `nature` is decided agent-side by the bill's own ledger group, not by
+// which of the two reports it came from - neither is cleanly scoped by that
+// on the real install (confirmed 2026-10-16).
+//
+// Current-state snapshot, same philosophy as order_lines, with one
+// departure from that precedent: a cleared bill's last-known state would be
+// actively wrong (it would still show as outstanding forever), so
+// server/import/mergeBills.ts also flips `status` to 'resolved' - never
+// deletes - for any previously-outstanding bill missing from the latest
+// full sync.
+export const tallyBills = pgTable('tally_bills', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(), // ISO-8601, first time this bill was seen
+  tallySourceId: integer('tally_source_id').notNull().references(() => tallySources.id, { onDelete: 'cascade' }),
+  ledgerName: text('ledger_name').notNull(), // Tally's BILLPARTY
+  billRef: text('bill_ref').notNull(),       // Tally's BILLREF
+  billDate: text('bill_date'),               // YYYY-MM-DD, normalized agent-side from Tally's own date format
+  nature: tallyBillNatureEnum('nature').notNull(),
+  outstandingAmount: doublePrecision('outstanding_amount').notNull(), // Tally's signed convention: debit negative, credit positive
+  dueDate: text('due_date'),       // YYYY-MM-DD
+  voucherDate: text('voucher_date'),
+  voucherType: text('voucher_type'),     // e.g. "Opening Balance", "Sales", "Receipt"
+  voucherNumber: text('voucher_number'),
+  voucherAmount: doublePrecision('voucher_amount'),
+  status: tallyBillStatusEnum('status').notNull().default('outstanding'),
+  lastSeenAt: text('last_seen_at').notNull(), // ISO-8601, bumped every sync this bill is still present in
+  resolvedAt: text('resolved_at'),            // ISO-8601, set once when status flips to 'resolved'
+  matchKey: text('match_key').notNull(), // normalized (ledgerName, billRef) - see server/import/mergeBills.ts
+}, (t) => [
+  uniqueIndex('tally_bills_source_match_key').on(t.tallySourceId, t.matchKey),
 ]);
 
 // ── App entities (HR & compliance forms) ─────────────────────────────────────

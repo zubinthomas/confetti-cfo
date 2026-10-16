@@ -150,9 +150,12 @@ export function cashFlowExportSheets(data: CashFlowYearData): ExportSheet[] {
 // and are specifically why the 13-week forecast (src/data/cashForecast.ts)
 // is a trend projection rather than a timing-aware one - it has no idea when
 // a specific receivable will land or a specific payable is actually due.
+// "Accounts receivable & collection timing" and "Accounts payable & vendor
+// payment terms" were removed once Tally's bill-wise sync shipped - see
+// src/data/billAgeing.ts and CashFlowTab.tsx's AgeingSection, fed by
+// server/routes/bills.ts. Same removal pattern as the bank-balance ledger
+// before this.
 export const CASH_GAPS = [
-  "Accounts receivable & collection timing",
-  "Accounts payable & vendor payment terms",
   "Loan EMIs, interest schedule & debt position",
   "Capex and asset purchases",
 ];

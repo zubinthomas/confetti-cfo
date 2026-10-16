@@ -209,7 +209,7 @@ export function parseProduction(wb: ExcelJS.Workbook): ParsedWorkbook {
     issues.push({ level: 'error', sheet: wb.worksheets[0]?.name ?? '(none)', message: 'expected sheets "Kiln Firing ", "Glaze Application" and "Green Production" not all found' });
     return {
       kind: 'potteryProduction', businessName: '', periods: [], financialRecords: [], salesRecords: [],
-      consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], issues,
+      consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], issues,
     };
   }
 
@@ -227,7 +227,7 @@ export function parseProduction(wb: ExcelJS.Workbook): ParsedWorkbook {
     employeeRecords: [],
     targetRecords: [],
     productionLogRecords: [...greenRecords, ...glazeRecords, ...kilnRecords],
-    shiftRosterRecords: [], orderRecords: [],
+    shiftRosterRecords: [], orderRecords: [], billRecords: [],
     issues,
   };
 }

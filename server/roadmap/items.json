@@ -5,8 +5,8 @@
       "title": "Tally integration: automated P&L sync",
       "area": "Finance",
       "status": "in_progress",
-      "description": "A Rust agent pushes month and week period P&L values from Tally into the dashboard automatically, packaged as a Windows Service.",
-      "reason": "Live-tested against the real JP Office install: all 74 Tally groups are mapped (23 balance-sheet, 51 P&L), a standing Trial Balance reconciliation check runs every cycle, and the agent is now installed as a Windows Service on the real client machine and syncing on its own (first real batch committed 2026-10-12). A Balance Sheet / company-wide Profit & Loss dashboard page now renders the pushed data, with flat Balance Sheet line items classified into Assets / Liabilities & Equity (ambiguous ones flagged for review rather than guessed). Still needed: confirmation the service survives the client machine's daily automatic shutdown/restart."
+      "description": "A Rust agent pushes month and week period P&L values from Tally into the dashboard automatically, packaged as a Windows Service, and now also syncs bill-wise receivables/payables for ageing.",
+      "reason": "Live-tested against the real JP Office install: all 74 Tally groups are mapped (23 balance-sheet, 51 P&L), a standing Trial Balance reconciliation check runs every cycle, and the agent is now installed as a Windows Service on the real client machine and syncing on its own (first real batch committed 2026-10-12). A Balance Sheet / company-wide Profit & Loss dashboard page now renders the pushed data, with flat Balance Sheet line items classified into Assets / Liabilities & Equity (ambiguous ones flagged for review rather than guessed). Receivables/payables ageing now syncs from Tally's own bill-wise reports (behind a per-source syncBills flag, off by default) and renders on the Cash Flow page. Still needed: confirmation the service survives the client machine's daily automatic shutdown/restart, and flipping syncBills on for JP Office once this is reviewed."
     },
     {
       "id": "password-reset-emails",

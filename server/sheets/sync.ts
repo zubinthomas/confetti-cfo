@@ -142,7 +142,7 @@ export async function syncSource(source: SheetSource, prefetchedBuffer?: Buffer)
       sheetSourceId: source.id,
       contentHash,
     }).returning();
-    await supersedePendingForSource(db, { sourceType: 'sheet', sheetSourceId: source.id }, [batch.id]);
+    await supersedePendingForSource(db, { sourceType: 'sheet', sheetSourceId: source.id, kind: parsed.kind }, [batch.id]);
 
     if (source.syncMode === 'auto' && canAutoCommit(parsed.issues)) {
       await commitMergePlan(plan);

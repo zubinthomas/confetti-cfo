@@ -2,7 +2,7 @@
 //! the outbound-only direction the integration plan settled on, since this
 //! machine can't be relied on to be reachable inbound. Every call carries the
 //! install's API key as a Bearer token (server/middleware/tallyAgentAuth.ts).
-use crate::types::{AgentConfig, SyncResponse, TallyRecord};
+use crate::types::{AgentConfig, BillRecord, SyncResponse, TallyRecord};
 
 pub struct ServerClient {
     base_url: String,
@@ -32,11 +32,12 @@ impl ServerClient {
     /// POST /api/tally-agent/sync - never expected to error on a data-side
     /// problem (unmapped ledgers, validation issues); those come back inside
     /// a 200 response body. A non-2xx here means auth or transport failed.
-    pub fn push_sync(&self, records: &[TallyRecord]) -> Result<SyncResponse, reqwest::Error> {
+    /// `bills` is empty whenever `AgentConfig.sync_bills` is off.
+    pub fn push_sync(&self, records: &[TallyRecord], bills: &[BillRecord]) -> Result<SyncResponse, reqwest::Error> {
         self.http
             .post(format!("{}/api/tally-agent/sync", self.base_url))
             .bearer_auth(&self.api_key)
-            .json(&serde_json::json!({ "records": records }))
+            .json(&serde_json::json!({ "records": records, "bills": bills }))
             .send()?
             .error_for_status()?
             .json()

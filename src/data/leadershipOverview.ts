@@ -13,9 +13,9 @@ export interface StoreFnbTargetPace {
   gap: number;
 }
 
+// "Receivables & payables ageing" was removed once Tally's bill-wise sync
+// shipped - see src/data/billAgeing.ts.
 export const UNAVAILABLE_METRICS = [
   ...CASH_GAPS,
-  "Stock / inventory position",
-  "Receivables & payables ageing",
   "Scenario / what-if planning",
 ];

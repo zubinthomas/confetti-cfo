@@ -1,8 +1,10 @@
 // Cash forecast: a flat trend projection from the latest known balance plus
-// a trailing-3-month run-rate - not an AP/AR-timing-aware forecast, since no
-// per-invoice due-date data exists anywhere this app integrates with (see
-// CashFlowTab.tsx's caveat box). Pure, frontend-only, fed by the server's
-// computed position (server/db/bankBalanceLedger.ts's computePosition) and
+// a trailing-3-month run-rate - not an AP/AR-timing-aware forecast. Per-bill
+// due-date data exists now (src/data/billAgeing.ts, fed by Tally's bill-wise
+// sync), but it isn't wired into this projection - ageing is surfaced as its
+// own section instead (see CashFlowTab.tsx's AgeingSection), not folded into
+// the trend line. Pure, frontend-only, fed by the server's computed position
+// (server/db/bankBalanceLedger.ts's computePosition) and
 // cashFlowFinancials.ts's own already-computed monthly inflow/outflow
 // series - this app's convention of doing financial aggregation client-side
 // over already-fetched data, not on the server.

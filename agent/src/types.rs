@@ -64,6 +64,27 @@ pub struct AgentConfig {
     /// Set by an admin in the web UI; None means the agent's built-in default
     /// ("Profit and Loss").
     pub tally_period_report_name: Option<String>,
+    /// Set by an admin in the web UI once the bill-wise ageing sync is ready
+    /// to go live for this source. Defaults to false (via serde, for an older
+    /// server response that doesn't send the field yet, and as the safe
+    /// default so this never silently activates on an already-deployed
+    /// agent) - never inferred from `ledgers` or anything else.
+    #[serde(default)]
+    pub sync_bills: bool,
+}
+
+/// The `bills` sub-object of a sync response - reported separately from
+/// `status`/`error` above because syncTallyBillsPush (server/tally/sync.ts)
+/// never touches the same tallySources outcome fields as the records push,
+/// so a bills-side failure wouldn't otherwise show up anywhere in this
+/// struct at all.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BillsSyncResult {
+    pub status: String,
+    pub error: Option<String>,
+    #[allow(dead_code)] // not acted on yet - logged for visibility only
+    pub batch: Option<serde_json::Value>,
 }
 
 /// POST /api/tally-agent/sync response.
@@ -75,6 +96,7 @@ pub struct SyncResponse {
     pub unmapped_ledgers: Vec<String>,
     #[allow(dead_code)] // not acted on yet - logged for visibility only
     pub batches: Vec<serde_json::Value>,
+    pub bills: BillsSyncResult,
 }
 
 /// One ledger read back from Tally's gateway.
@@ -126,4 +148,57 @@ pub struct TrialBalanceGroup {
 pub struct TallyGroup {
     pub name: String,
     pub parent: String,
+}
+
+/// One bill read back from Tally's "Bills Receivable"/"Bills Payable" report
+/// export (`tally_client::parse_bills_response`), before classification -
+/// field names mirror Tally's own confirmed response tags (BILLPARTY,
+/// BILLREF, BILLCL, etc. - see that function's doc comment) rather than
+/// being renamed, so the mapping from raw XML to this struct stays
+/// traceable. `closing_amount` is Tally's `BILLCL` tag, signed per the same
+/// debit-negative/credit-positive convention as everywhere else in this
+/// agent.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawBill {
+    pub ledger_name: String,
+    pub bill_ref: String,
+    pub bill_date: Option<String>,
+    pub closing_amount: f64,
+    pub due_date: Option<String>,
+    pub voucher_date: Option<String>,
+    pub voucher_type: Option<String>,
+    pub voucher_number: Option<String>,
+    pub voucher_amount: Option<f64>,
+}
+
+/// Which side of the books an outstanding bill belongs to. Classified by
+/// `classify_bills` (main.rs) from the bill's own ledger's immediate PARENT
+/// group - neither "Bills Receivable" nor "Bills Payable" report ID is
+/// cleanly scoped by this on the real install (confirmed 2026-10-16: both
+/// return a mix of Sundry Debtors, Sundry Creditors, and Fixed Assets
+/// ledgers), so this can't be inferred from which report a bill came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BillNature {
+    Receivable,
+    Payable,
+}
+
+/// One outstanding bill, pushed to the server as part of `POST
+/// /api/tally-agent/sync`'s `bills` array. Mirrors the server's
+/// `ParsedBillRecord` (server/import/types.ts) by hand - no shared schema
+/// between the two languages, same as `TallyRecord` above.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BillRecord {
+    pub ledger_name: String,
+    pub bill_ref: String,
+    pub bill_date: Option<String>,
+    pub nature: BillNature,
+    pub outstanding_amount: f64,
+    pub due_date: Option<String>,
+    pub voucher_date: Option<String>,
+    pub voucher_type: Option<String>,
+    pub voucher_number: Option<String>,
+    pub voucher_amount: Option<f64>,
 }

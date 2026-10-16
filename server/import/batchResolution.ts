@@ -35,16 +35,20 @@ export async function findManuallyRejectedPrecedent(db: Db, q: PrecedentQuery): 
 }
 
 type SourceRef =
-  | { sourceType: 'sheet'; sheetSourceId: number }
-  | { sourceType: 'tally'; tallySourceId: number };
+  | { sourceType: 'sheet'; sheetSourceId: number; kind: string }
+  | { sourceType: 'tally'; tallySourceId: number; kind: string };
 
-/** Discards any other still-pending preview from the same sheet/Tally
- *  source, so a source never has more than one open preview at a time.
- *  `excludeIds` keeps this sync cycle's own freshly-inserted batches safe -
- *  a single Tally push can produce one batch per business
- *  (server/tally/sync.ts), and those siblings must not supersede each other.
- *  Not applicable to manual uploads, which have no persistent source row to
- *  key off. */
+/** Discards any other still-pending preview of the same kind from the same
+ *  sheet/Tally source, so a source never has more than one open preview of
+ *  that kind at a time. Scoped by `kind` (not just source) because a single
+ *  Tally source now pushes two independent kinds of batch per cycle
+ *  ('tally' financial records and 'bills' - server/tally/sync.ts) - without
+ *  this, resolving one kind's sync would wrongly discard the other kind's
+ *  still-open preview. `excludeIds` keeps this sync cycle's own
+ *  freshly-inserted batches safe - a single Tally push can produce one
+ *  batch per business for financial records, and those siblings must not
+ *  supersede each other. Not applicable to manual uploads, which have no
+ *  persistent source row to key off. */
 export async function supersedePendingForSource(db: Db, ref: SourceRef, excludeIds: number[]): Promise<void> {
   const sourceCondition = ref.sourceType === 'sheet'
     ? eq(schema.importBatches.sheetSourceId, ref.sheetSourceId)
@@ -53,6 +57,7 @@ export async function supersedePendingForSource(db: Db, ref: SourceRef, excludeI
     .set({ status: 'discarded', decisionSource: 'auto_discard_superseded' })
     .where(and(
       eq(schema.importBatches.sourceType, ref.sourceType),
+      eq(schema.importBatches.kind, ref.kind),
       sourceCondition,
       eq(schema.importBatches.status, 'preview'),
       notInArray(schema.importBatches.id, excludeIds),

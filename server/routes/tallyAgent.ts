@@ -5,9 +5,9 @@
 import { Router } from 'express';
 import { tallyAgentAuth, type TallyAgentRequest } from '../middleware/tallyAgentAuth.ts';
 import { ready } from '../db/client.ts';
-import { syncTallyPush } from '../tally/sync.ts';
+import { syncTallyPush, syncTallyBillsPush } from '../tally/sync.ts';
 import { loadEffectiveMappings } from '../tally/loadEffectiveMappings.ts';
-import type { TallyRecordInput } from '../tally/sync.ts';
+import type { TallyBillInput, TallyRecordInput } from '../tally/sync.ts';
 import { batchSummary } from './import.ts';
 
 const router = Router();
@@ -26,6 +26,7 @@ router.get('/config', async (req: TallyAgentRequest, res) => {
   res.json({
     syncIntervalMinutes: source.syncIntervalMinutes,
     syncMode: source.syncMode,
+    syncBills: source.syncBills,
     ledgers: [...effective.entries()]
       .filter(([, m]) => m.businessUnitId != null && m.lineItemId != null)
       .map(([name, m]) => ({
@@ -39,19 +40,32 @@ router.get('/config', async (req: TallyAgentRequest, res) => {
   });
 });
 
-/** POST /api/tally-agent/sync { records: TallyRecordInput[] } - never 500s
- *  for a data-side problem (unmapped ledgers, validation issues); those come
- *  back as part of the JSON body, same contract as syncTallyPush. */
+/** POST /api/tally-agent/sync { records: TallyRecordInput[], bills?:
+ *  TallyBillInput[] } - never 500s for a data-side problem (unmapped
+ *  ledgers, validation issues); those come back as part of the JSON body,
+ *  same contract as syncTallyPush. `bills` is optional and independent of
+ *  `records`: an agent with syncBills off simply never sends it, and a
+ *  cycle can push one without the other (e.g. an unchanged-balances,
+ *  changed-bills cycle). */
 router.post('/sync', async (req: TallyAgentRequest, res) => {
   const source = req.tallySource!;
-  const { records } = req.body as { records?: TallyRecordInput[] };
+  const { records, bills } = req.body as { records?: TallyRecordInput[]; bills?: TallyBillInput[] };
   if (!Array.isArray(records)) return res.status(400).json({ message: 'records must be an array' });
+  if (bills !== undefined && !Array.isArray(bills)) return res.status(400).json({ message: 'bills must be an array' });
+
   const result = await syncTallyPush(source, records);
+  const billsResult = await syncTallyBillsPush(source, (bills ?? []).map((b) => ({ ...b, tallySourceId: source.id })));
+
   res.json({
     status: result.status,
     error: result.error,
     unmappedLedgers: result.unmappedLedgers,
     batches: result.batches.map((b) => batchSummary(b)),
+    bills: {
+      status: billsResult.status,
+      error: billsResult.error,
+      batch: billsResult.batch ? batchSummary(billsResult.batch) : null,
+    },
   });
 });
 

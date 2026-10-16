@@ -21,7 +21,9 @@ use confetti_tally_agent::tally_client::{
     books_imbalance, reconcile_period_with_ledger_range, reconcile_trial_balance_by_group, roll_up_by_primary_group,
     HttpTallyGateway,
 };
-use confetti_tally_agent::types::{MappedLedger, PeriodGranularity, PeriodType, TallyRecord, ValueMode};
+use confetti_tally_agent::types::{
+    BillNature, BillRecord, MappedLedger, PeriodGranularity, PeriodType, RawBill, TallyRecord, ValueMode,
+};
 
 /// Used when the server doesn't send a period report name. Unverified against
 /// real Tally - see agent/README.md. The server can override it per source.
@@ -190,19 +192,31 @@ fn run_cycle(server: &ServerClient, local: &Config) -> u64 {
         records.extend(fetch_period_records(&tally, report_name, &week_ledgers, PeriodType::Week, monday, query_to, sunday));
     }
 
-    if records.is_empty() {
-        log::info!("none of the {} mapped ledger(s) produced a value to push this cycle", agent_config.ledgers.len());
+    let bills: Vec<BillRecord> = if agent_config.sync_bills {
+        fetch_and_classify_bills(&tally)
+    } else {
+        Vec::new()
+    };
+
+    if records.is_empty() && bills.is_empty() {
+        log::info!("none of the {} mapped ledger(s) produced a value, and no bills, to push this cycle", agent_config.ledgers.len());
         return sleep_seconds;
     }
 
-    match server.push_sync(&records) {
+    match server.push_sync(&records, &bills) {
         Ok(result) => {
-            log::info!("pushed {} record(s): status={}", records.len(), result.status);
+            log::info!("pushed {} record(s) and {} bill(s): status={}", records.len(), bills.len(), result.status);
             if !result.unmapped_ledgers.is_empty() {
                 log::warn!("server reports {} unmapped ledger(s): {:?}", result.unmapped_ledgers.len(), result.unmapped_ledgers);
             }
             if let Some(err) = result.error {
                 log::warn!("server reported an error: {err}");
+            }
+            if !bills.is_empty() || result.bills.status != "no_changes" {
+                log::info!("bills sync: status={}", result.bills.status);
+            }
+            if let Some(err) = result.bills.error {
+                log::warn!("server reported a bills sync error: {err}");
             }
         }
         Err(e) => log::error!("could not push sync to server: {e}"),
@@ -277,6 +291,101 @@ fn fetch_period_records(
 /// (`YYYYMMDD`, per the reference Tally MCP implementation).
 fn format_tally_date(d: NaiveDate) -> String {
     d.format("%Y%m%d").to_string()
+}
+
+/// Ledger groups confirmed (2026-10-16, against the real JP Office chart of
+/// accounts, via agent/scripts/check_bill_wise_raw.ps1) to hold genuine
+/// trade receivables. Client-specific group names, hardcoded like
+/// `KNOWN_IMPRECISE_GROUPS` below - this is a single-tenant app, not a
+/// server-configurable scheme.
+const RECEIVABLE_GROUPS: &[&str] =
+    &["Sundry Debtors", "Advance to Staff", "Adv. to Outsider", "Advance to Supplier", "Loans & Advances (Asset)"];
+
+/// Same idea, payable side.
+const PAYABLE_GROUPS: &[&str] = &["Sundry Creditors"];
+
+/// Parses one of Tally's own date formats ("31-Mar-12" and "31-Mar-2026"
+/// have both been seen in real exports) into ISO "YYYY-MM-DD" - the format
+/// every other date already on the wire to the server uses (`TallyRecord`'s
+/// `period_start`/`period_end`). Returns the original string unparsed,
+/// rather than dropping it, if neither format matches - a field the server
+/// can't make sense of is better than one silently lost.
+fn parse_tally_date(raw: &str) -> String {
+    let raw = raw.trim();
+    NaiveDate::parse_from_str(raw, "%d-%b-%y")
+        .or_else(|_| NaiveDate::parse_from_str(raw, "%d-%b-%Y"))
+        .map(|d| d.format("%Y-%m-%d").to_string())
+        .unwrap_or_else(|_| raw.to_string())
+}
+
+/// Classifies each raw bill by its own ledger's immediate PARENT group
+/// (`ledger_parents`, keyed by ledger name - the same shape the standing
+/// Trial Balance check already builds from `fetch_ledger_balances()`).
+/// Neither "Bills Receivable" nor "Bills Payable" is cleanly scoped by this
+/// on the real install (confirmed 2026-10-16: both report IDs return a mix
+/// of Sundry Debtors, Sundry Creditors, and Fixed Assets ledgers) - a bill
+/// whose ledger isn't in either known list, or whose ledger isn't in
+/// `ledger_parents` at all, is discarded rather than guessed at (e.g. the
+/// Fixed Assets "bills" the investigation found aren't a receivable or
+/// payable at all, and are never pushed).
+fn classify_bills(raw: Vec<RawBill>, ledger_parents: &std::collections::HashMap<&str, &str>) -> Vec<BillRecord> {
+    raw.into_iter()
+        .filter_map(|b| {
+            let parent = *ledger_parents.get(b.ledger_name.as_str())?;
+            let nature = if RECEIVABLE_GROUPS.contains(&parent) {
+                BillNature::Receivable
+            } else if PAYABLE_GROUPS.contains(&parent) {
+                BillNature::Payable
+            } else {
+                return None;
+            };
+            Some(BillRecord {
+                ledger_name: b.ledger_name,
+                bill_ref: b.bill_ref,
+                bill_date: b.bill_date.as_deref().map(parse_tally_date),
+                nature,
+                outstanding_amount: b.closing_amount,
+                due_date: b.due_date.as_deref().map(parse_tally_date),
+                voucher_date: b.voucher_date.as_deref().map(parse_tally_date),
+                voucher_type: b.voucher_type,
+                voucher_number: b.voucher_number,
+                voucher_amount: b.voucher_amount,
+            })
+        })
+        .collect()
+}
+
+/// Fetches both of Tally's bill-wise reports, classifies every bill by its
+/// ledger's own group (`classify_bills`), and dedupes by (ledger, bill ref) -
+/// the same bill can appear in both the "Bills Receivable" and "Bills
+/// Payable" pulls on this install (confirmed 2026-10-16: 181 of 359/294
+/// party names overlapped between the two), since neither report ID is
+/// cleanly scoped. Never panics: returns an empty Vec, logged, on any fetch
+/// failure, same convention as every other fetch in this file.
+fn fetch_and_classify_bills(tally: &HttpTallyGateway) -> Vec<BillRecord> {
+    let balances = match tally.fetch_ledger_balances() {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("bills sync: could not fetch ledger balances for classification: {e}");
+            return Vec::new();
+        }
+    };
+    let ledger_parents: std::collections::HashMap<&str, &str> =
+        balances.iter().filter_map(|b| b.parent.as_deref().map(|p| (b.name.as_str(), p))).collect();
+
+    let mut raw: Vec<RawBill> = Vec::new();
+    for report_id in ["Bills Receivable", "Bills Payable"] {
+        match tally.fetch_bills(report_id) {
+            Ok(bills) => raw.extend(bills),
+            Err(e) => log::error!("bills sync: could not fetch '{report_id}': {e}"),
+        }
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    classify_bills(raw, &ledger_parents)
+        .into_iter()
+        .filter(|b| seen.insert((b.ledger_name.clone(), b.bill_ref.clone())))
+        .collect()
 }
 
 /// Groups whose raw rollup is known, as of 2026-10-09, not to match Tally's
@@ -456,5 +565,81 @@ mod tests {
         assert!((cleaning - 11329.37).abs() < 0.01, "should use the raw range's value (~11329.37), not the report's wrong 0.00: got {cleaning}");
         let cctv = *by_name.get("CCTV Maintanence").expect("CCTV Maintanence should be in the pushed records");
         assert!(cctv.abs() < 0.01, "CCTV Maintanence had no real movement, expected ~0.0: got {cctv}");
+    }
+
+    fn raw_bill(ledger_name: &str, bill_ref: &str, closing_amount: f64) -> RawBill {
+        RawBill {
+            ledger_name: ledger_name.to_string(),
+            bill_ref: bill_ref.to_string(),
+            bill_date: None,
+            closing_amount,
+            due_date: None,
+            voucher_date: None,
+            voucher_type: None,
+            voucher_number: None,
+            voucher_amount: None,
+        }
+    }
+
+    #[test]
+    fn parse_tally_date_handles_both_two_and_four_digit_years() {
+        // Real value from the 2026-10-16 capture.
+        assert_eq!(parse_tally_date("31-Mar-12"), "2012-03-31");
+        assert_eq!(parse_tally_date("5-Jan-2026"), "2026-01-05");
+    }
+
+    #[test]
+    fn parse_tally_date_falls_back_to_the_raw_string_on_an_unrecognized_format() {
+        assert_eq!(parse_tally_date("not a date"), "not a date");
+    }
+
+    #[test]
+    fn classify_bills_normalizes_tally_dates_to_iso() {
+        let ledger_parents: std::collections::HashMap<&str, &str> = [("Acme Corp", "Sundry Debtors")].into_iter().collect();
+        let mut raw = raw_bill("Acme Corp", "INV-001", -5000.0);
+        raw.bill_date = Some("31-Mar-12".to_string());
+        raw.due_date = Some("30-Apr-12".to_string());
+        let bills = classify_bills(vec![raw], &ledger_parents);
+        assert_eq!(bills[0].bill_date.as_deref(), Some("2012-03-31"));
+        assert_eq!(bills[0].due_date.as_deref(), Some("2012-04-30"));
+    }
+
+    #[test]
+    fn classify_bills_sorts_receivable_and_payable_by_ledger_group() {
+        let ledger_parents: std::collections::HashMap<&str, &str> = [
+            ("Acme Corp", "Sundry Debtors"),
+            ("Staff Loan - Priya", "Advance to Staff"),
+            ("Local Supplies Co", "Sundry Creditors"),
+        ]
+        .into_iter()
+        .collect();
+        let raw = vec![
+            raw_bill("Acme Corp", "INV-001", -5000.0),
+            raw_bill("Staff Loan - Priya", "ADV-02", -1200.0),
+            raw_bill("Local Supplies Co", "BILL-9", 3400.0),
+        ];
+        let bills = classify_bills(raw, &ledger_parents);
+        assert_eq!(bills.len(), 3);
+        let by_ref: std::collections::HashMap<&str, &BillRecord> = bills.iter().map(|b| (b.bill_ref.as_str(), b)).collect();
+        assert_eq!(by_ref["INV-001"].nature, BillNature::Receivable);
+        assert_eq!(by_ref["ADV-02"].nature, BillNature::Receivable);
+        assert_eq!(by_ref["BILL-9"].nature, BillNature::Payable);
+    }
+
+    // The investigation (2026-10-16) found "Bills Receivable" returning real
+    // Fixed Assets bills alongside genuine debtors - this is exactly what
+    // must be discarded, not guessed into one side or the other.
+    #[test]
+    fn classify_bills_discards_ledgers_outside_the_known_groups() {
+        let ledger_parents: std::collections::HashMap<&str, &str> = [("Furniture & Fixture", "Fixed Assets")].into_iter().collect();
+        let raw = vec![raw_bill("Furniture & Fixture", "Furniture Up to 31.3.12", -945852.88)];
+        assert!(classify_bills(raw, &ledger_parents).is_empty());
+    }
+
+    #[test]
+    fn classify_bills_discards_a_ledger_with_no_known_parent() {
+        let ledger_parents: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        let raw = vec![raw_bill("Unknown Ledger", "REF-1", -100.0)];
+        assert!(classify_bills(raw, &ledger_parents).is_empty());
     }
 }

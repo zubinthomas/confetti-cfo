@@ -17,7 +17,7 @@ import { computeContentHash } from '../import/contentHash.ts';
 import { findManuallyRejectedPrecedent, supersedePendingForSource } from '../import/batchResolution.ts';
 import { loadEffectiveMappings } from './loadEffectiveMappings.ts';
 import { fiscalYearOf, monthPeriod } from '../import/types.ts';
-import type { Issue, ParsedFinancialRecord, ParsedPeriod, ParsedWorkbook } from '../import/types.ts';
+import type { Issue, ParsedBillRecord, ParsedFinancialRecord, ParsedPeriod, ParsedWorkbook } from '../import/types.ts';
 
 export interface TallyRecordInput {
   ledgerName: string;
@@ -26,6 +26,12 @@ export interface TallyRecordInput {
   periodEnd: string;   // YYYY-MM-DD; same as periodStart for a point-in-time balance
   value: number;
 }
+
+/** Wire shape of one entry in POST /sync's `bills` array - everything the
+ *  agent's BillRecord (agent/src/types.rs) carries. tallySourceId isn't part
+ *  of it: the route attributes every pushed bill to the authenticated
+ *  source itself, same as records never carry their own source id either. */
+export type TallyBillInput = Omit<ParsedBillRecord, 'tallySourceId'>;
 
 type TallySource = typeof schema.tallySources.$inferSelect;
 type ImportBatch = typeof schema.importBatches.$inferSelect;
@@ -246,7 +252,7 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
     }
 
     if (newPreviewIds.length) {
-      await supersedePendingForSource(db, { sourceType: 'tally', tallySourceId: source.id }, newPreviewIds);
+      await supersedePendingForSource(db, { sourceType: 'tally', tallySourceId: source.id, kind: 'tally' }, newPreviewIds);
     }
 
     const status: TallySyncStatus = !anyChange
@@ -263,5 +269,125 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
       status: 'error', error: msg, batches: [], unmappedLedgers: [],
       source: await recordOutcome(source.id, 'error', msg, null),
     };
+  }
+}
+
+export type TallyBillsSyncStatus = 'preview_created' | 'auto_committed' | 'no_changes' | 'auto_discarded' | 'error';
+
+export interface TallyBillsSyncResult {
+  status: TallyBillsSyncStatus;
+  batch: ImportBatch | null;
+  error?: string;
+}
+
+/** Parallel to syncTallyPush, but for bill-wise data. Bills are company-wide
+ *  (no business/unit/period/ledger-mapping resolution), so this builds one
+ *  batch per cycle, not one per business, and gets its own kind ('bills')
+ *  so it dedups/supersedes independently of the financial-records sync -
+ *  see batchResolution.ts's supersedePendingForSource, now scoped by kind
+ *  for exactly this reason.
+ *
+ *  Deliberately never touches tallySources' lastSyncAt/lastSyncStatus/
+ *  lastSyncError/lastSyncIssues columns - those are syncTallyPush's
+ *  contract (the dashboard's freshness badges read them), and calling
+ *  recordOutcome from both functions in the same cycle would let whichever
+ *  ran second silently overwrite the other's real error with its own
+ *  success. */
+export async function syncTallyBillsPush(source: TallySource, bills: ParsedBillRecord[]): Promise<TallyBillsSyncResult> {
+  await ready();
+  try {
+    if (bills.length === 0) {
+      return { status: 'no_changes', batch: null };
+    }
+
+    const parsed: ParsedWorkbook = {
+      kind: 'bills',
+      businessName: '',
+      periods: [],
+      financialRecords: [],
+      salesRecords: [],
+      consignmentRecords: [],
+      employeeRecords: [],
+      targetRecords: [],
+      productionLogRecords: [],
+      shiftRosterRecords: [],
+      orderRecords: [],
+      billRecords: bills,
+      issues: [],
+    };
+
+    const plan = await buildMergePlan(parsed);
+    const contentHash = computeContentHash(plan.details);
+    const noChanges = Object.values(plan.details).every((d) => d.length === 0);
+
+    if (noChanges) {
+      const [batch] = await db.insert(schema.importBatches).values({
+        filename: `${source.label} (bills)`,
+        kind: 'bills',
+        status: 'discarded',
+        uploadedAt: new Date().toISOString(),
+        committedAt: null,
+        issues: [],
+        stats: plan.stats,
+        details: null,
+        payload: null,
+        sourceType: 'tally',
+        tallySourceId: source.id,
+        contentHash,
+        decisionSource: 'auto_discard_noop',
+      }).returning();
+      return { status: 'no_changes', batch };
+    }
+
+    const rejectedBefore = await findManuallyRejectedPrecedent(db, {
+      kind: 'bills', sourceType: 'tally', sheetSourceId: null, tallySourceId: source.id, contentHash,
+    });
+    if (rejectedBefore) {
+      const [batch] = await db.insert(schema.importBatches).values({
+        filename: `${source.label} (bills)`,
+        kind: 'bills',
+        status: 'discarded',
+        uploadedAt: new Date().toISOString(),
+        committedAt: null,
+        issues: [],
+        stats: plan.stats,
+        details: plan.details,
+        payload: null,
+        sourceType: 'tally',
+        tallySourceId: source.id,
+        contentHash,
+        decisionSource: 'auto_discard_duplicate_rejected',
+      }).returning();
+      return { status: 'auto_discarded', batch };
+    }
+
+    const [batch] = await db.insert(schema.importBatches).values({
+      filename: `${source.label} (bills)`,
+      kind: 'bills',
+      status: 'preview',
+      uploadedAt: new Date().toISOString(),
+      committedAt: null,
+      issues: [],
+      stats: plan.stats,
+      details: plan.details,
+      payload: parsed,
+      sourceType: 'tally',
+      tallySourceId: source.id,
+      contentHash,
+    }).returning();
+    await supersedePendingForSource(db, { sourceType: 'tally', tallySourceId: source.id, kind: 'bills' }, [batch.id]);
+
+    if (source.syncMode === 'auto' && canAutoCommit([])) {
+      await commitMergePlan(plan);
+      const [committed] = await db.update(schema.importBatches).set({
+        status: 'committed', committedAt: new Date().toISOString(), decisionSource: 'auto_commit',
+      }).where(eq(schema.importBatches.id, batch.id)).returning();
+      return { status: 'auto_committed', batch: committed };
+    }
+    return { status: 'preview_created', batch };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`tally: bills sync failed for source ${source.id} (${source.label}):`, msg);
+    return { status: 'error', batch: null, error: msg };
   }
 }

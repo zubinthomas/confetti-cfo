@@ -186,8 +186,34 @@ export interface ParsedOrderRecord {
   sourceRow: number;
 }
 
+// One outstanding bill from Tally's bill-wise sync (server/tally/sync.ts,
+// agent/src/tally_client.rs's fetch_bills + classify_bills) - a current-state
+// snapshot of what's presently outstanding, not a time series. `nature` is
+// decided agent-side by the bill's own ledger group, not by which Tally
+// report it came from (neither "Bills Receivable" nor "Bills Payable" is
+// cleanly scoped by that on the real install - confirmed 2026-10-16).
+// Matched against existing `tally_bills` rows by (tallySourceId, ledgerName,
+// billRef) - see server/import/mergeBills.ts's `billMatchKey`. Unlike
+// order_lines (whose closest-precedent "never delete, keep last-known state"
+// policy doesn't transfer here - a cleared bill's last-known state would be
+// actively wrong), a bill missing from a later sync gets marked resolved,
+// not just left stale.
+export interface ParsedBillRecord {
+  tallySourceId: number;
+  ledgerName: string;
+  billRef: string;
+  billDate: string | null; // YYYY-MM-DD
+  nature: 'receivable' | 'payable';
+  outstandingAmount: number;
+  dueDate: string | null; // YYYY-MM-DD
+  voucherDate: string | null;
+  voucherType: string | null;
+  voucherNumber: string | null;
+  voucherAmount: number | null;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders' | 'bills';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
@@ -198,6 +224,7 @@ export interface ParsedWorkbook {
   productionLogRecords: ParsedProductionLogRecord[];
   shiftRosterRecords: ParsedShiftRosterRecord[];
   orderRecords: ParsedOrderRecord[];
+  billRecords: ParsedBillRecord[];
   issues: Issue[];
 }
 
