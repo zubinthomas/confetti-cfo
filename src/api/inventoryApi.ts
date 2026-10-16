@@ -32,6 +32,21 @@ export const listTransactions = (itemId: string) =>
 export const listBatches = (itemId: string) =>
   get<InventoryBatch[]>(`/inventory/items/${itemId}/batches`);
 
+export interface BusinessUnitTransaction {
+  itemId: string;
+  createdDate: string;
+  quantity: number;
+  itemUnitCost: number | null;
+  batchUnitCost: number | null;
+}
+
+// All "out" transactions for items tagged with a given business unit, for
+// the theoretical-COGS variance calculation (src/data/cogsVariance.ts).
+export const listTransactionsForBusinessUnit = (businessUnitKey: string, from: string, to: string) => {
+  const query = new URLSearchParams({ businessUnitKey, from, to });
+  return get<BusinessUnitTransaction[]>(`/inventory/transactions?${query}`);
+};
+
 // expiryDate/unitCost only matter for an "in" against an expiry-tracked
 // item (creates a batch); batchId only matters for an "out" against one
 // (debits that batch) - see server/db/inventoryLedger.ts.

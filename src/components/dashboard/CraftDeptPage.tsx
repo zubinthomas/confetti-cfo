@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ClipboardList } from "lucide-react";
 import KpiCard from "./KpiCard";
@@ -8,8 +8,10 @@ import StatusRow from "./StatusRow";
 import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
-import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
-import { computeDeptFinancials, deptFinancialsExportSheets, resolveDeptBu, resolveDeptLi, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
+import { MONTHS, L, pct, sum, maxIdx, minIdx, fyLabel, fyDateRange, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
+import { computeDeptFinancials, deptFinancialsExportSheets, resolveDeptBu, resolveDeptLi, DEPT_BU_NAMES, type DeptKey, type DeptFinancials } from "@/data/deptFinancials";
+import { computeTheoreticalCogs, computeCogsVariance, type CogsVarianceResult } from "@/data/cogsVariance";
+import { listTransactionsForBusinessUnit } from "@/api/inventoryApi";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFyParam } from "@/hooks/useFyParam";
@@ -83,7 +85,7 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
       </div>
 
       {data.hasMonthlyDetail ? (
-        <DeptDetail data={data} label={label} />
+        <DeptDetail data={data} label={label} deptKey={deptKey} fy={fy} />
       ) : (
         <DashCard title={`Monthly detail - ${label}`}>
           <p className="text-sm text-muted-foreground">
@@ -98,7 +100,7 @@ export default function CraftDeptPage({ deptKey, heading }: { deptKey: DeptKey; 
   );
 }
 
-function DeptDetail({ data, label }: { data: DeptFinancials; label: string }) {
+function DeptDetail({ data, label, deptKey, fy }: { data: DeptFinancials; label: string; deptKey: DeptKey; fy: string }) {
   const fyRevenue = sum(data.revenue);
   const fyCogs = sum(data.cogs);
   const fyGrossProfit = fyRevenue - fyCogs;
@@ -112,6 +114,18 @@ function DeptDetail({ data, label }: { data: DeptFinancials; label: string }) {
   const profitableMonths = data.netPL.filter((v) => v != null && v > 0).length;
 
   const freshness = useImportFreshness(["cepl"]);
+
+  // Theoretical COGS from the inventory ledger's "out" transactions for
+  // items tagged with this department, compared against the P&L's actual
+  // reported COGS (fyCogs, above) - see src/data/cogsVariance.ts.
+  const [variance, setVariance] = useState<CogsVarianceResult | null>(null);
+  useEffect(() => {
+    setVariance(null);
+    const [from, to] = fyDateRange(fy);
+    listTransactionsForBusinessUnit(DEPT_BU_NAMES[deptKey], from, to)
+      .then((txns) => setVariance(computeCogsVariance(computeTheoreticalCogs(txns), fyCogs)))
+      .catch(() => setVariance(null));
+  }, [deptKey, fy, fyCogs]);
 
   const kpis: KpiData[] = [
     {
@@ -158,6 +172,15 @@ function DeptDetail({ data, label }: { data: DeptFinancials; label: string }) {
       status: "red",
       definition: "The month with the lowest net P&L for the fiscal year.",
       ...freshness,
+    },
+    {
+      label: "COGS Variance (Theoretical)",
+      value: variance?.variancePct != null ? `${variance.variancePct > 0 ? "+" : ""}${variance.variancePct.toFixed(1)}%` : "-",
+      sub: variance?.theoretical != null
+        ? `₹${L(variance.theoretical)} theoretical vs ₹${L(fyCogs)} actual`
+        : "No items tagged to this department yet",
+      status: variance?.variancePct == null ? undefined : Math.abs(variance.variancePct) <= 10 ? "green" : Math.abs(variance.variancePct) <= 25 ? "amber" : "red",
+      definition: "Actual reported COGS vs. the inventory ledger's own quantity × cost for \"out\" transactions on items tagged to this department. Includes any waste recorded as a plain stock-out, since the ledger has no separate waste/spoilage category - a wide variance can mean waste, miscosted items, or items not yet tagged with a financial department.",
     },
   ];
 

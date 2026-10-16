@@ -18,7 +18,10 @@ import type { ExportSheet } from "@/lib/dataExport";
 
 export const CEPL_ID = 1;
 
-const DEPT_BU_NAMES = { tradingItems: "Trading Items", pottery: "Pottery", batik: "Batik", stitching: "Stitching" } as const;
+// Also doubles as each department's label in InventoryTab.tsx's
+// BUSINESS_UNITS dropdown (inventory_items.business_unit_key) - keep the two
+// in sync, since src/data/cogsVariance.ts joins on this exact string.
+export const DEPT_BU_NAMES = { tradingItems: "Trading Items", pottery: "Pottery", batik: "Batik", stitching: "Stitching" } as const;
 export type DeptKey = keyof typeof DEPT_BU_NAMES;
 
 export function resolveDeptBu(businessUnits: BusinessUnit[]): Record<DeptKey, number> {

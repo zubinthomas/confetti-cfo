@@ -15,7 +15,7 @@ import { db, ready, schema } from './client.ts';
 export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
-  'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup',
+  'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -30,7 +30,9 @@ export class PermissionGrantError extends Error {}
 
 const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role'];
 const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings'];
-const READ_WRITE: Resource[] = ['Integration', 'Backup'];
+// BankAccount: bank accounts aren't deletable, only deactivated (isActive on
+// the schema row) - no delete action is ever granted, same as Backup/Integration.
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
   ...FULL_CRUD.flatMap((resource) => ACTIONS.map((action) => ({ resource, action }))),

@@ -117,6 +117,9 @@ function PLDetail({ data, label }: { data: CompanyPL; label: string }) {
   const fyOther = sum(data.other);
   const fyNetPL = sum(data.netPL);
   const fyNetMarginPct = fyRevenue ? (fyNetPL / fyRevenue) * 100 : 0;
+  // hrCost is already negative here (Tally sign convention - see companyPL.ts),
+  // so this needs Math.abs to read as a plain positive percentage.
+  const fyPeopleCostPct = fyRevenue ? (Math.abs(fyHrCost) / fyRevenue) * 100 : 0;
 
   const bestMonthIdx = maxIdx(data.netPL);
   const worstMonthIdx = minIdx(data.netPL);
@@ -145,6 +148,14 @@ function PLDetail({ data, label }: { data: CompanyPL; label: string }) {
       sub: "After all expenses",
       status: fyNetMarginPct >= 0 ? "green" : "red",
       definition: "Net profit as a percentage of revenue, after all operating, HR, and other costs.",
+      ...freshness,
+    },
+    {
+      label: "People Cost (% of Revenue)",
+      value: `${fyPeopleCostPct.toFixed(1)}%`,
+      sub: "HR/payroll cost as % of company revenue",
+      status: fyPeopleCostPct < 30 ? "green" : fyPeopleCostPct <= 40 ? "amber" : "red",
+      definition: "Total company HR/payroll cost as a percentage of total company revenue for the fiscal year.",
       ...freshness,
     },
     {

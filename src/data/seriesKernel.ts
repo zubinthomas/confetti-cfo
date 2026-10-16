@@ -77,6 +77,12 @@ export const MONTHS = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Ja
 /** "2025-2026" -> "FY 25-26" */
 export const fyLabel = (fy: string): string => `FY ${fy.slice(2, 4)}-${fy.slice(7)}`;
 
+/** "2025-2026" -> ["2025-04-01", "2026-03-31"] (April-March FY, matching
+ *  server/import/types.ts's fiscalYearOf) - the calendar-date range to query
+ *  against real timestamped records (e.g. the inventory ledger), as opposed
+ *  to this app's own period-id system which the P&L data uses. */
+export const fyDateRange = (fy: string): [string, string] => [`${fy.slice(0, 4)}-04-01`, `${fy.slice(5, 9)}-03-31`];
+
 // ── Format helpers ───────────────────────────────────────────────────────────
 export const L = (n: number | null | undefined): string => {
   if (n == null) return "-";

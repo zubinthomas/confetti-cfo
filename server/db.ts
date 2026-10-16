@@ -24,6 +24,10 @@ const TABLES: Record<string, AnyPgTable> = {
   // it's served by server/routes/inventory.ts instead, not this generic
   // layer. Both share the Inventory permission resource.
   Inventory: schema.inventoryItems,
+  // The account list only - bank_balance_entries is append-only (same
+  // reasoning as inventory_transactions above) and is served by
+  // server/routes/cash.ts instead. Both share the BankAccount permission resource.
+  BankAccount: schema.bankAccounts,
 };
 
 function assertEntity(entity: string): AnyPgTable {
@@ -154,6 +158,15 @@ export async function updateEntity(entity: string, id: string, data: Record<stri
   delete row.createdDate;
   const [updated] = await db.update(table).set(row).where(eq(table.id, id)).returning();
   return updated ? toApiShape(table, updated as Record<string, unknown>) : null;
+}
+
+/** Whether this entity's table has a division column at all - BankAccount
+ *  is the first entity that doesn't (bank accounts are company-wide, see
+ *  server/db/bankBalanceLedger.ts), so the division-scope checks in
+ *  server/routes/entities.ts need this instead of assuming every entity
+ *  has one, the way listEntities' own divisionCol check above already does. */
+export function entityHasDivisionColumn(entity: string): boolean {
+  return !!getTableColumns(assertEntity(entity)).division;
 }
 
 /** Snake-case API payload -> camelCase row, for the few atomic

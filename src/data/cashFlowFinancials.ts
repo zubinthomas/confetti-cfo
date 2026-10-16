@@ -143,8 +143,14 @@ export function cashFlowExportSheets(data: CashFlowYearData): ExportSheet[] {
   return [monthly, outflows];
 }
 
+// "Opening / current bank balance" used to be listed here but is no longer a
+// gap - manual balance entries on the Cash Flow page (src/api/cashApi.ts)
+// now supply a real, if manually-maintained, cash position. The remaining
+// items are still not derivable from any source this app integrates with,
+// and are specifically why the 13-week forecast (src/data/cashForecast.ts)
+// is a trend projection rather than a timing-aware one - it has no idea when
+// a specific receivable will land or a specific payable is actually due.
 export const CASH_GAPS = [
-  "Opening / current bank balance",
   "Accounts receivable & collection timing",
   "Accounts payable & vendor payment terms",
   "Loan EMIs, interest schedule & debt position",

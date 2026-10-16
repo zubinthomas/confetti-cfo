@@ -24,10 +24,20 @@ const divisionColors: Record<string, string> = {
 };
 const DEFAULT_DIVISION_COLOR = "#888";
 
-const EMPTY = { name: "", sku: "", division: "", category: "", unit: "", quantity_on_hand: "0", reorder_threshold: "", unit_cost: "", notes: "", tracks_expiry: false };
+const EMPTY = { name: "", sku: "", division: "", category: "", unit: "", quantity_on_hand: "0", reorder_threshold: "", unit_cost: "", notes: "", tracks_expiry: false, business_unit_key: "" };
 
 const CATEGORIES = ["Raw Material", "Finished Good", "Packaging", "Trading Item", "Other"];
 const UNITS = ["kg", "g", "pieces", "meters", "liters", "boxes", "rolls"];
+
+// Financial department this item's stock movements count against for the
+// theoretical-COGS variance (src/data/cogsVariance.ts) - independent of
+// `division` above, which is an HR access-scoping field with different
+// names (e.g. "Batik Unit" vs. "Batik") and no 1:1 mapping to it. These
+// plain labels are the value stored in business_unit_key itself (matching
+// how CATEGORIES/UNITS/divisionOptions already work with FormField, which
+// has no separate value/label split) - CraftDeptPage.tsx and SiennaTab.tsx
+// pass the matching literal when querying their own department's variance.
+const BUSINESS_UNITS = ["Trading Items", "Pottery", "Batik", "Stitching", "F&B", "Store"];
 
 const isLowStock = (item: any) => item.reorder_threshold != null && item.quantity_on_hand <= item.reorder_threshold;
 
@@ -445,6 +455,7 @@ export default function InventoryTab() {
         quantity_on_hand: Number(form.quantity_on_hand) || 0,
         reorder_threshold: form.reorder_threshold === "" ? null : Number(form.reorder_threshold),
         unit_cost: form.unit_cost === "" ? null : Number(form.unit_cost),
+        business_unit_key: form.business_unit_key === "" ? null : form.business_unit_key,
       };
       await Inventory.create(payload);
       setShowForm(false);
@@ -578,6 +589,7 @@ export default function InventoryTab() {
               <FormField label="Department *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Category" name="category" options={CATEGORIES} value={form.category ?? ""} onChange={updateField} />
               <FormField label="Unit" name="unit" options={UNITS} value={form.unit ?? ""} onChange={updateField} />
+              <FormField label="Financial Department" name="business_unit_key" options={BUSINESS_UNITS} placeholder="Unassigned (no COGS variance)" value={form.business_unit_key ?? ""} onChange={updateField} />
               <FormField label="Opening Quantity" name="quantity_on_hand" type="number" value={form.quantity_on_hand ?? ""} onChange={updateField} />
               <FormField label="Reorder Threshold" name="reorder_threshold" type="number" value={form.reorder_threshold ?? ""} onChange={updateField} />
               <FormField label="Unit Cost (₹)" name="unit_cost" type="number" value={form.unit_cost ?? ""} onChange={updateField} />
@@ -614,6 +626,7 @@ export default function InventoryTab() {
                   ["SKU", selected.sku],
                   ["Department", selected.division],
                   ["Category", selected.category],
+                  ["Financial Department", selected.business_unit_key || "Unassigned"],
                   ["Quantity on Hand", `${selected.quantity_on_hand} ${selected.unit || ""}`],
                   ["Reorder Threshold", selected.reorder_threshold],
                   ["Unit Cost", selected.unit_cost ? `₹${selected.unit_cost}` : null],

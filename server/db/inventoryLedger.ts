@@ -4,7 +4,7 @@
 // Reuses getUserDivisionScope directly for the identical scoping guarantee
 // the generic entity CRUD gets automatically for the item catalog.
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { getUserDivisionScope } from './divisionScope.ts';
 
@@ -56,6 +56,40 @@ export async function listBatches(userId: number, itemId: string) {
     .from(schema.inventoryBatches)
     .where(eq(schema.inventoryBatches.itemId, itemId))
     .orderBy(sql`${schema.inventoryBatches.expiryDate} IS NULL, ${schema.inventoryBatches.expiryDate} ASC`);
+}
+
+/** All "out" transactions for items tagged with the given businessUnitKey,
+ *  in [from, to), with each row's unitCost resolved the same way
+ *  applyLedgerEffect resolves it when recording an "in" (batch cost if the
+ *  transaction is against a batch, else the item's current unitCost) - the
+ *  input to the theoretical-COGS calculation (see
+ *  server/db/inventoryCogsVariance.ts). Respects the caller's division
+ *  scope the same way requireScopedItem does for a single item, since this
+ *  reads across every item in a business unit, not one already-checked item. */
+export async function listTransactionsForBusinessUnit(userId: number, businessUnitKey: string, from: string, to: string) {
+  await ready();
+  const scope = await getUserDivisionScope(userId);
+  const itemFilter = scope.length > 0
+    ? and(eq(schema.inventoryItems.businessUnitKey, businessUnitKey), inArray(schema.inventoryItems.division, scope))
+    : eq(schema.inventoryItems.businessUnitKey, businessUnitKey);
+
+  return db
+    .select({
+      itemId: schema.inventoryTransactions.itemId,
+      createdDate: schema.inventoryTransactions.createdDate,
+      quantity: schema.inventoryTransactions.quantity,
+      itemUnitCost: schema.inventoryItems.unitCost,
+      batchUnitCost: schema.inventoryBatches.unitCost,
+    })
+    .from(schema.inventoryTransactions)
+    .innerJoin(schema.inventoryItems, eq(schema.inventoryItems.id, schema.inventoryTransactions.itemId))
+    .leftJoin(schema.inventoryBatches, eq(schema.inventoryBatches.id, schema.inventoryTransactions.batchId))
+    .where(and(
+      itemFilter,
+      eq(schema.inventoryTransactions.type, 'out'),
+      gte(schema.inventoryTransactions.createdDate, from),
+      lte(schema.inventoryTransactions.createdDate, to),
+    ));
 }
 
 type LedgerEffectInput = {

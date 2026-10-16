@@ -626,6 +626,17 @@ export const inventoryItems = pgTable('inventory_items', {
   reorderThreshold: doublePrecision('reorder_threshold'),
   unitCost: doublePrecision('unit_cost'),
   notes: text('notes'),
+  // Which financial department's COGS this item's consumption counts
+  // against, for the theoretical-vs-actual COGS variance calculation
+  // (server/db/inventoryCogsVariance.ts). Deliberately separate from
+  // `division` above: division drives HR access-scoping and doesn't line up
+  // 1:1 with the financial department names (e.g. "Batik Unit" vs "Batik"),
+  // so this is its own explicit, user-set field rather than inferred.
+  // Nullable - existing items start unassigned, variance just isn't
+  // computable for them until someone sets it. One of the plain labels in
+  // InventoryTab.tsx's BUSINESS_UNITS ("Trading Items"|"Pottery"|"Batik"|
+  // "Stitching"|"F&B"|"Store"), or null.
+  businessUnitKey: text('business_unit_key'),
   // Opts this item into batch/expiry tracking (see inventoryBatches below) -
   // most items leave this false and keep working exactly as before, since a
   // single expiryDate column on the item itself would be wrong once the same
@@ -694,6 +705,41 @@ export const purchaseOrderItems = pgTable('purchase_order_items', {
   quantityOrdered: doublePrecision('quantity_ordered').notNull(),
   unitCost: doublePrecision('unit_cost'),
   quantityReceived: doublePrecision('quantity_received').notNull().default(0),
+});
+
+// ── Cash (manual bank-balance tracking, no live feed exists or is coming -
+// Tally's own "Bank Accounts" ledger category was deliberately left
+// unseeded, see server/db/seed-tally-pl-and-missing-bs.ts) ─────────────────
+export const bankAccountTypeEnum = pgEnum('bank_account_type', ['current', 'savings', 'fixed_deposit', 'other']);
+
+// The catalog - a plain generic entity (server/db.ts's TABLES map), same
+// shape as inventoryItems: list/create/edit/delete come for free.
+export const bankAccounts = pgTable('bank_accounts', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  name: text('name').notNull(),
+  accountType: bankAccountTypeEnum('account_type').notNull().default('current'),
+  // Drives the available-vs-restricted cash split on the Cash Flow page -
+  // a simple per-account flag rather than a partial/reason-coded model,
+  // since that's all the real account structure needs today.
+  isRestricted: boolean('is_restricted').notNull().default(false),
+  restrictionNote: text('restriction_note'),
+  isActive: boolean('is_active').notNull().default(true),
+});
+
+// Append-only point-in-time balance snapshots - no update/delete surface,
+// same philosophy as inventory_transactions: a mistake is corrected with a
+// new entry, not by rewriting history (see server/db/bankBalanceLedger.ts).
+export const bankBalanceEntries = pgTable('bank_balance_entries', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  accountId: text('account_id').notNull().references(() => bankAccounts.id, { onDelete: 'cascade' }),
+  // The balance as-of this date, distinct from createdDate (when it was
+  // keyed in) - someone may enter Tuesday's balance on Wednesday.
+  asOfDate: text('as_of_date').notNull(),
+  balance: doublePrecision('balance').notNull(),
+  note: text('note'),
+  recordedByUserId: integer('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
 
 // ── Reservations (Cafe/Restaurant table booking with real capacity/overlap

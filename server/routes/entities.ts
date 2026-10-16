@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listEntities, createEntity, updateEntity, deleteEntity, getEntityRow } from '../db.ts';
+import { listEntities, createEntity, updateEntity, deleteEntity, getEntityRow, entityHasDivisionColumn } from '../db.ts';
 import { authMiddleware, requireEntityPermission, type AuthedRequest } from '../middleware/auth.ts';
 import { getUserDivisionScope } from '../db/divisionScope.ts';
 import { getManagedEmployeeIds } from '../db/managerScope.ts';
@@ -58,7 +58,7 @@ router.get('/:entity', requireEntityPermission('read'), async (req: AuthedReques
 router.post('/:entity', requireEntityPermission('write'), async (req: AuthedRequest, res) => {
   try {
     const scope = await getUserDivisionScope(req.user!.id);
-    if (scope.length > 0 && !scope.includes(req.body?.division)) {
+    if (scope.length > 0 && entityHasDivisionColumn(req.params.entity) && !scope.includes(req.body?.division)) {
       return res.status(403).json({ message: `You can only create records in: ${scope.join(', ')}` });
     }
     let body = req.body;
@@ -79,16 +79,17 @@ router.put('/:entity/:id', requireEntityPermission('write'), async (req: AuthedR
     const scope = await getUserDivisionScope(req.user!.id);
     const managedIds = await getManagedEmployeeIds(req.user!.id);
     const managerField = MANAGER_SCOPE_FIELD[req.params.entity];
-    if (scope.length > 0 || (managedIds.length > 0 && managerField)) {
+    const hasDivision = entityHasDivisionColumn(req.params.entity);
+    if ((scope.length > 0 && hasDivision) || (managedIds.length > 0 && managerField)) {
       const current = await getEntityRow(req.params.entity, req.params.id);
       if (!current) return res.status(404).json({ message: 'Not found' });
-      if (scope.length > 0 && !scope.includes(current.division as string)) {
+      if (scope.length > 0 && hasDivision && !scope.includes(current.division as string)) {
         return res.status(403).json({ message: 'That record is outside your assigned division.' });
       }
       if (managedIds.length > 0 && managerField && !managedIds.includes(current[managerField] as string)) {
         return res.status(403).json({ message: 'That record is outside the employees you manage.' });
       }
-      if (req.body?.division !== undefined && !scope.includes(req.body.division) && scope.length > 0) {
+      if (hasDivision && req.body?.division !== undefined && !scope.includes(req.body.division) && scope.length > 0) {
         return res.status(403).json({ message: `You can only assign records to: ${scope.join(', ')}` });
       }
     }
@@ -111,10 +112,11 @@ router.delete('/:entity/:id', requireEntityPermission('delete'), async (req: Aut
     const scope = await getUserDivisionScope(req.user!.id);
     const managedIds = await getManagedEmployeeIds(req.user!.id);
     const managerField = MANAGER_SCOPE_FIELD[req.params.entity];
-    if (scope.length > 0 || (managedIds.length > 0 && managerField)) {
+    const hasDivision = entityHasDivisionColumn(req.params.entity);
+    if ((scope.length > 0 && hasDivision) || (managedIds.length > 0 && managerField)) {
       const current = await getEntityRow(req.params.entity, req.params.id);
       if (!current) return res.status(404).json({ message: 'Not found' });
-      if (scope.length > 0 && !scope.includes(current.division as string)) {
+      if (scope.length > 0 && hasDivision && !scope.includes(current.division as string)) {
         return res.status(403).json({ message: 'That record is outside your assigned division.' });
       }
       if (managedIds.length > 0 && managerField && !managedIds.includes(current[managerField] as string)) {

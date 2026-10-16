@@ -1,24 +1,40 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import KpiCard from "./KpiCard";
 import DashCard from "./DashCard";
 import PLRow from "./PLRow";
 import ExportButtons from "./ExportButtons";
 import ChartTooltip from "./ChartTooltip";
 import PageSpinner from "./PageSpinner";
+import FormField from "@/components/hr/FormField";
 import { CASH_GAPS, cashFlowExportSheets, type CashFlowYearData } from "@/data/cashFlowFinancials";
+import { computeCashForecast } from "@/data/cashForecast";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useCashFlowYear } from "@/hooks/useCashFlowYear";
 import { useFyParam } from "@/hooks/useFyParam";
 import { useImportFreshness } from "@/hooks/useImportFreshness";
+import { useAuth } from "@/lib/AuthContext";
 import { MONTHS, L, sum, fyLabel } from "@/data/seriesKernel";
+import { BankAccount } from "@/api/entities";
+import { listBalanceEntries, recordBalanceEntry, getCashPosition, type BankBalanceEntry, type CashPosition } from "@/api/cashApi";
 import type { KpiData } from "./KpiCard";
 import type { PLRowData } from "./PLRow";
-import { Database } from "lucide-react";
+import { Database, Plus, X, Loader2 } from "lucide-react";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
 
+const ACCOUNT_TYPES = ["current", "savings", "fixed_deposit", "other"];
+
 const CAT_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4", "#10b981", "#ec4899", "#84cc16", "#94a3b8"];
+
+// Last n months with any reported money movement, in fiscal-year order - a
+// P&L year in progress has trailing all-zero months that aren't yet
+// reported, which would otherwise be mistaken for genuinely quiet months.
+function trailingActiveMonths(inflows: number[], outflows: number[], n: number): { inflows: number[]; outflows: number[] } {
+  const activeIdx = inflows.map((_, i) => i).filter((i) => inflows[i] !== 0 || outflows[i] !== 0);
+  const lastIdx = activeIdx.slice(-n);
+  return { inflows: lastIdx.map((i) => inflows[i]), outflows: lastIdx.map((i) => outflows[i]) };
+}
 
 export default function CashFlowTab() {
   const fys = useOverviewFiscalYears();
@@ -54,6 +70,8 @@ export default function CashFlowTab() {
           ))}
         </div>
       </div>
+
+      <CashPositionSection CUR={CUR} />
 
       {CUR.hasFullDetail ? <FullDetail CUR={CUR} /> : (
         <DashCard title={`Group cash flow - ${CUR.label}`}>
@@ -177,8 +195,8 @@ function FullDetail({ CUR }: { CUR: CashFlowYearData }) {
             ))}
           </ul>
           <p className="text-xs text-muted-foreground mt-3">
-            Until a bank/receivables source is connected, this page shows P&L-basis money movement
-            rather than a true cash position or forecast.
+            The cash position above comes from manually recorded bank balances, and its forecast is a
+            trend projection - these four items are specifically why it can't be a timing-aware one.
           </p>
         </DashCard>
       </div>
@@ -198,5 +216,261 @@ function FullDetail({ CUR }: { CUR: CashFlowYearData }) {
         </ResponsiveContainer>
       </DashCard>
     </>
+  );
+}
+
+// Available/restricted/total cash + a 13-week trend forecast, built from
+// manually recorded bank balances (server/db/bankBalanceLedger.ts) - the
+// only realistic source, since Tally's own Bank Accounts ledger was never
+// seeded (real balances turned out commingled inside Fixed Deposit). Shown
+// regardless of CUR.hasFullDetail - the position itself doesn't depend on
+// the P&L workbook, only the forecast's run-rate does.
+function CashPositionSection({ CUR }: { CUR: CashFlowYearData }) {
+  const { can } = useAuth();
+  const canRead = can("BankAccount", "read");
+  const canWrite = can("BankAccount", "write");
+  const [position, setPosition] = useState<CashPosition | null>(null);
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [accountForm, setAccountForm] = useState({ name: "", account_type: "current", is_restricted: false, restriction_note: "" });
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [entryAccount, setEntryAccount] = useState<CashPosition["accounts"][number] | null>(null);
+
+  const load = () => { getCashPosition().then(setPosition); };
+  useEffect(() => { if (canRead) load(); }, [canRead]);
+
+  if (!canRead) return null;
+  if (!position) return <DashCard title="Cash Position"><PageSpinner /></DashCard>;
+
+  const saveAccount = async () => {
+    setSavingAccount(true);
+    try {
+      await BankAccount.create({
+        name: accountForm.name,
+        account_type: accountForm.account_type,
+        is_restricted: accountForm.is_restricted,
+        restriction_note: accountForm.is_restricted ? (accountForm.restriction_note || null) : null,
+        is_active: true,
+      });
+      setShowAccountForm(false);
+      setAccountForm({ name: "", account_type: "current", is_restricted: false, restriction_note: "" });
+      load();
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const { inflows: trailingInflows, outflows: trailingOutflows } = trailingActiveMonths(CUR.inflows, CUR.outflows, 3);
+  const forecast = CUR.hasFullDetail && trailingInflows.length
+    ? computeCashForecast(position.total, trailingInflows, trailingOutflows, 13)
+    : [];
+  const forecastChartData = forecast.map((w) => ({ week: `Wk ${w.week}`, Balance: Math.round(w.balance) }));
+
+  const kpis: KpiData[] = [
+    { label: "Available Cash", value: `₹${L(position.available)}`, status: "green", definition: "Sum of the latest recorded balance for every non-restricted bank account." },
+    { label: "Restricted Cash", value: `₹${L(position.restricted)}`, status: "amber", definition: "Sum of the latest recorded balance for every account flagged restricted (e.g. fixed deposits, earmarked funds)." },
+    { label: "Total Cash", value: `₹${L(position.total)}`, status: "green", definition: "Available plus restricted cash across all active bank accounts." },
+  ];
+
+  return (
+    <>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Cash Position (manual entry)</p>
+        {canWrite && (
+          <button
+            onClick={() => setShowAccountForm(true)}
+            className="flex items-center gap-2 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90 transition"
+          >
+            <Plus className="w-4 h-4" /> Add Bank Account
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+      </div>
+
+      <DashCard title="Bank Accounts">
+        {position.accounts.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            No bank accounts yet.{canWrite ? " Add one to start recording balances." : ""}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="text-left py-2 pr-4 font-medium">Account</th>
+                  <th className="text-left py-2 pr-4 font-medium">Type</th>
+                  <th className="text-left py-2 pr-4 font-medium">Latest Balance</th>
+                  <th className="text-left py-2 pr-4 font-medium">As Of</th>
+                  <th className="text-left py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {position.accounts.map((a) => (
+                  <tr key={a.id} className="border-b border-border last:border-b-0">
+                    <td className="py-2.5 pr-4">
+                      <span className="font-medium text-foreground">{a.name}</span>
+                      {a.isRestricted && (
+                        <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                          Restricted
+                        </span>
+                      )}
+                      {a.restrictionNote && <p className="text-xs text-muted-foreground">{a.restrictionNote}</p>}
+                    </td>
+                    <td className="py-2.5 pr-4 text-muted-foreground capitalize">{a.accountType.replace("_", " ")}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground">₹{L(a.balance)}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground">{a.asOfDate || "Never recorded"}</td>
+                    <td className="py-2.5 text-right">
+                      {canWrite && (
+                        <button onClick={() => setEntryAccount(a)} className="text-xs text-primary hover:underline">Record balance</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </DashCard>
+
+      {forecast.length > 0 && (
+        <DashCard title="13-Week Cash Forecast (trend projection)">
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={forecastChartData}>
+              <XAxis dataKey="week" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
+              <Tooltip content={<ChartTooltip />} />
+              <ReferenceLine y={0} stroke="#e2e8f0" />
+              <Line type="monotone" dataKey="Balance" stroke="#3b82f6" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-muted-foreground mt-3">
+            Projected from the current total cash position plus the trailing 3 months' average net
+            P&L money movement ({CUR.label}), flat-lined forward. This is a trend projection, not a
+            timing-aware forecast - it has no idea when a specific receivable will actually be
+            collected or a specific payable is actually due, so a real week could land well off this
+            line.
+          </p>
+        </DashCard>
+      )}
+
+      {showAccountForm && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl border border-border w-full max-w-md">
+            <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-foreground">Add Bank Account</h2>
+              <button onClick={() => setShowAccountForm(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <FormField label="Name *" name="name" value={accountForm.name} onChange={(_, v) => setAccountForm((f) => ({ ...f, name: v }))} />
+              <FormField label="Type" name="account_type" options={ACCOUNT_TYPES} value={accountForm.account_type} onChange={(_, v) => setAccountForm((f) => ({ ...f, account_type: v }))} />
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox" id="is_restricted" checked={accountForm.is_restricted}
+                  onChange={(e) => setAccountForm((f) => ({ ...f, is_restricted: e.target.checked }))}
+                />
+                <label htmlFor="is_restricted" className="text-sm text-foreground">Restricted (not freely available)</label>
+              </div>
+              {accountForm.is_restricted && (
+                <FormField label="Why restricted" name="restriction_note" value={accountForm.restriction_note} onChange={(_, v) => setAccountForm((f) => ({ ...f, restriction_note: v }))} />
+              )}
+            </div>
+            <div className="px-6 pb-6 flex justify-end gap-3">
+              <button onClick={() => setShowAccountForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+              <button
+                onClick={saveAccount} disabled={savingAccount || !accountForm.name}
+                className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingAccount && <Loader2 className="w-4 h-4 animate-spin" />} Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {entryAccount && (
+        <BalanceEntryModal
+          account={entryAccount}
+          onClose={() => setEntryAccount(null)}
+          onRecorded={() => { setEntryAccount(null); load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+// The ledger is append-only, same philosophy as inventory_transactions -
+// correcting a mistaken balance means recording a new entry, not editing.
+function BalanceEntryModal({ account, onClose, onRecorded }: {
+  account: CashPosition["accounts"][number]; onClose: () => void; onRecorded: () => void;
+}) {
+  const [entries, setEntries] = useState<BankBalanceEntry[] | null>(null);
+  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
+  const [balance, setBalance] = useState("");
+  const [note, setNote] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => { listBalanceEntries(account.id).then(setEntries).catch((err: Error) => setError(err.message)); }, [account.id]);
+
+  const record = async () => {
+    setError("");
+    const bal = Number(balance);
+    if (balance === "" || !Number.isFinite(bal)) { setError("Enter a valid balance"); return; }
+    setRecording(true);
+    try {
+      await recordBalanceEntry(account.id, { asOfDate, balance: bal, note: note || undefined });
+      setBalance(""); setNote("");
+      listBalanceEntries(account.id).then(setEntries);
+      onRecorded();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to record balance");
+    } finally {
+      setRecording(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-card rounded-2xl border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">{account.name} - Balance Entries</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="As Of" name="asOfDate" type="date" value={asOfDate} onChange={(_, v) => setAsOfDate(v)} />
+            <FormField label="Balance (₹)" name="balance" type="number" value={balance} onChange={(_, v) => setBalance(v)} />
+          </div>
+          <FormField label="Note" name="note" value={note} onChange={(_, v) => setNote(v)} />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <button
+            onClick={record} disabled={recording}
+            className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+          >
+            {recording && <Loader2 className="w-4 h-4 animate-spin" />} Record Balance
+          </button>
+
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2">History (append-only - a correction is a new entry, not an edit)</p>
+            {entries === null ? (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            ) : entries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No balance recorded yet.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {entries.map((e) => (
+                  <li key={e.id} className="flex justify-between text-sm border-b border-border last:border-b-0 pb-1.5">
+                    <span className="text-muted-foreground">{e.asOfDate}{e.note ? ` · ${e.note}` : ""}</span>
+                    <span className="text-foreground font-medium">₹{L(e.balance)}{e.recordedBy ? ` · ${e.recordedBy}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

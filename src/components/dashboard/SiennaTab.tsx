@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
@@ -16,7 +16,9 @@ import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { targetSeries, projectionSeries } from "@/data/revenueTargets";
 import { computeFabYear, resolveFnbBu, resolveFabLi, resolveFabOvLi } from "@/data/fabData";
 import { VENUE_NAMES, DRILL_DOWN_CATEGORIES } from "@/data/fnbVenueData";
-import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
+import { MONTHS, L, avg, maxIdx, minIdx, lastValidIdx, sum, fyLabel, fyDateRange, monthPeriodIds, buildFrIndex } from "@/data/seriesKernel";
+import { computeTheoreticalCogs, computeCogsVariance, type CogsVarianceResult } from "@/data/cogsVariance";
+import { listTransactionsForBusinessUnit } from "@/api/inventoryApi";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -42,6 +44,9 @@ const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
 const QUARTER_LABELS = ["Q1 (Apr-Jun)", "Q2 (Jul-Sep)", "Q3 (Oct-Dec)", "Q4 (Jan-Mar)"];
 // Sienna's internal COGS target - a fixed policy ceiling, not a data value.
 const COGS_TARGET_PCT = 35;
+// Matches the "F&B" label in InventoryTab.tsx's BUSINESS_UNITS dropdown
+// (inventory_items.business_unit_key) - see src/data/cogsVariance.ts.
+const FNB_BUSINESS_UNIT_KEY = "F&B";
 
 export default function SiennaTab() {
   const [view, setView] = useState("revenue");
@@ -76,6 +81,23 @@ export default function SiennaTab() {
   const fnbBu = ref ? resolveFnbBu(ref.businessUnits) : null;
   const { data: allFnbRecords } = useFinancialRecords({ businessUnitId: fnbBu != null ? [fnbBu] : undefined });
   const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly"]);
+
+  // Theoretical COGS from the inventory ledger's "out" transactions tagged
+  // to F&B, compared against the actual reported raw-material cost below -
+  // see src/data/cogsVariance.ts. Declared before any conditional return so
+  // the hook always runs; guarded internally for the targets-FY branch and
+  // for years with no monthly detail, where there's no actual figure to
+  // compare against.
+  const [cogsVariance, setCogsVariance] = useState<CogsVarianceResult | null>(null);
+  useEffect(() => {
+    setCogsVariance(null);
+    if (!fy || isTargetsFy || !FAB?.hasMonthlyDetail) return;
+    const fyCOGSForVariance = sum(FAB.rawMaterial);
+    const [from, to] = fyDateRange(fy);
+    listTransactionsForBusinessUnit(FNB_BUSINESS_UNIT_KEY, from, to)
+      .then((txns) => setCogsVariance(computeCogsVariance(computeTheoreticalCogs(txns), fyCOGSForVariance)))
+      .catch(() => setCogsVariance(null));
+  }, [fy, isTargetsFy, FAB]);
 
   if (!fys || !fy || !FAB) return <PageSpinner />;
 
@@ -334,6 +356,15 @@ export default function SiennaTab() {
         label: "Delivery Commissions", value: L(fyDelivery), sub: `${((fyDelivery/fyTotal)*100).toFixed(1)}% of revenue`, status: "amber",
         definition: "Total commissions paid to delivery platforms for the fiscal year.",
         ...freshness,
+      },
+      {
+        label: "COGS Variance (Theoretical)",
+        value: cogsVariance?.variancePct != null ? `${cogsVariance.variancePct > 0 ? "+" : ""}${cogsVariance.variancePct.toFixed(1)}%` : "-",
+        sub: cogsVariance?.theoretical != null
+          ? `${L(cogsVariance.theoretical)} theoretical vs ${L(fyCOGS)} actual`
+          : "No items tagged to F&B yet",
+        status: cogsVariance?.variancePct == null ? undefined : Math.abs(cogsVariance.variancePct) <= 10 ? "green" : Math.abs(cogsVariance.variancePct) <= 25 ? "amber" : "red",
+        definition: "Actual reported raw-material cost vs. the inventory ledger's own quantity × cost for \"out\" transactions on items tagged to F&B. Includes any waste recorded as a plain stock-out, since the ledger has no separate waste/spoilage category - a wide variance can mean waste, miscosted items, or items not yet tagged with a financial department.",
       },
     );
 
