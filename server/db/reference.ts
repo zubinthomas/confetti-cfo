@@ -15,5 +15,17 @@ export async function loadReferenceData() {
     categories: await db.select().from(schema.categories).orderBy(asc(schema.categories.id)),
     channels: await db.select().from(schema.channels).orderBy(asc(schema.channels.id)),
     vendors: await db.select().from(schema.vendors).orderBy(asc(schema.vendors.id)),
+    // Cost-centre taxonomy (see db/costCentres.ts). Only the mapping itself -
+    // the target names are already in the lists above. Clients must invalidate
+    // the ['reference'] query after changing a membership (staleTime: Infinity).
+    costCentres: await db.select().from(schema.costCentres).orderBy(asc(schema.costCentres.sortOrder), asc(schema.costCentres.id)),
+    costCentreMembers: await db.select({
+      id: schema.costCentreMembers.id,
+      costCentreId: schema.costCentreMembers.costCentreId,
+      businessUnitId: schema.costCentreMembers.businessUnitId,
+      channelId: schema.costCentreMembers.channelId,
+      vendorId: schema.costCentreMembers.vendorId,
+      exclusionReason: schema.costCentreMembers.exclusionReason,
+    }).from(schema.costCentreMembers).orderBy(asc(schema.costCentreMembers.id)),
   };
 }

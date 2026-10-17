@@ -38,6 +38,7 @@ async function insertChunked<T extends { id: unknown }>(
   await db.transaction(async (tx) => {
   // wipe in FK-safe order
   for (const t of [
+    schema.costCentreMembers, // FKs to business_units / channels / vendors, so it goes first
     schema.consignmentRecords, schema.salesRecords, schema.financialRecords,
     schema.vendors, schema.channels, schema.categories, schema.lineItems,
     schema.periods, schema.businessUnits, schema.businesses, schema.datasetMeta,

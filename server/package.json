@@ -8,6 +8,8 @@
     "db:seed": "node db/seed.ts",
     "db:seed-settings": "node db/seed-settings.ts",
     "db:verify": "node db/verify.ts",
+    "db:seed-cost-centres": "node db/seed-cost-centres.ts",
+    "costcentres:verify": "node db/verify-cost-centres.ts",
     "db:generate": "drizzle-kit generate",
     "import:verify": "node import/verify-parsers.ts && node import/verify-import.ts && node import/verify-financial-aggregation.ts",
     "sheets:verify": "node sheets/verify-sheets.ts",

@@ -16,7 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
-  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills',
+  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -42,7 +42,10 @@ const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRec
 // (the revision history itself is append-only, see revenue_target_revisions).
 // ExceptionAssignment: clearing an assignment means nulling its fields, not
 // deleting the row - same convention as Period/BankAccount.
-const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment'];
+// CostCentre: assigning, excluding and returning a unit to "undecided" are all
+// `write` - there is no destructive delete of a cost centre or its history to
+// guard separately, and the seven centres themselves aren't editable here.
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
   ...FULL_CRUD.flatMap((resource) => ACTIONS.map((action) => ({ resource, action }))),

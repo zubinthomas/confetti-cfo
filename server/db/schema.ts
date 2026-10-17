@@ -13,8 +13,9 @@
 // text column to keep the existing API contract byte-identical.
 import {
   pgTable, pgEnum, integer, serial, text, doublePrecision, boolean, date, jsonb,
-  uniqueIndex, unique, primaryKey, index, type AnyPgColumn,
+  uniqueIndex, unique, primaryKey, index, check, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type { ParsedWorkbook, RecordChange } from '../import/types.ts';
 
 // ── Closed value sets (verified distinct values) ─────────────────────────────
@@ -1123,3 +1124,50 @@ export const timeLogEntries = pgTable('time_log_entries', {
   note: text('note'),
   createdByUserId: integer('created_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
 });
+
+// ── Cost-centre master (section 3 of the implementation guidelines) ──────────
+// Seven coded reporting groups (cost-centre-master-proposal). `code` is the
+// stable identifier; `name` is a display label and can be renamed freely. Rows
+// elsewhere reference the surrogate id, never the code, so a code correction is
+// a one-row update.
+export const costCentres = pgTable('cost_centres', {
+  id: serial('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  description: text('description'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: text('created_at').notNull(), // ISO-8601
+});
+
+// Which cost centre a business unit, Sienna sales channel or consignment vendor
+// rolls up into. Three typed nullable FKs (exactly one set) instead of a
+// type+id pair so the database keeps real foreign keys. A target belongs to at
+// most one centre, so a rollup can't count it twice; a real split (e.g.
+// Rannaghor between events and F&B) is an allocation question, not modelled here.
+//
+// Three states for a target, as seen by a consumer:
+//   - no row            -> undecided (listed as Unassigned)
+//   - exclusion_reason  -> deliberately out (aggregate rows, technical buckets)
+//   - cost_centre_id    -> a member
+export const costCentreMembers = pgTable('cost_centre_members', {
+  id: serial('id').primaryKey(),
+  costCentreId: integer('cost_centre_id').references(() => costCentres.id, { onDelete: 'restrict' }),
+  businessUnitId: integer('business_unit_id').references(() => businessUnits.id),
+  channelId: integer('channel_id').references(() => channels.id),
+  vendorId: integer('vendor_id').references(() => vendors.id),
+  exclusionReason: text('exclusion_reason'),
+  createdAt: text('created_at').notNull(), // ISO-8601
+  createdByUserId: integer('created_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  // Postgres treats NULLs as distinct, so each of these only constrains its own kind.
+  uniqueIndex('cost_centre_members_business_unit').on(t.businessUnitId),
+  uniqueIndex('cost_centre_members_channel').on(t.channelId),
+  uniqueIndex('cost_centre_members_vendor').on(t.vendorId),
+  check('cost_centre_members_one_target', sql`(
+    (${t.businessUnitId} IS NOT NULL)::int + (${t.channelId} IS NOT NULL)::int + (${t.vendorId} IS NOT NULL)::int = 1
+  )`),
+  check('cost_centre_members_member_xor_excluded', sql`(
+    (${t.costCentreId} IS NOT NULL)::int + (${t.exclusionReason} IS NOT NULL)::int = 1
+  )`),
+]);
