@@ -12,7 +12,9 @@ import { listConsignmentRecords } from './consignmentRecords.ts';
 
 export async function loadDataset() {
   await ready();
-  const reference = await loadReferenceData();
+  // The cost-centre tables ride along on the reference route only; the
+  // dataset keeps the shape of extracted_data.json (see db/verify.ts).
+  const { costCentres: _costCentres, costCentreMembers: _costCentreMembers, ...reference } = await loadReferenceData();
   return {
     ...reference,
     financialRecords: await listFinancialRecords({}),
