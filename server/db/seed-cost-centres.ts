@@ -28,6 +28,10 @@ export const COST_CENTRES = [
 
 type Code = typeof COST_CENTRES[number]['code'];
 
+// Older spelling still present in databases that have not run
+// rename-cafe-dining-room.ts yet. Tried only when the canonical name is absent.
+const LEGACY_UNIT_NAMES: Record<string, string> = { 'Dining Room': 'Dinning Room' };
+
 // [business, unit, centre]
 const MEMBERSHIPS: [string, string, Code][] = [
   ['CEPL', 'Bosar Ghor', 'CC-HFB'],
@@ -35,7 +39,7 @@ const MEMBERSHIPS: [string, string, Code][] = [
   ['CEPL', 'Bar', 'CC-HFB'],
   ['CEPL', 'Bar Find', 'CC-HFB'], // retired from the workbook 13-07-2026; history stays in F&B
   ['Cafe', 'Bosar Ghor', 'CC-HFB'],
-  ['Cafe', 'Dinning Room', 'CC-HFB'],
+  ['Cafe', 'Dining Room', 'CC-HFB'],
   ['CEPL', 'Rannaghor', 'CC-CEV'], // the Chef's Table; bookable, so an open allocation question for Sienna
   ['Cafe', 'Rannaghor', 'CC-CEV'],
   ['CEPL', 'Event', 'CC-CEV'],
@@ -78,8 +82,14 @@ export async function applyCostCentreSeed(): Promise<SeedReport> {
   async function place(business: string, unit: string, state: { costCentreId: number } | { exclusionReason: string }) {
     const label = `${business} / ${unit}`;
     const bId = businessId.get(business);
-    const [row] = bId == null ? [] : await db.select({ id: schema.businessUnits.id }).from(schema.businessUnits)
-      .where(and(eq(schema.businessUnits.businessId, bId), eq(schema.businessUnits.name, unit)));
+    const find = async (name: string) => {
+      if (bId == null) return undefined;
+      const [r] = await db.select({ id: schema.businessUnits.id }).from(schema.businessUnits)
+        .where(and(eq(schema.businessUnits.businessId, bId), eq(schema.businessUnits.name, name)));
+      return r;
+    };
+    const legacy = LEGACY_UNIT_NAMES[unit];
+    const row = (await find(unit)) ?? (legacy ? await find(legacy) : undefined);
     if (!row) { report.notFound.push(label); return; }
     const [existing] = await db.select({ id: schema.costCentreMembers.id }).from(schema.costCentreMembers)
       .where(eq(schema.costCentreMembers.businessUnitId, row.id));

@@ -71,7 +71,7 @@
     {
       "id": 9,
       "businessId": 2,
-      "name": "Dinning Room",
+      "name": "Dining Room",
       "unitType": "outlet"
     },
     {
@@ -146171,7 +146171,7 @@
       "Amount vs percentage LineItems are distinguished by a magnitude heuristic (values with |v| <= 1.5 are treated as a percentage/ratio), not by parsing the row label text, since a few percentage rows in the source sheets have blank or malformed labels.",
       "LineItem.category (revenue / cogs / hr_cost / operating_cost / subtotal / other) is assigned by keyword matching on the row label and should be spot-checked, not treated as authoritative.",
       "CEPL Overview sheet: only FY2024-25, 2023-24, 2022-23 and 2021-22 rows were imported from this sheet (as lower-granularity 'Sales (Overview)/Expense (Overview)/Profit & Loss (Overview)' LineItems) for F&B and Store. FY2025-26 was skipped here because it's already captured at full line-item granularity from the individual department sheets. Trading Items/Pottery/Batik/Stitching don't appear in Overview at all in the source file.",
-      "Cafe weekly sheets (Sept 2025 onward) break down by outlet/section (Bosar Ghor, Dinning Room, Rannaghor) rather than by week-of-month like the April-August sheets do; both are preserved as-is via BusinessUnit rather than forced into one consistent shape, since that's how the source data is actually organized.",
+      "Cafe weekly sheets (Sept 2025 onward) break down by outlet/section (Bosar Ghor, Dining Room, Rannaghor) rather than by week-of-month like the April-August sheets do; both are preserved as-is via BusinessUnit rather than forced into one consistent shape, since that's how the source data is actually organized.",
       "5 raw Excel date-serial numbers in 'Category wise' header cells (e.g. 44672.0) that openpyxl did not auto-convert to dates were manually decoded from the Excel epoch; flagged in the recovered period's label for traceability.",
       "Sienna channel names were normalized to 5 canonical values (e.g. 'HP' and 'HP Store' both map to 'HP Store') since the 'Overall sales' and 'Category wise' sheets use different naming for the same channels."
     ],
@@ -146185,7 +146185,7 @@
         "Rebuilt vendors and consignmentRecords: all four fiscal-year blocks (FY2023-24 through FY2026-27) were previously collapsed onto FY2023-24 periods. Vendor names are canonicalised across blocks (Munai's->Munal's, '(30%)' suffix stripped, 'Sujata Weaves'='Sujata Weaves & Prints') and vendors carry a group field (consignment | other_brands).",
         "Added month periods April-December 2021 to complete FY2021-2022.",
         "Known intentional omissions (unchanged): rows with a blank label in column A are not extracted. This drops two derivable ratio rows (total-expense-to-sales) in the CEPL F&B/Store sheets and one orphaned unlabeled amount (670281, Trading Items sheet row 32, January column) that has no row label or total in the source.",
-        "Second pass: all Cafe-workbook records (business units Cafe/Bosar Ghor/Dinning Room/Rannaghor/Total) were re-extracted from scratch so the duplicated 'Kombucha'/'Liquor' rows land wholly on their new '(Retail Purchases)' line items, eliminating the mixed amount/percentage residue the first collision left behind."
+        "Second pass: all Cafe-workbook records (business units Cafe/Bosar Ghor/Dining Room/Rannaghor/Total) were re-extracted from scratch so the duplicated 'Kombucha'/'Liquor' rows land wholly on their new '(Retail Purchases)' line items, eliminating the mixed amount/percentage residue the first collision left behind."
       ]
     }
   }

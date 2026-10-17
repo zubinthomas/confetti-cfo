@@ -73,7 +73,7 @@ DIVISIONS (FY 2025-26):
 
 LATEST MONTH (${MONTHS[latest]} 2026): F&B revenue ${R(fab.totalRevenue[latest])} (net ${R(fab.profitLoss[latest])}), Store revenue ${R(store.totalSales[latest])} (net ${R(store.profitLoss[latest])}).
 
-F&B OUTLETS (weekly detail, Sep 2025 – Jan 2026, ${outletWeeksCount} weeks): Bosar Ghor (cafe) ${R(outletRev("bosarGhor"))}, Dinning Room (restaurant) ${R(outletRev("dinningRoom"))}, Rannaghor (events kitchen) ${R(outletRev("rannaghor"))}. Liquor mix: ${liquorMix.map((x) => `${x.name} ${R(x.value)}`).join(", ")}. ${durgaPuja.label}: sales ${R(durgaPuja.totalSales)}, P&L ${R(durgaPuja.pl)}.
+F&B OUTLETS (weekly detail, Sep 2025 – Jan 2026, ${outletWeeksCount} weeks): Bosar Ghor (cafe) ${R(outletRev("bosarGhor"))}, Dining Room (restaurant) ${R(outletRev("dinningRoom"))}, Rannaghor (events kitchen) ${R(outletRev("rannaghor"))}. Liquor mix: ${liquorMix.map((x) => `${x.name} ${R(x.value)}`).join(", ")}. ${durgaPuja.label}: sales ${R(durgaPuja.totalSales)}, P&L ${R(durgaPuja.pl)}.
 
 TOP COST LINES (FY, all departments): ${topOutflows}. GST paid ${R(gstMemoTotal)} (reported outside the P&L expense totals).
 

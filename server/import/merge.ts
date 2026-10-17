@@ -28,6 +28,13 @@ export interface MergePlan {
 
 const stat = (): TableStats => ({ creates: 0, updates: 0, unchanged: 0 });
 
+// Spellings a workbook may still use, mapped to the canonical unit name.
+// The Cafe workbook header reads "Dinning Room"; the canonical name is
+// "Dining Room" (cost-centre master, step 4).
+const UNIT_NAME_ALIASES: Record<string, string> = {
+  'Dinning Room': 'Dining Room',
+};
+
 export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan> {
   await ready();
   // HR Mastersheet rows don't belong to any business/unit/period/line-item -
@@ -143,8 +150,13 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
     financialRecords: [], salesRecords: [], consignmentRecords: [], revenueTargets: [], revenueTargetRevisions: [],
   };
 
-  const resolveUnit = (name: string, unitType: 'department' | 'outlet') => {
-    const k = unitKey(businessId, name);
+  const resolveUnit = (rawName: string, unitType: 'department' | 'outlet') => {
+    // A workbook may still use an old spelling. Prefer the canonical unit,
+    // fall back to an existing row under the old spelling (database not yet
+    // renamed), and only create a unit under the canonical name.
+    const name = UNIT_NAME_ALIASES[rawName] ?? rawName;
+    const spellings = [name, ...Object.keys(UNIT_NAME_ALIASES).filter((old) => UNIT_NAME_ALIASES[old] === name)];
+    const k = unitKey(businessId, spellings.find((s) => unitIds.has(unitKey(businessId, s))) ?? name);
     let id = unitIds.get(k);
     if (id == null) {
       id = nextUnit();

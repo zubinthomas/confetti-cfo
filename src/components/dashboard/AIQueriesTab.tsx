@@ -24,7 +24,7 @@ const queries: CannedQuery[] = [
   { icon: BarChart3, label: "Compare net margin by division", prompt: "Compare net margin across F&B, Store, Pottery, Batik, Stitching and Trading Items - which divisions drag the group down?" },
   { icon: CalendarDays, label: "Seasonality & weak months", prompt: "Which months were loss-making or weak this year, and what does the seasonality pattern suggest for planning next year?" },
   { icon: AlertTriangle, label: "Loss-making divisions", prompt: "Which divisions lost money this year, how much, and what would it take to turn them around?" },
-  { icon: UtensilsCrossed, label: "F&B outlet performance", prompt: "Compare the F&B outlets (Bosar Ghor cafe, Dinning Room restaurant, Rannaghor events kitchen) - which is strongest and where is the opportunity?" },
+  { icon: UtensilsCrossed, label: "F&B outlet performance", prompt: "Compare the F&B outlets (Bosar Ghor cafe, Dining Room restaurant, Rannaghor events kitchen) - which is strongest and where is the opportunity?" },
   { icon: Tag, label: "Store category & channel mix", prompt: "Analyse the store's sales by category and channel - where is growth coming from and what looks over-concentrated?" },
   { icon: Truck, label: "Consignment partner review", prompt: "Review the consignment partner sales - which partners matter, and is the commission mix healthy?" },
   { icon: Building2, label: "F&B turnaround story", prompt: "Explain the F&B division's year-over-year turnaround - what changed vs FY 24-25 and is it sustainable?" },

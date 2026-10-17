@@ -1,4 +1,4 @@
-// All four Cafe outlet units (Bosar Ghor / Dinning Room / Rannaghor + Total)
+// All four Cafe outlet units (Bosar Ghor / Dining Room / Rannaghor + Total)
 // plus their derived liquor mix / events breakdown / Durga Puja summary -
 // used by pages that compare across outlets (Bar, Events), unlike
 // useOutletData which only fetches one outlet + the total.

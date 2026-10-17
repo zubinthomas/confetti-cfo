@@ -52,7 +52,7 @@ export default function BarPage() {
       monthly: MONTHS.map((m, i) => ({ month: m, "Retail & Bar Sales": fab.retailBarSales[i] })),
       weekly: weeks.map((w, i) => ({
         week: w.short,
-        "Dinning Room": byOutlet.dinningRoom.liquor[i],
+        "Dining Room": byOutlet.dinningRoom.liquor[i],
         "Bosar Ghor": byOutlet.bosarGhor.liquor[i],
         Rannaghor: byOutlet.rannaghor.liquor[i],
       })),
@@ -93,7 +93,7 @@ export default function BarPage() {
               <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={L} />
               <Tooltip content={<ChartTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Dinning Room" stackId="a" fill="#8b5cf6" />
+              <Bar dataKey="Dining Room" stackId="a" fill="#8b5cf6" />
               <Bar dataKey="Bosar Ghor" stackId="a" fill="#f59e0b" />
               <Bar dataKey="Rannaghor" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>

@@ -7,7 +7,7 @@ export default function RestaurantPage() {
   return (
     <OutletPage
       outletKey="dinningRoom"
-      heading="Restaurant (Dinning Room)"
+      heading="Restaurant (Dining Room)"
       description="The dining room - Baro/Chotto plates, sharing portions, bar bites and most of the liquor programme."
     >
       <MenuMixCard items={outletData?.menuMix ?? []} title="Menu Mix - Top Sellers (Sep 2025 onwards)" />

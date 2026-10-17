@@ -1,5 +1,5 @@
 // Pure, parametrized Cafe weekly-workbook computations (business "Cafe"):
-// outlet-level weekly P&L from Sept 2025 (Bosar Ghor / Dinning Room /
+// outlet-level weekly P&L from Sept 2025 (Bosar Ghor / Dining Room /
 // Rannaghor + Total), revenue streams, menu & liquor mix, events breakdown,
 // the Durga Puja special-event summary, and the whole-cafe Apr-Aug 2025
 // weekly P&L from before the outlet split.
@@ -16,13 +16,19 @@ export const CAFE_BUSINESS_ID = 2;
 
 export type OutletKey = "bosarGhor" | "dinningRoom" | "rannaghor" | "total";
 const OUTLET_UNIT_NAMES: Record<OutletKey, string> = {
-  bosarGhor: "Bosar Ghor", dinningRoom: "Dinning Room", rannaghor: "Rannaghor", total: "Total",
+  bosarGhor: "Bosar Ghor", dinningRoom: "Dining Room", rannaghor: "Rannaghor", total: "Total",
 };
 export const OUTLET_LABELS: Record<OutletKey, string> = {
   bosarGhor: "Bosar Ghor (Cafe)",
-  dinningRoom: "Dinning Room (Restaurant)",
+  dinningRoom: "Dining Room (Restaurant)",
   rannaghor: "Rannaghor",
   total: "All outlets",
+};
+
+// Older spellings still accepted when resolving a unit by name, so a database
+// that has not yet had the Dining Room rename applied keeps working.
+const OUTLET_UNIT_LEGACY_NAMES: Partial<Record<OutletKey, string>> = {
+  dinningRoom: "Dinning Room",
 };
 
 export function buildOutletUnitLookup(businessUnits: BusinessUnit[]): Record<OutletKey, number> {
@@ -31,7 +37,8 @@ export function buildOutletUnitLookup(businessUnits: BusinessUnit[]): Record<Out
   );
   const out = {} as Record<OutletKey, number>;
   for (const key of Object.keys(OUTLET_UNIT_NAMES) as OutletKey[]) {
-    out[key] = byName.get(OUTLET_UNIT_NAMES[key]) ?? -1;
+    const legacy = OUTLET_UNIT_LEGACY_NAMES[key];
+    out[key] = byName.get(OUTLET_UNIT_NAMES[key]) ?? (legacy ? byName.get(legacy) : undefined) ?? -1;
   }
   return out;
 }
@@ -165,7 +172,7 @@ export function computeEventsBreakdown(
 // Whole-cafe P&L, weekly from the week of 31 Mar 2025 through the week
 // before the outlet split (unit "Cafe": the source workbook reports weekly
 // detail here too, same as the outlet-split era below - it's just not
-// broken out by Bosar Ghor / Dinning Room / Rannaghor yet).
+// broken out by Bosar Ghor / Dining Room / Rannaghor yet).
 const CAFE_BU_NAME = "Cafe";
 
 export function resolveCafeBu(businessUnits: BusinessUnit[]): number {

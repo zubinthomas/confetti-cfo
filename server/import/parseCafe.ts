@@ -24,6 +24,7 @@ import {
 } from './types.ts';
 
 const BUSINESS = 'Cafe';
+const VENUE_ALIASES: Record<string, string> = { 'Dinning Room': 'Dining Room' };
 const WEEK_SHEET_RE = /^(\d{2})-(\d{2})-(\d{4}) to (\d{2})-(\d{2})-(\d{4})$/;
 const WEEK_COL_RE = /^(\d{1,2})\/(\d{1,2})-(\d{1,2})\/(\d{1,2})$/;
 
@@ -54,6 +55,10 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
       break;
     }
   }
+
+  // The workbook header spells the restaurant "Dinning Room"; the unit is
+  // "Dining Room" (same fold as parseFnbWeekly's VENUE_ALIASES).
+  const headerUnit = (h: string) => VENUE_ALIASES[h] ?? h;
 
   type ColTarget = { col: number; unitName: string; unitType: 'department' | 'outlet'; period: ParsedPeriod };
 
@@ -153,7 +158,7 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
       const targets: ColTarget[] = [];
       ws.getRow(2).eachCell((cell, col) => {
         const h = str(cell.value);
-        if (h) targets.push({ col, unitName: h, unitType: h === 'Total' ? 'department' : 'outlet', period });
+        if (h) targets.push({ col, unitName: headerUnit(h), unitType: h === 'Total' ? 'department' : 'outlet', period });
       });
       if (!targets.length) { issues.push({ level: 'error', sheet: ws.name, message: 'no outlet columns found in header row 2' }); continue; }
       addRows(ws, targets);
@@ -211,7 +216,7 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     const targets: ColTarget[] = [];
     ws.getRow(2).eachCell((cell, col) => {
       const h = str(cell.value);
-      if (h) targets.push({ col, unitName: h, unitType: h === 'Total' ? 'department' : 'outlet', period });
+      if (h) targets.push({ col, unitName: headerUnit(h), unitType: h === 'Total' ? 'department' : 'outlet', period });
     });
     addRows(ws, targets);
 
