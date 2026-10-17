@@ -20,6 +20,7 @@ const EXTRA_TITLES: Record<string, string> = {
   "/settings": "General Settings",
   "/settings/user": "User Settings",
   "/settings/users": "Users and Permissions",
+  "/settings/cost-centres": "Cost Centres",
 };
 
 const NAV_SECTIONS = [

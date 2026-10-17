@@ -41,6 +41,7 @@ import RannaghorPage from '@/components/fnb/RannaghorPage';
 const AIQueriesTab = lazy(() => import('@/components/dashboard/AIQueriesTab'));
 const ImportPage = lazy(() => import('@/components/dashboard/ImportPage'));
 const TallyPage = lazy(() => import('@/components/dashboard/TallyPage'));
+const CostCentresPanel = lazy(() => import('@/components/dashboard/CostCentresPanel'));
 
 export default function DashboardApp() {
   useEffect(() => {
@@ -113,6 +114,10 @@ export default function DashboardApp() {
           { resource: 'Role', action: 'read' },
         ]} />}>
           <Route path="settings/users" element={<UsersPage />} />
+        </Route>
+
+        <Route element={<RequirePermission requires={[{ resource: 'CostCentre', action: 'read' }]} />}>
+          <Route path="settings/cost-centres" element={<CostCentresPanel />} />
         </Route>
 
         {/* No backend resource is read on this page - open to any authenticated user */}

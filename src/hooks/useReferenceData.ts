@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { get } from '@/api/http';
 import type {
-  Business, BusinessUnit, Period, LineItem, Category, Channel, Vendor,
+  Business, BusinessUnit, Period, LineItem, Category, Channel, Vendor, CostCentre, CostCentreMembership,
 } from '@/data/types';
 
 export interface ReferenceData {
@@ -16,6 +16,8 @@ export interface ReferenceData {
   categories: Category[];
   channels: Channel[];
   vendors: Vendor[];
+  costCentres: CostCentre[];
+  costCentreMembers: CostCentreMembership[];
 }
 
 export function useReferenceData() {

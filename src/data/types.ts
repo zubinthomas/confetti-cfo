@@ -35,6 +35,26 @@ export interface FinancialRecord {
 }
 export interface Category { id: number; businessId: number; name: string }
 export interface Channel { id: number; businessId: number; name: string }
+// Cost-centre master (server/db/costCentres.ts). A membership has exactly one
+// of businessUnitId / channelId / vendorId, and exactly one of costCentreId
+// (a member) or exclusionReason (deliberately out). No row = undecided.
+export interface CostCentre {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string; // ISO-8601
+}
+export interface CostCentreMembership {
+  id: number;
+  costCentreId: number | null;
+  businessUnitId: number | null;
+  channelId: number | null;
+  vendorId: number | null;
+  exclusionReason: string | null;
+}
 export interface SalesRecord {
   id: number;
   periodId: number;
