@@ -132,6 +132,57 @@ assert.equal(ref.costCentres.length, COST_CENTRES.length);
 assert.ok(ref.costCentreMembers.length > 0);
 assert.ok(!('createdByUserId' in ref.costCentreMembers[0]), 'reference data leaves out audit columns');
 
+// ── Dining Room spelling: the importer and the rename script ─────────────────
+// The fixture's Cafe unit still has the old spelling, like a real database that
+// has not run the rename yet. A workbook using either spelling must reuse it.
+const { buildMergePlan } = await import('../import/merge.ts');
+const { renameCafeDiningRoom } = await import('./rename-cafe-dining-room.ts');
+type Parsed = Parameters<typeof buildMergePlan>[0];
+const parsedWith = (businessName: string, over: Partial<Parsed>): Parsed => ({
+  kind: 'cafe', businessName, periods: [], financialRecords: [], salesRecords: [], consignmentRecords: [],
+  employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], orderRecords: [],
+  billRecords: [], issues: [], ...over,
+});
+const week = { periodType: 'week' as const, startDate: '2026-01-05', endDate: '2026-01-11', label: 'W1', fiscalYear: '2025-2026', isSpecialEvent: false };
+const finFor = (businessName: string, unitName: string): Parsed['financialRecords'][number] => ({
+  businessName, unitName, unitType: 'outlet', periodStart: week.startDate, periodEnd: week.endDate,
+  periodType: 'week', lineItemName: 'Total Cafe Sales', valueType: 'amount', value: 100,
+});
+const unitCreates = (plan: Awaited<ReturnType<typeof buildMergePlan>>) =>
+  (plan.details.businessUnits ?? []).filter((c) => c.action === 'create').map((c) => c.description);
+
+for (const spelling of ['Dinning Room', 'Dining Room']) {
+  const plan = await buildMergePlan(parsedWith('Cafe', { periods: [week], financialRecords: [finFor('Cafe', spelling)] }));
+  assert.deepEqual(unitCreates(plan), [], `a "${spelling}" workbook reuses the existing Cafe dining-room unit`);
+}
+// A database with no dining-room unit at all gets the canonical spelling, even from an old-spelling workbook.
+const fresh = await buildMergePlan(parsedWith('Sienna', { periods: [week], financialRecords: [finFor('Sienna', 'Dinning Room')] }));
+assert.deepEqual(unitCreates(fresh), ['Dining Room (outlet)'], 'a new unit is created under the canonical name');
+// Both spellings in one batch resolve to one unit.
+const both = await buildMergePlan(parsedWith('Sienna', {
+  periods: [week], financialRecords: [finFor('Sienna', 'Dinning Room'), finFor('Sienna', 'Dining Room')] }));
+assert.deepEqual(unitCreates(both), ['Dining Room (outlet)'], 'both spellings in one batch make one unit');
+
+const beforeRename = await renameCafeDiningRoom();
+assert.equal(beforeRename.status, 'renamed');
+const renamedId = unitId(2, 'Dinning Room');
+const [renamed] = await db.select().from(schema.businessUnits).where(eq(schema.businessUnits.id, renamedId));
+assert.equal(renamed.name, 'Dining Room', 'the rename script changes the row, keeping its id');
+assert.equal((await renameCafeDiningRoom()).status, 'nothing-to-do', 'a second run is a no-op');
+for (const spelling of ['Dinning Room', 'Dining Room']) {
+  const plan = await buildMergePlan(parsedWith('Cafe', { periods: [week], financialRecords: [finFor('Cafe', spelling)] }));
+  assert.deepEqual(unitCreates(plan), [], `after the rename a "${spelling}" workbook still reuses the unit`);
+}
+ov = await getOverview();
+assert.ok(byCode('CC-HFB').members.some((m) => m.name === 'Cafe / Dining Room'),
+  'the cost-centre membership follows the unit through the rename');
+
+// Two rows with the two spellings: the script refuses to guess.
+await db.insert(schema.businessUnits).values({ id: 900, businessId: 2, name: 'Dinning Room', unitType: 'outlet' });
+const clash = await renameCafeDiningRoom();
+assert.equal(clash.status, 'conflict', 'the script aborts when both spellings exist');
+await db.delete(schema.businessUnits).where(eq(schema.businessUnits.id, 900));
+
 // ── A newly created unit is flagged, never defaulted into a group ────────────
 const { newUnitIssue, addNewUnitWarning } = await import('../import/newUnitWarning.ts');
 const { canAutoCommit } = await import('../sheets/sync.ts');
@@ -142,6 +193,23 @@ assert.match(issue.message, /Midweek \(outlet\)/);
 const sample = { issues: [] as { level: 'info' | 'warning' | 'error'; sheet: string; message: string }[] };
 addNewUnitWarning(sample as never, { details: { businessUnits: [{ action: 'create', description: 'Midweek (outlet)' }] } });
 assert.equal(canAutoCommit(sample.issues), false, 'a new unit blocks sheet-sync auto-commit');
+
+// New Sienna channels and vendors are flagged the same way; known ones are not.
+const saleRow = (channelName: string) => ({ periodStart: week.startDate, periodEnd: week.endDate, periodType: 'month' as const, categoryName: null as string | null, channelName, amount: 5 });
+const conRow = (vendorName: string) => ({ periodStart: week.startDate, periodEnd: week.endDate, periodType: 'month' as const,
+  vendorName, vendorGroup: 'consignment' as const, amount: 5, commissionRate: 0.2 });
+const known = parsedWith('Sienna', { kind: 'sienna', periods: [{ ...week, periodType: 'month' }], salesRecords: [saleRow('HP Store')], consignmentRecords: [conRow('Some Brand')] });
+const knownPlan = await buildMergePlan(known);
+assert.equal(newUnitIssue(knownPlan.details), null, 're-importing known channels and vendors raises no warning');
+const novel = parsedWith('Sienna', { kind: 'sienna', periods: [{ ...week, periodType: 'month' }], salesRecords: [saleRow('Pop-up')], consignmentRecords: [conRow('Fresh Label')] });
+addNewUnitWarning(novel, await buildMergePlan(novel));
+const novelIssue = novel.issues.find((i) => i.message.includes('no cost centre'))!;
+assert.ok(novelIssue, 'a new channel and vendor raise a warning');
+assert.equal(novelIssue.level, 'warning');
+assert.match(novelIssue.message, /1 new channel \(Pop-up\)/);
+assert.match(novelIssue.message, /1 new vendor \(Fresh Label\)/);
+assert.doesNotMatch(novelIssue.message, /consignment/, 'the vendor group is left out of the message');
+assert.equal(canAutoCommit(novel.issues), false, 'a new channel or vendor blocks sheet-sync auto-commit');
 
 // Against the real newer F&B workbook (if present): Midweek and Bar Find are not in the fixture's
 // units, so the merge plan creates them and the warning names them, but not the known venues.
