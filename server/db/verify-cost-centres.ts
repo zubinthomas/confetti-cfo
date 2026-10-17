@@ -132,6 +132,41 @@ assert.equal(ref.costCentres.length, COST_CENTRES.length);
 assert.ok(ref.costCentreMembers.length > 0);
 assert.ok(!('createdByUserId' in ref.costCentreMembers[0]), 'reference data leaves out audit columns');
 
+// ── A newly created unit is flagged, never defaulted into a group ────────────
+const { newUnitIssue, addNewUnitWarning } = await import('../import/newUnitWarning.ts');
+const { canAutoCommit } = await import('../sheets/sync.ts');
+assert.equal(newUnitIssue({ businessUnits: [{ action: 'update', description: 'x' }], periods: [] }), null, 'no creates, no warning');
+const issue = newUnitIssue({ businessUnits: [{ action: 'create', description: 'Midweek (outlet)' }] })!;
+assert.equal(issue.level, 'warning');
+assert.match(issue.message, /Midweek \(outlet\)/);
+const sample = { issues: [] as { level: 'info' | 'warning' | 'error'; sheet: string; message: string }[] };
+addNewUnitWarning(sample as never, { details: { businessUnits: [{ action: 'create', description: 'Midweek (outlet)' }] } });
+assert.equal(canAutoCommit(sample.issues), false, 'a new unit blocks sheet-sync auto-commit');
+
+// Against the real newer F&B workbook (if present): Midweek and Bar Find are not in the fixture's
+// units, so the merge plan creates them and the warning names them, but not the known venues.
+const weekly = path.join(process.cwd(), '..', 'data-sources', 'F&B Weekly P&L (2026-27) (1).xlsx');
+if (fs.existsSync(weekly)) {
+  // Midweek exists in the fixture (used above); remove it so it is genuinely unseen.
+  await db.delete(schema.costCentreMembers).where(eq(schema.costCentreMembers.businessUnitId, unitId(1, 'Midweek')));
+  await db.delete(schema.businessUnits).where(eq(schema.businessUnits.id, unitId(1, 'Midweek')));
+  const ExcelJS = (await import('exceljs')).default;
+  const { parseFnbWeekly } = await import('../import/parseFnbWeekly.ts');
+  const { buildMergePlan } = await import('../import/merge.ts');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(weekly);
+  const parsed = parseFnbWeekly(wb);
+  const plan = await buildMergePlan(parsed);
+  addNewUnitWarning(parsed, plan);
+  const w = parsed.issues.find((i) => i.message.includes('no cost centre'));
+  assert.ok(w, 'the real workbook produces a new-unit warning');
+  assert.match(w.message, /Midweek/);
+  assert.match(w.message, /Bar Find/);
+  assert.doesNotMatch(w.message, /Bosar Ghor|Dining Room|Rannaghor/, 'known venues are not flagged');
+} else {
+  console.log('skipping real-workbook warning check (no F&B Weekly P&L (1) workbook in data-sources/)');
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log('verify-cost-centres: OK');
 process.exit(0);

@@ -17,6 +17,7 @@ import { loadWorkbook } from '../import/xlsx.ts';
 import { detectKind, PARSERS } from '../import/detect.ts';
 import { buildMergePlan, commitMergePlan } from '../import/merge.ts';
 import { computeContentHash } from '../import/contentHash.ts';
+import { addNewUnitWarning } from '../import/newUnitWarning.ts';
 import { findManuallyRejectedPrecedent, supersedePendingForSource } from '../import/batchResolution.ts';
 import type { Issue } from '../import/types.ts';
 import { fetchSheetXlsx } from './fetch.ts';
@@ -75,6 +76,7 @@ export async function syncSource(source: SheetSource, prefetchedBuffer?: Buffer)
     }
 
     const plan = await buildMergePlan(parsed);
+    addNewUnitWarning(parsed, plan);
     const contentHash = computeContentHash(plan.details);
 
     const noChanges = Object.values(plan.stats).every((s) => s.creates + s.updates === 0);

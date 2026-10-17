@@ -10,6 +10,7 @@ import { loadWorkbook } from '../import/xlsx.ts';
 import { detectKind, PARSERS } from '../import/detect.ts';
 import { buildMergePlan, commitMergePlan } from '../import/merge.ts';
 import { computeContentHash } from '../import/contentHash.ts';
+import { addNewUnitWarning } from '../import/newUnitWarning.ts';
 import { findManuallyRejectedPrecedent } from '../import/batchResolution.ts';
 import type { Issue, ParsedWorkbook } from '../import/types.ts';
 
@@ -81,6 +82,7 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
     }
     // preview merge plan against the current database (not committed)
     const plan = await buildMergePlan(parsed);
+    addNewUnitWarning(parsed, plan);
     const contentHash = computeContentHash(plan.details);
     const noChanges = Object.values(plan.stats).every((s) => s.creates + s.updates === 0);
     const rejectedBefore = !noChanges && await findManuallyRejectedPrecedent(db, {
