@@ -9,6 +9,14 @@
       "reason": "Live-tested against the real JP Office install: all 74 Tally groups are mapped (23 balance-sheet, 51 P&L), a standing Trial Balance reconciliation check runs every cycle, and the agent is now installed as a Windows Service on the real client machine and syncing on its own (first real batch committed 2026-10-12). A Balance Sheet / company-wide Profit & Loss dashboard page now renders the pushed data, with flat Balance Sheet line items classified into Assets / Liabilities & Equity (ambiguous ones flagged for review rather than guessed). Receivables/payables ageing now syncs from Tally's own bill-wise reports (behind a per-source syncBills flag, off by default) and renders on the Cash Flow page. Still needed: confirmation the service survives the client machine's daily automatic shutdown/restart, and flipping syncBills on for JP Office once this is reviewed."
     },
     {
+      "id": "cost-centre-master",
+      "title": "Cost-centre master",
+      "area": "Finance",
+      "status": "in_progress",
+      "description": "Seven coded cost centres (CC-HFB, CC-RTL, CC-CRF, CC-CEV, CC-SPN, CC-SHS, CC-CPX) with a reviewable mapping of business units, Sienna retail channels and consignment vendors, on Settings > Cost Centres. A unit is a member, deliberately excluded, or undecided; new venues from an import are flagged and never placed automatically.",
+      "reason": "Tables, seed, API and review screen are built, but nothing reports by cost centre yet and the proposal is unsigned. Waiting on Sienna: Store and Trading Items grouping, whether Store overlaps the store-sales workbook, how to treat Cafe April to August 2025 (no venue split), what Midweek is, the Rannaghor events/F&B split, Sponsorships, and whether Corporate Sales and Factory Outlet are Retail. Waiting on Capsage: which Tally expense lines are shared, where the shared pool stops and the department trackers start, a capex source, whether Tally cost centres are in use, and where Retail's costs come from. Allocation drivers and the pre/post-allocation view are not started."
+    },
+    {
       "id": "password-reset-emails",
       "title": "Forgot / reset password emails",
       "area": "Admin",
