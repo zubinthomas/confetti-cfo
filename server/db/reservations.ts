@@ -5,8 +5,9 @@
 // (plus a party-size-vs-capacity check) is what gives every table real
 // capacity enforcement, the chef's table included, with no special-casing.
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
+import { escapeLikeTerm } from '../db.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow } from './tableMerges.ts';
 
@@ -339,6 +340,26 @@ export async function listReservations({ date, tableId, locationId }: { date?: s
   if (conditions.length > 0) query = query.where(and(...conditions));
 
   return query.orderBy(asc(schema.reservations.date), asc(schema.reservations.time));
+}
+
+/** Spotlight search over reservations, by guest name/phone/email - most
+ *  recent bookings first, unlike listReservations' chronological order,
+ *  since a recent guest is the more likely match. */
+export async function searchReservations(q: string, limit: number) {
+  await ready();
+  const term = `%${escapeLikeTerm(q)}%`;
+  return db
+    .select({
+      id: schema.reservations.id,
+      guestName: schema.reservations.guestName,
+      date: schema.reservations.date,
+      time: schema.reservations.time,
+      partySize: schema.reservations.partySize,
+    })
+    .from(schema.reservations)
+    .where(or(ilike(schema.reservations.guestName, term), ilike(schema.reservations.guestPhone, term), ilike(schema.reservations.guestEmail, term)))
+    .orderBy(desc(schema.reservations.date), desc(schema.reservations.time))
+    .limit(limit);
 }
 
 export async function createReservation(

@@ -2,7 +2,7 @@
 // the old JSON-file store: rows go in/out with snake_case field names and a
 // string id + ISO-8601 created_date.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, getTableColumns, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, ilike, inArray, or } from 'drizzle-orm';
 import { getTableConfig, type PgTableWithColumns } from 'drizzle-orm/pg-core';
 import { db, ready, schema } from './db/client.ts';
 
@@ -29,6 +29,14 @@ const TABLES: Record<string, AnyPgTable> = {
   // server/routes/cash.ts instead. Both share the BankAccount permission resource.
   BankAccount: schema.bankAccounts,
 };
+
+// Escapes a user-supplied search term for safe use inside a LIKE/ILIKE
+// `%...%` pattern - without this, a literal `%` or `_` the user typed acts
+// as a wildcard instead of a literal character. Shared by every ilike-based
+// search function across the DB layer (search.ts route handlers).
+export function escapeLikeTerm(q: string): string {
+  return q.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 
 function assertEntity(entity: string): AnyPgTable {
   const table = TABLES[entity];
@@ -127,6 +135,28 @@ export async function listEntities(entity: string, sort?: string, divisionScope?
   }
   const rows = await query;
   return rows.map((r) => toApiShape(table, r as Record<string, unknown>));
+}
+
+/** Spotlight search over employees - same division/manager AND-scoping as
+ *  `listEntities('Employee', ...)` above (division scope and managed-ids
+ *  scope each independently restrict results when non-empty, combined with
+ *  AND when both apply), but hand-written against the employees table
+ *  directly rather than through the generic column-lookup machinery, since
+ *  this is the only entity the search endpoint ever queries this way. */
+export async function searchEmployees(q: string, divisionScope: string[], managedIds: string[], limit: number) {
+  await ready();
+  const table = schema.employees;
+  const term = `%${escapeLikeTerm(q)}%`;
+  const conditions = [
+    or(ilike(table.fullName, term), ilike(table.employeeId, term), ilike(table.email, term), ilike(table.phone, term)),
+  ];
+  if (divisionScope.length > 0) conditions.push(inArray(table.division, divisionScope));
+  if (managedIds.length > 0) conditions.push(inArray(table.id, managedIds));
+  return db
+    .select({ id: table.id, fullName: table.fullName, employeeId: table.employeeId, role: table.role, division: table.division })
+    .from(table)
+    .where(and(...conditions))
+    .limit(limit);
 }
 
 /** Single-row fetch by id, in API (snake_case) shape - used to check a

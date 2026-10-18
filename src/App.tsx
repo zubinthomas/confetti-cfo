@@ -15,6 +15,7 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AcceptInvite from '@/pages/AcceptInvite';
 import { useReferenceData } from '@/hooks/useReferenceData';
+import SpotlightSearch from '@/components/SpotlightSearch';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
 // Code-split - none of these are visited by every user on every load, but
@@ -91,40 +92,43 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      {/* No open registration - accounts are CLI-created or invite-only (see README) */}
-      <Route path="/invite/:token" element={<AcceptInvite />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        {/* Coarse "can enter the module at all" gate - each tab inside HR.tsx
-            additionally self-checks its own specific permission via can(). */}
-        <Route element={<RequirePermission mode="any" requires={[
-          { resource: 'Employee', action: 'read' },
-          { resource: 'LeaveRequest', action: 'read' },
-          { resource: 'Recruitment', action: 'read' },
-        ]} />}>
-          <Route path="/hr" element={<Suspense fallback={<Splash />}><HR /></Suspense>} />
+    <>
+      <SpotlightSearch />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        {/* No open registration - accounts are CLI-created or invite-only (see README) */}
+        <Route path="/invite/:token" element={<AcceptInvite />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
+          {/* Coarse "can enter the module at all" gate - each tab inside HR.tsx
+              additionally self-checks its own specific permission via can(). */}
+          <Route element={<RequirePermission mode="any" requires={[
+            { resource: 'Employee', action: 'read' },
+            { resource: 'LeaveRequest', action: 'read' },
+            { resource: 'Recruitment', action: 'read' },
+          ]} />}>
+            <Route path="/hr" element={<Suspense fallback={<Splash />}><HR /></Suspense>} />
+          </Route>
+          <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
+            <Route path="/compliance" element={<Suspense fallback={<Splash />}><Compliance /></Suspense>} />
+          </Route>
+          <Route element={<RequirePermission requires={[{ resource: 'Inventory', action: 'read' }]} />}>
+            <Route path="/inventory" element={<Suspense fallback={<Splash />}><InventoryPage /></Suspense>} />
+          </Route>
+          <Route element={<RequirePermission requires={[{ resource: 'Reservation', action: 'read' }]} />}>
+            <Route path="/reservations" element={<Suspense fallback={<Splash />}><ReservationsPage /></Suspense>} />
+          </Route>
+          {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
+              Renders its own "not linked" message for anyone who navigates here
+              without an employee link. Kept outside ReferenceDataGate below since
+              it doesn't need the financial reference-data prerequisite. */}
+          <Route path="/me" element={<Suspense fallback={<Splash />}><MyProfile /></Suspense>} />
+          {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
+          <Route path="/*" element={<ReferenceDataGate />} />
         </Route>
-        <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
-          <Route path="/compliance" element={<Suspense fallback={<Splash />}><Compliance /></Suspense>} />
-        </Route>
-        <Route element={<RequirePermission requires={[{ resource: 'Inventory', action: 'read' }]} />}>
-          <Route path="/inventory" element={<Suspense fallback={<Splash />}><InventoryPage /></Suspense>} />
-        </Route>
-        <Route element={<RequirePermission requires={[{ resource: 'Reservation', action: 'read' }]} />}>
-          <Route path="/reservations" element={<Suspense fallback={<Splash />}><ReservationsPage /></Suspense>} />
-        </Route>
-        {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
-            Renders its own "not linked" message for anyone who navigates here
-            without an employee link. Kept outside ReferenceDataGate below since
-            it doesn't need the financial reference-data prerequisite. */}
-        <Route path="/me" element={<Suspense fallback={<Splash />}><MyProfile /></Suspense>} />
-        {/* Everything else is the data-driven dashboard (it 404s unknown paths itself) */}
-        <Route path="/*" element={<ReferenceDataGate />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </>
   );
 };
 

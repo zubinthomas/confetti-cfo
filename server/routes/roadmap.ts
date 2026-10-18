@@ -13,16 +13,30 @@ import { authMiddleware } from '../middleware/auth.ts';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ITEMS_PATH = path.join(__dirname, '..', 'roadmap', 'items.json');
 
+export interface RoadmapItem {
+  id: string;
+  title: string;
+  area: string;
+  status: string;
+  description: string;
+  reason?: string;
+}
+
+/** Reads items.json fresh off disk per call (tiny file, no caching needed)
+ *  so a hand-edit takes effect on the next request with no server restart.
+ *  Shared by the route handler below and server/routes/search.ts. */
+export function readRoadmapItems(): RoadmapItem[] {
+  const raw = readFileSync(ITEMS_PATH, 'utf-8');
+  return JSON.parse(raw).items;
+}
+
 const router = Router();
 router.use(authMiddleware);
 
-/** GET /api/roadmap - reads items.json fresh off disk per request (tiny
- *  file, no caching needed) so a hand-edit takes effect on the next
- *  request with no server restart. */
+/** GET /api/roadmap */
 router.get('/', (_req, res) => {
   try {
-    const raw = readFileSync(ITEMS_PATH, 'utf-8');
-    res.json(JSON.parse(raw));
+    res.json({ items: readRoadmapItems() });
   } catch (err) {
     console.error('roadmap error:', err);
     res.status(500).json({ message: 'Failed to load roadmap' });
