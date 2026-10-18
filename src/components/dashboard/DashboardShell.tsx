@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import UserMenu from "./UserMenu";
 import InstallBanner from "./InstallBanner";
+import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import { useAuth } from "@/lib/AuthContext";
 
 // Routes not shown in NAV_SECTIONS (relocated into the header/user menu) but
@@ -219,6 +220,7 @@ export default function DashboardShell() {
               <p className="text-[11px] text-muted-foreground">Sienna · CFO Dashboard</p>
             </div>
             <div className="flex items-center gap-4 ml-auto">
+              <SpotlightSearchButton showHint />
               <div className="hidden md:flex items-center gap-4">
                 <Link
                   to="/hr"

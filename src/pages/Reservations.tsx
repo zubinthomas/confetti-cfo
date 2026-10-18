@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarDays } from "lucide-react";
+import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import ReservationsTab from "@/components/reservations/ReservationsTab";
 
 export default function Reservations() {
@@ -18,6 +19,7 @@ export default function Reservations() {
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">Bookings, guest arrivals and floor status for Sienna</p>
           </div>
+          <SpotlightSearchButton className="ml-auto" />
         </div>
       </header>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

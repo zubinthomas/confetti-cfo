@@ -32,9 +32,11 @@ function filterByName<T extends { name: string }>(items: T[] | undefined, query:
   return items.filter((i) => matches(i.name, query)).slice(0, RESULT_CAP);
 }
 
-export default function SpotlightSearch() {
+// `open`/`onOpenChange` are owned by SpotlightSearchProvider
+// (src/lib/SpotlightSearchContext.tsx) so a header button elsewhere in the
+// tree can open the palette via useSpotlightSearch() without prop-drilling.
+export default function SpotlightSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { isAuthenticated, can } = useAuth();
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
@@ -45,12 +47,12 @@ export default function SpotlightSearch() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'k' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        setOpen((v) => !v);
+        onOpenChange(!open);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, open, onOpenChange]);
 
   const { data: reference } = useReferenceData();
   const debouncedQuery = useDebouncedValue(query, 200);
@@ -73,7 +75,7 @@ export default function SpotlightSearch() {
   const lineItems = useMemo(() => (hasQuery ? filterByName(reference?.lineItems, trimmed) : []), [hasQuery, reference, trimmed]);
 
   function go(to: string) {
-    setOpen(false);
+    onOpenChange(false);
     setQuery('');
     navigate(to);
   }
@@ -81,7 +83,7 @@ export default function SpotlightSearch() {
   if (!isAuthenticated) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="overflow-hidden p-0">
         <DialogTitle className="sr-only">Search</DialogTitle>
         <DialogDescription className="sr-only">

@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/AuthContext";
 import DashCard from "@/components/dashboard/DashCard";
 import { generateSalarySlip, generateIdCard, monthLabel, type EmployeeDocInfo } from "@/lib/employeeDocs";
 import { ArrowLeft, FileText, User as UserIcon, IdCard, Loader2 } from "lucide-react";
+import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import { auth, type SelfEmployeeView, type RosterEntry } from "@/api/auth";
 
 const toDocInfo = (emp: SelfEmployeeView): EmployeeDocInfo => ({
@@ -65,6 +66,7 @@ export default function MyProfile() {
           </Link>
           <span className="text-muted-foreground/40">|</span>
           <h1 className="text-xl font-bold font-heading text-foreground tracking-tight">My Profile</h1>
+          <SpotlightSearchButton className="ml-auto" />
         </div>
       </header>
 

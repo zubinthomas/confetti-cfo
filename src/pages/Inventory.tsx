@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Boxes } from "lucide-react";
+import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import InventoryTab from "@/components/inventory/InventoryTab";
 
 export default function Inventory() {
@@ -18,6 +19,7 @@ export default function Inventory() {
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">Stock levels by department</p>
           </div>
+          <SpotlightSearchButton className="ml-auto" />
         </div>
       </header>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

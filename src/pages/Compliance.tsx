@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
+import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import ComplianceTab from "@/components/hr/ComplianceTab";
 
 export default function Compliance() {
@@ -18,6 +19,7 @@ export default function Compliance() {
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">Licences & Permits · Kolkata, Birbhum & all locations</p>
           </div>
+          <SpotlightSearchButton className="ml-auto" />
         </div>
       </header>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

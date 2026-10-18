@@ -15,7 +15,7 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AcceptInvite from '@/pages/AcceptInvite';
 import { useReferenceData } from '@/hooks/useReferenceData';
-import SpotlightSearch from '@/components/SpotlightSearch';
+import { SpotlightSearchProvider } from '@/lib/SpotlightSearchContext';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
 // Code-split - none of these are visited by every user on every load, but
@@ -92,8 +92,7 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
-    <>
-      <SpotlightSearch />
+    <SpotlightSearchProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
         {/* No open registration - accounts are CLI-created or invite-only (see README) */}
@@ -128,7 +127,7 @@ const AuthenticatedApp = () => {
           <Route path="/*" element={<ReferenceDataGate />} />
         </Route>
       </Routes>
-    </>
+    </SpotlightSearchProvider>
   );
 };
 

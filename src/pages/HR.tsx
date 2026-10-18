@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, CalendarOff, UserSearch, FileCheck, CalendarDays, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import HeadcountTab from "@/components/hr/HeadcountTab";
 import LeaveTab from "@/components/hr/LeaveTab";
 import RecruitmentTab from "@/components/hr/RecruitmentTab";
@@ -42,6 +43,7 @@ export default function HR() {
               <p className="text-xs text-muted-foreground mt-0.5">Confetti Exports · 3 divisions · 150 employees</p>
             </div>
           </div>
+          <SpotlightSearchButton className="ml-auto" />
         </div>
       </header>
 
