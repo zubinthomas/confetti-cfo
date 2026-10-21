@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { auth, type User } from '@/api/auth';
 import { ApiError } from '@/api/http';
+import type { LayoutConfig } from '@/lib/layout/types';
 
 export type PermissionAction = 'read' | 'write' | 'delete';
 
@@ -17,6 +18,9 @@ interface AuthContextValue {
   checkUserAuth: () => Promise<void>;
   checkAppState: () => Promise<void>;
   can: (resource: string, action: PermissionAction) => boolean;
+  /** Swaps this user's own layout layer locally after it was saved or reset
+   *  (null = reset), so the nav updates without refetching /auth/me. */
+  setOwnLayout: (config: LayoutConfig | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,6 +56,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     [permissionSet],
   );
 
+  const setOwnLayout = useCallback((config: LayoutConfig | null) => {
+    setUser((u) => (u ? { ...u, layout: { ...u.layout, user: config } } : u));
+  }, []);
+
   const logout = useCallback(() => {
     auth.logout('/login');
   }, []);
@@ -70,6 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       checkUserAuth,
       checkAppState: async () => {},
       can,
+      setOwnLayout,
     }}>
       {children}
     </AuthContext.Provider>

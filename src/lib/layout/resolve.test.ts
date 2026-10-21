@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, gateAllows, resolveNav } from './resolve';
+import { applyOrder, flattenLayers, gateAllows, resolveNav } from './resolve';
 import type { CanFn, LayoutConfig, NavItemBase } from './types';
 
 const item = (id: string, over: Partial<NavItemBase> = {}): NavItemBase => ({
@@ -105,5 +105,23 @@ describe('resolveNav', () => {
   it('skips null layers', () => {
     const nav = resolveNav({ items, can: allow, hasEmployee: true, layers: [null, undefined] });
     expect(ids(nav.header)).toEqual(['hr']);
+  });
+});
+
+describe('flattenLayers', () => {
+  const cfg = (id: string): LayoutConfig => ({ v: 1, nav: { items: { [id]: { hidden: true } } } });
+
+  it('applies permission layers, then roles, then the user', () => {
+    const layers = flattenLayers({
+      permission: [{ key: 'A:read', priority: 9, config: cfg('p1') }, { key: 'B:read', priority: 1, config: cfg('p2') }],
+      roles: [{ roleId: 1, rank: 50, config: cfg('r1') }],
+      user: cfg('u'),
+    });
+    expect(layers.map((l) => Object.keys(l.nav!.items!)[0])).toEqual(['p1', 'p2', 'r1', 'u']);
+  });
+
+  it('copes with a missing layout or user layer', () => {
+    expect(flattenLayers(undefined)).toEqual([]);
+    expect(flattenLayers({ permission: [], roles: [], user: null })).toEqual([]);
   });
 });

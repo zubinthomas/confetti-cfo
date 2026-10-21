@@ -1,15 +1,16 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { NAV_ITEMS, type NavItem } from './registry';
-import { resolveNav, type ResolvedNav } from './resolve';
+import { flattenLayers, resolveNav, type ResolvedNav } from './resolve';
 
-/** The navigation this user sees: registry filtered by can(), then layered
- *  overrides (none wired up yet). */
+/** The navigation this user sees: registry filtered by can(), then the
+ *  permission, role and user layers from /auth/me applied in that order. */
 export function useNav(): ResolvedNav<NavItem> {
   const { user, can } = useAuth();
   const hasEmployee = !!user?.employee;
+  const layout = user?.layout;
   return useMemo(
-    () => resolveNav({ items: NAV_ITEMS, can, hasEmployee }),
-    [can, hasEmployee],
+    () => resolveNav({ items: NAV_ITEMS, can, hasEmployee, layers: flattenLayers(layout) }),
+    [can, hasEmployee, layout],
   );
 }

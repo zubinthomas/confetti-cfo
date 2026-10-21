@@ -40,13 +40,26 @@ export interface NavItemBase {
   searchable?: boolean;
 }
 
+export type WidgetWidth = 'sixth' | 'third' | 'half' | 'full';
+
 /** One layer of layout overrides. Sparse: anything missing falls through to
- *  the layer below. Only `nav` is resolved so far; tabs and widgets arrive
- *  with their own phases. */
+ *  the layer below. Mirrors the server's StoredLayout (server/db/layouts.ts).
+ *  Only `nav` is resolved so far; tabs and widgets arrive with their own
+ *  phases. */
 export interface LayoutConfig {
   v: 1;
   nav?: {
     items?: Record<string, { hidden?: boolean; placement?: Placement }>;
     order?: Partial<Record<Placement, string[]>>;
   };
+  tabs?: Record<string, { hidden?: string[]; order?: string[]; default?: string }>;
+  widgets?: Record<string, { hidden?: string[]; order?: string[]; width?: Record<string, WidgetWidth> }>;
+}
+
+/** What GET /auth/me returns: the layers that apply to this user, each list
+ *  already in application order (the layer that should lose comes first). */
+export interface LayoutLayers {
+  permission: { key: string; priority: number; config: LayoutConfig }[];
+  roles: { roleId: number; rank: number; config: LayoutConfig }[];
+  user: LayoutConfig | null;
 }

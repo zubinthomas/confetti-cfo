@@ -1,6 +1,7 @@
 // Auth calls against the Express server (server/routes/auth.ts).
 import { get, post, setToken, clearToken } from "./http";
 import type { PayrollSlipRecord } from "@/lib/employeeDocs";
+import type { LayoutLayers } from "@/lib/layout/types";
 
 export interface Role {
   id: number;
@@ -49,6 +50,7 @@ export interface User {
   permissions: string[]; // "Resource:action", e.g. "Employee:write"
   divisionScope: string[]; // empty = unrestricted; see src/lib/hrDivisions.ts
   employee: SelfEmployeeView | null; // set only if this account is linked for self-service
+  layout: LayoutLayers; // nav/tab/widget layers that apply to this user, see src/lib/layout
 }
 
 // "Who's on my team" - other (non-terminated) employees in the same

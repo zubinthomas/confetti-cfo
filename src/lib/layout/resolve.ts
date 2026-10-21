@@ -1,7 +1,7 @@
 // Pure layout resolution. No React, no icons, so it can be unit-tested.
 import {
   PLACEMENTS,
-  type CanFn, type Gate, type LayoutConfig, type NavItemBase, type Placement,
+  type CanFn, type Gate, type LayoutConfig, type LayoutLayers, type NavItemBase, type Placement,
 } from './types';
 
 /** Same rule as RequirePermission: a gate with no requirements is open. */
@@ -25,6 +25,18 @@ export function applyOrder(current: string[], named: string[] | undefined): stri
     }
   }
   return [...head, ...current.filter((id) => !taken.has(id))];
+}
+
+/** The layers in the order they are applied: permission layers, then role
+ *  layers, then the user's own. The server already ordered each list so the
+ *  winning layer comes last. */
+export function flattenLayers(layout: LayoutLayers | null | undefined): LayoutConfig[] {
+  if (!layout) return [];
+  return [
+    ...layout.permission.map((l) => l.config),
+    ...layout.roles.map((l) => l.config),
+    ...(layout.user ? [layout.user] : []),
+  ];
 }
 
 export interface ResolvedNav<T extends NavItemBase> {
