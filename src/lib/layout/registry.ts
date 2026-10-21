@@ -159,8 +159,16 @@ export interface OverviewWidget extends WidgetBase {
 
 export const OVERVIEW_AREA = 'overview';
 
-const group = (id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth']): OverviewWidget =>
-  ({ id: `group.${id}`, label, kind, defaultWidth, source: 'group', gate: GATES.financial });
+// Gates follow what each widget reads from the API. Nearly everything is
+// FinancialRecord:read (KPIs, charts, company P&L, balance sheet, cash flow and
+// targets all come from financial records). The FY 26-27 targets card also
+// reads sales records, so it takes the store gate. Import:read (the "imported
+// on" badges) and ExceptionAssignment:read (assignment blocks) are optional
+// extras inside a widget and are checked there, not here.
+const group = (
+  id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth'],
+  gate: Gate = GATES.financial,
+): OverviewWidget => ({ id: `group.${id}`, label, kind, defaultWidth, source: 'group', gate });
 const leadership = (id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth']): OverviewWidget =>
   ({ id: `leadership.${id}`, label, kind, defaultWidth, source: 'leadership', gate: GATES.financial, defaultHidden: true });
 
@@ -172,7 +180,7 @@ export const OVERVIEW_WIDGETS: OverviewWidget[] = [
   group('kpi.storePL', 'Store net P&L (year)', 'kpi', 'sixth'),
   group('kpi.fnbLatest', 'F&B revenue (latest month)', 'kpi', 'sixth'),
   group('kpi.storeLatest', 'Store revenue (latest month)', 'kpi', 'sixth'),
-  group('targets', 'FY 26-27 targets (Store + F&B)', 'card', 'full'),
+  group('targets', 'FY 26-27 targets (Store + F&B)', 'card', 'full', GATES.store),
   group('chart.monthlyRevenue', 'Monthly revenue chart', 'card', 'full'),
   group('chart.monthlyPL', 'Monthly net P&L chart', 'card', 'full'),
   group('chart.annualRevenue', 'Annual revenue chart', 'card', 'full'),

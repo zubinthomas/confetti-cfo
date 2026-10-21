@@ -49,7 +49,7 @@ export function GroupHeader({ width }: WidgetProps) {
           <TrackerImportBadge freshness={g.freshness} />
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          {[...g.realFys, "2026-2027"].map((y) => (
+          {[...g.realFys, ...(g.hasTargets ? ["2026-2027"] : [])].map((y) => (
             <button
               key={y}
               onClick={() => g.setFy(y)}

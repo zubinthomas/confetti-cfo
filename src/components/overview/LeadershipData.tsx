@@ -16,6 +16,9 @@ import type { StoreFnbTargetPace } from "@/data/leadershipOverview";
 import { L, pct, sum, buildFrIndex, monthPeriodIds } from "@/data/seriesKernel";
 import type { CashFlowYearData } from "@/data/cashFlowFinancials";
 import type { Period } from "@/data/types";
+import { useAuth } from "@/lib/AuthContext";
+import { GATES } from "@/lib/layout/registry";
+import { gateAllows } from "@/lib/layout/resolve";
 
 export const LEADERSHIP_KPI_KEYS = ["revenue", "margin", "assets", "balanceCheck", "cashNet", "storeFnbTarget"] as const;
 export type LeadershipKpiKey = (typeof LEADERSHIP_KPI_KEYS)[number];
@@ -50,6 +53,8 @@ export const useLeadershipData = () => useContext(LeadershipContext);
 // guidelines-gap-analysis.md section 5/15 for what's intentionally left as
 // "not available" rather than faked.
 export function LeadershipProvider({ children }: { children: React.ReactNode }) {
+  const { can } = useAuth();
+  const canOpenStore = gateAllows(GATES.store, can);
   const { data: ref } = useReferenceData();
   const cplBu = ref ? resolveCplBu(ref.businessUnits) : -1;
   const bsBu = ref ? resolveBsBu(ref.businessUnits) : -1;
@@ -165,7 +170,7 @@ export function LeadershipProvider({ children }: { children: React.ReactNode }) 
         hasAssignment,
         ...derive({
           companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel: bsAsOf ? bsAsOf.endDate : null,
-          cashFlow: cashFlow ?? null, storeFnbTarget, plFreshness, cashFreshness, storeFnbFreshness,
+          cashFlow: cashFlow ?? null, storeFnbTarget, plFreshness, cashFreshness, storeFnbFreshness, canOpenStore,
         }),
       };
     }
@@ -176,7 +181,7 @@ export function LeadershipProvider({ children }: { children: React.ReactNode }) 
 
 function derive({
   companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel, cashFlow, storeFnbTarget,
-  plFreshness, cashFreshness, storeFnbFreshness,
+  plFreshness, cashFreshness, storeFnbFreshness, canOpenStore,
 }: {
   companyPL: CompanyPL;
   companyPLFy: string;
@@ -187,6 +192,8 @@ function derive({
   plFreshness: ReturnType<typeof useImportFreshness>;
   cashFreshness: ReturnType<typeof useImportFreshness>;
   storeFnbFreshness: ReturnType<typeof useImportFreshness>;
+  /** The /store page is behind a stricter gate than the rest of the overview. */
+  canOpenStore: boolean;
 }): Pick<LeadershipReady, "kpis" | "healthChecks"> {
   const fyRevenue = sum(companyPL.revenue);
   const fyNetPL = sum(companyPL.netPL);
@@ -248,7 +255,7 @@ function derive({
       value: storeFnbTarget ? `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)}` : "Not available",
       sub: storeFnbTarget ? "Store + F&B retail/outlet scope only" : "Not available",
       status: storeFnbTarget ? (storeFnbTarget.gap >= 0 ? "green" : "amber") : "grey",
-      href: "/store?fy=2026-2027",
+      href: canOpenStore ? "/store?fy=2026-2027" : undefined,
       definition: "Actual Store and F&B retail/outlet revenue for FY 26-27 against the FY 26-27 target plan, elapsed months only. Not the same revenue figure as Company Revenue above.",
       ...storeFnbFreshness,
     },
@@ -299,7 +306,7 @@ function derive({
         value: `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)} vs target`,
       },
       exceptionKey: "store-fnb-vs-target",
-      href: "/store?fy=2026-2027",
+      href: canOpenStore ? "/store?fy=2026-2027" : undefined,
     });
   }
 

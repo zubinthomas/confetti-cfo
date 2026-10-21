@@ -6,6 +6,7 @@ import StatusBadge from "@/components/dashboard/StatusBadge";
 import ReconciledBadge from "@/components/dashboard/ReconciledBadge";
 import ExceptionAssignmentPanel from "@/components/dashboard/ExceptionAssignmentPanel";
 import { UNAVAILABLE_METRICS } from "@/data/leadershipOverview";
+import { useAuth } from "@/lib/AuthContext";
 import Cell, { type WidgetProps } from "./Cell";
 import { useLeadershipData, type LeadershipKpiKey, type LeadershipReady } from "./LeadershipData";
 
@@ -62,8 +63,12 @@ export const LeadershipKpiStoreFnbTarget = leadershipKpi("storeFnbTarget");
 
 export function LeadershipInterventions({ width }: WidgetProps) {
   const l = useReadyLeadership();
+  const { can } = useAuth();
   if (!l) return null;
   const { healthChecks, hasAssignment } = l;
+  // Assignments are their own permission; without it the reason and link still
+  // show, but not an owner/deadline block that would wrongly read "unassigned".
+  const canSeeAssignments = can("ExceptionAssignment", "read");
   return (
     <Cell width={width} kind="card">
       <DashCard title="Where to Intervene">
@@ -88,7 +93,7 @@ export function LeadershipInterventions({ width }: WidgetProps) {
                         View details
                       </Link>
                     )}
-                    <ExceptionAssignmentPanel exceptionKey={item.exceptionKey!} />
+                    {canSeeAssignments && <ExceptionAssignmentPanel exceptionKey={item.exceptionKey!} />}
                   </div>
                 </div>
               )}

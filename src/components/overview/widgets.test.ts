@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { OVERVIEW_WIDGETS } from '@/lib/layout/registry';
+import { GATES, OVERVIEW_WIDGETS } from '@/lib/layout/registry';
+import { resolveWidgets } from '@/lib/layout/resolve';
+import type { CanFn } from '@/lib/layout/types';
 import { readFileSync } from 'node:fs';
 import leadershipPreset from '@/lib/layout/presets/leadership.json';
 
@@ -29,5 +31,27 @@ describe('overview widgets', () => {
     expect(area.shown).toEqual(leadership);
     expect(area.order).toEqual(leadership);
     expect(area.hidden).toEqual(group);
+  });
+
+  const visibleFor = (...keys: string[]) => {
+    const can: CanFn = (resource, action) => keys.includes(`${resource}:${action}`);
+    // Every widget shown, so only the gate decides.
+    const layer = { v: 1 as const, widgets: { overview: { shown: OVERVIEW_WIDGETS.map((w) => w.id) } } };
+    return resolveWidgets({ areaId: 'overview', widgets: OVERVIEW_WIDGETS, can, layers: [layer] }).map((r) => r.widget.id);
+  };
+
+  it('gates every widget on financial records, and the targets card on the store gate too', () => {
+    for (const w of OVERVIEW_WIDGETS) {
+      expect(w.gate, w.id).toBe(w.id === 'group.targets' ? GATES.store : GATES.financial);
+    }
+  });
+
+  it('shows nothing without FinancialRecord:read and no targets card without SalesRecord:read', () => {
+    expect(visibleFor()).toEqual([]);
+    expect(visibleFor('SalesRecord:read')).toEqual([]);
+    const financialOnly = visibleFor('FinancialRecord:read');
+    expect(financialOnly).toHaveLength(OVERVIEW_WIDGETS.length - 1);
+    expect(financialOnly).not.toContain('group.targets');
+    expect(visibleFor('FinancialRecord:read', 'SalesRecord:read')).toContain('group.targets');
   });
 });

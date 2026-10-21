@@ -11,6 +11,9 @@ import { useFabYear } from "@/hooks/useFabYear";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { useImportFreshness, type ImportFreshness } from "@/hooks/useImportFreshness";
 import { MONTHS, L, lastValidIdx, fyLabel } from "@/data/seriesKernel";
+import { useAuth } from "@/lib/AuthContext";
+import { GATES } from "@/lib/layout/registry";
+import { gateAllows } from "@/lib/layout/resolve";
 
 export const GROUP_KPI_KEYS = ["fnbRevenue", "storeRevenue", "fnbProfit", "storePL", "fnbLatest", "storeLatest"] as const;
 export type GroupKpiKey = (typeof GROUP_KPI_KEYS)[number];
@@ -19,8 +22,11 @@ export interface GroupReady {
   status: "ready";
   fy: string;
   setFy: (fy: string) => void;
-  /** Years with real data. "2026-2027" is always added as the targets entry. */
+  /** Years with real data. "2026-2027" is added as the targets entry for
+   *  viewers who can open the targets card (see `hasTargets`). */
   realFys: string[];
+  /** The viewer may see the FY 26-27 targets card (needs sales records too). */
+  hasTargets: boolean;
   isTargetsFy: boolean;
   cur: OverviewYear["cur"];
   freshness: ImportFreshness | undefined;
@@ -49,6 +55,8 @@ export const useGroupData = () => useContext(GroupContext);
 /** The data behind every `group.*` overview widget. Mounted only when at least
  *  one of them is visible, so hiding them all also stops these requests. */
 export function GroupProvider({ children }: { children: React.ReactNode }) {
+  const { can } = useAuth();
+  const hasTargets = gateAllows(GATES.store, can);
   const fys = useOverviewFiscalYears();
   // "2026-2027" is always handled as the synthetic/projected combined-targets
   // entry (the targets widget), never as a normal year - useOverviewFiscalYears()
@@ -57,8 +65,8 @@ export function GroupProvider({ children }: { children: React.ReactNode }) {
   // the default landing year on the last complete one.
   const realFys = fys?.filter((y) => y !== "2026-2027");
   const [fy, setFy] = useFyParam(
-    realFys && [...realFys, "2026-2027"],
-    realFys?.at(-1) ?? fys?.at(-1),
+    realFys && [...realFys, ...(hasTargets ? ["2026-2027"] : [])],
+    realFys?.at(-1) ?? (hasTargets ? fys?.at(-1) : undefined),
   );
   const fyIdx = fys && fy ? fys.indexOf(fy) : -1;
   const prevFY = fys && fyIdx > 0 ? fys[fyIdx - 1] : null;
@@ -68,11 +76,13 @@ export function GroupProvider({ children }: { children: React.ReactNode }) {
   // Combined FY26-27 Store + F&B targets data - fixed to FY26-27/FY25-26
   // regardless of the page-level year selector, same as StoreTab/SiennaTab.
   const { data: ref } = useReferenceData();
-  const { data: sales2627 } = useSalesRecords({ fiscalYear: ["2026-2027"] });
-  const { data: sales2526 } = useSalesRecords({ fiscalYear: ["2025-2026"] });
-  const FAB2627 = useFabYear("2026-2027");
-  const FAB2526 = useFabYear("2025-2026");
-  const { data: combinedTargets2627 } = useRevenueTargets({ category: ["store", "fnb"], fiscalYear: ["2026-2027"] });
+  // Without the store gate the targets card is unavailable, so none of its
+  // inputs are requested (an empty filter leaves the query disabled).
+  const { data: sales2627 } = useSalesRecords(hasTargets ? { fiscalYear: ["2026-2027"] } : {});
+  const { data: sales2526 } = useSalesRecords(hasTargets ? { fiscalYear: ["2025-2026"] } : {});
+  const FAB2627 = useFabYear(hasTargets ? "2026-2027" : undefined);
+  const FAB2526 = useFabYear(hasTargets ? "2025-2026" : undefined);
+  const { data: combinedTargets2627 } = useRevenueTargets(hasTargets ? { category: ["store", "fnb"], fiscalYear: ["2026-2027"] } : {});
   const freshness = useImportFreshness(["fnbMonthly", "fnbWeekly", "cepl", "sienna"]);
 
   let value: GroupData = { status: "loading" };
@@ -82,11 +92,12 @@ export function GroupProvider({ children }: { children: React.ReactNode }) {
       fy,
       setFy,
       realFys: realFys ?? [],
-      isTargetsFy: fy === "2026-2027",
+      hasTargets,
+      isTargetsFy: hasTargets && fy === "2026-2027",
       cur: overview.cur,
       freshness,
       fnbStoreHistory,
-      ...derive(fy, prevFY, overview, fnbStoreHistory, freshness),
+      ...derive(fy, prevFY, overview, fnbStoreHistory, freshness, hasTargets),
       ref, sales2627, sales2526, FAB2627, FAB2526, combinedTargets2627,
     };
   }
@@ -100,6 +111,7 @@ function derive(
   overview: OverviewYear,
   fnbStoreHistory: NonNullable<ReturnType<typeof useFnbStoreHistory>>,
   freshness: ImportFreshness | undefined,
+  canOpenStore: boolean,
 ): Pick<GroupReady, "kpis" | "statusItems" | "monthlyData" | "historyData"> {
   const CUR = overview.cur;
   const prevTotals = overview.prev?.totals ?? null;
@@ -145,7 +157,7 @@ function derive(
         : "No prior year to compare",
       status: "green",
       definition: "Total Store sales for the fiscal year.",
-      href: `/store?fy=${fy}`,
+      href: canOpenStore ? `/store?fy=${fy}` : undefined,
       ...freshness,
     },
     fnbProfit: {
@@ -157,7 +169,7 @@ function derive(
     storePL: {
       label: "Store Net P&L (FY)", value: L(CUR.totals.storePL), sub: `${storeMargin.toFixed(1)}% margin`, status: CUR.totals.storePL > 0 ? "green" : "amber",
       definition: "Store's net profit or loss for the fiscal year, after all costs.",
-      href: `/store?fy=${fy}`,
+      href: canOpenStore ? `/store?fy=${fy}` : undefined,
       ...freshness,
     },
   };
@@ -173,7 +185,7 @@ function derive(
       sub: `${(CUR.store.plPct[LATEST_IDX] as number) > 0 ? "+" : ""}${CUR.store.plPct[LATEST_IDX]}% margin`,
       status: (CUR.store.plPct[LATEST_IDX] as number) > 0 ? "green" : "amber",
       definition: "Store sales for the most recent month with data.",
-      href: `/store?fy=${fy}`,
+      href: canOpenStore ? `/store?fy=${fy}` : undefined,
       ...freshness,
     };
   }

@@ -5,10 +5,13 @@
 // the underlying request between them.
 import { useQuery } from '@tanstack/react-query';
 import { listExceptionAssignments } from '@/api/exceptionsApi';
+import { useAuth } from '@/lib/AuthContext';
 
 export function useExceptionAssignments() {
+  const { can } = useAuth();
   return useQuery({
     queryKey: ['exception-assignments'],
+    enabled: can('ExceptionAssignment', 'read'),
     queryFn: listExceptionAssignments,
     staleTime: 5 * 60 * 1000,
   });
