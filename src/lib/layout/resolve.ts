@@ -1,7 +1,8 @@
 // Pure layout resolution. No React, no icons, so it can be unit-tested.
 import {
-  PLACEMENTS,
+  PLACEMENTS, WIDTHS,
   type CanFn, type Gate, type LayoutConfig, type LayoutLayers, type NavItemBase, type Placement, type TabBase,
+  type WidgetBase, type WidgetWidth,
 } from './types';
 
 /** Same rule as RequirePermission: a gate with no requirements is open. */
@@ -126,10 +127,18 @@ export interface ResolvedTabs<T extends TabBase> {
   defaultId: string | null;
 }
 
+/** Folds one layer's `hidden` and `shown` lists into the running hidden set.
+ *  Additive on purpose: a layer only says what it changes, so a user who hides
+ *  one widget does not un-hide everything a role hid. `shown` is applied last,
+ *  so it wins inside a layer, and later layers win across layers. */
+function applyVisibility(hidden: Set<string>, config: { hidden?: string[]; shown?: string[] }): void {
+  for (const id of config.hidden ?? []) hidden.add(id);
+  for (const id of config.shown ?? []) hidden.delete(id);
+}
+
 /** Tabs for one page. Access (the gate) is the hard filter. Then each layer
- *  in turn can reorder (same rule as applyOrder), replace the hidden list (a
- *  layer that lists `hidden` is a full statement, so a user can un-hide what a
- *  role hid by saving a shorter list) and pick a default tab. If hiding would
+ *  in turn can reorder (same rule as applyOrder), hide or re-show tabs
+ *  (additive, see applyVisibility) and pick a default tab. If hiding would
  *  leave the page with no tabs the hidden list is ignored. */
 export function resolveTabs<T extends TabBase>(
   { pageId, tabs, can, layers = [] }: {
@@ -143,12 +152,12 @@ export function resolveTabs<T extends TabBase>(
   const byId = new Map(accessible.map((tab) => [tab.id, tab]));
 
   let order = accessible.map((tab) => tab.id);
-  let hidden = new Set<string>();
+  const hidden = new Set<string>();
   let preferred: string | undefined;
   for (const layer of layers) {
     const config = layer?.tabs?.[pageId];
     if (!config) continue;
-    if (config.hidden) hidden = new Set(config.hidden);
+    applyVisibility(hidden, config);
     order = applyOrder(order, config.order);
     if (config.default !== undefined) preferred = config.default;
   }
@@ -158,4 +167,42 @@ export function resolveTabs<T extends TabBase>(
   const shown = shownIds.map((id) => byId.get(id)!);
   const defaultId = preferred && shownIds.includes(preferred) ? preferred : shown[0]?.id ?? null;
   return { tabs: shown, defaultId };
+}
+
+export interface ResolvedWidget<T extends WidgetBase> {
+  widget: T;
+  width: WidgetWidth;
+}
+
+/** Widgets for one area. Access (the gate) is the hard filter. The registry's
+ *  defaultHidden widgets start hidden; each layer can reorder, hide or re-show
+ *  (additive) and set per-widget widths. Unlike tabs, hiding everything is
+ *  allowed: an empty overview is a valid choice. */
+export function resolveWidgets<T extends WidgetBase>(
+  { areaId, widgets, can, layers = [] }: {
+    areaId: string;
+    widgets: T[];
+    can: CanFn;
+    layers?: (LayoutConfig | null | undefined)[];
+  },
+): ResolvedWidget<T>[] {
+  const accessible = widgets.filter((w) => gateAllows(w.gate, can));
+  const byId = new Map(accessible.map((w) => [w.id, w]));
+
+  let order = accessible.map((w) => w.id);
+  const hidden = new Set(accessible.filter((w) => w.defaultHidden).map((w) => w.id));
+  const widths = new Map<string, WidgetWidth>();
+  for (const layer of layers) {
+    const config = layer?.widgets?.[areaId];
+    if (!config) continue;
+    applyVisibility(hidden, config);
+    order = applyOrder(order, config.order);
+    for (const [id, width] of Object.entries(config.width ?? {})) {
+      if (byId.has(id) && WIDTHS.includes(width)) widths.set(id, width);
+    }
+  }
+
+  return order
+    .filter((id) => !hidden.has(id))
+    .map((id) => ({ widget: byId.get(id)!, width: widths.get(id) ?? byId.get(id)!.defaultWidth }));
 }

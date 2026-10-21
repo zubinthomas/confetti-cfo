@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, resolveNav, resolveTabs } from './resolve';
-import type { CanFn, LayoutConfig, NavItemBase, TabBase } from './types';
+import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, resolveNav, resolveTabs, resolveWidgets } from './resolve';
+import type { CanFn, LayoutConfig, NavItemBase, TabBase, WidgetBase } from './types';
 
 const item = (id: string, over: Partial<NavItemBase> = {}): NavItemBase => ({
   id, label: id, to: `/${id}`, group: 'G', defaultPlacement: 'sidebar', ...over,
@@ -187,10 +187,16 @@ describe('resolveTabs', () => {
     expect(r.defaultId).toBe('c');
   });
 
-  it('lets a later layer replace an earlier hidden list', () => {
+  it('adds hidden lists across layers and lets a later layer re-show', () => {
     const role = tabLayer({ hidden: ['a', 'b'] });
-    const user = tabLayer({ hidden: ['b'] });
-    expect(run(allow, [role, user]).tabs.map((t) => t.id)).toEqual(['a', 'c', 'd']);
+    expect(run(allow, [role, tabLayer({ hidden: ['c'] })]).tabs.map((t) => t.id)).toEqual(['d']);
+    expect(run(allow, [role, tabLayer({ shown: ['b'] })]).tabs.map((t) => t.id)).toEqual(['b', 'c', 'd']);
+  });
+
+  it('lets a lower layer hide again what a higher one never mentioned', () => {
+    const user = tabLayer({ shown: ['a'] });
+    const later = tabLayer({ hidden: ['a'] });
+    expect(run(allow, [user, later]).tabs.map((t) => t.id)).toEqual(['b', 'c', 'd']);
   });
 
   it('ignores a default that is hidden or inaccessible', () => {
@@ -211,5 +217,51 @@ describe('resolveTabs', () => {
   it('cannot bring back an inaccessible tab through order or default', () => {
     const r = run(grants(), [tabLayer({ order: ['a', 'b', 'd'], default: 'd' })]);
     expect(r.tabs.map((t) => t.id)).toEqual(['c']);
+  });
+});
+
+describe('resolveWidgets', () => {
+  const widget = (id: string, over: Partial<WidgetBase> = {}): WidgetBase => ({
+    id, label: id, defaultWidth: 'third', ...over,
+  });
+  const widgets = [
+    widget('a'),
+    widget('b', { defaultWidth: 'full' }),
+    widget('c', { gate: { requires: [{ resource: 'C', action: 'read' }] } }),
+    widget('d', { defaultHidden: true }),
+  ];
+  const layer = (cfg: NonNullable<LayoutConfig['widgets']>[string], area = 'o'): LayoutConfig => ({ v: 1, widgets: { [area]: cfg } });
+  const run = (can: CanFn, layers?: LayoutConfig[]) =>
+    resolveWidgets({ areaId: 'o', widgets, can, layers }).map((r) => `${r.widget.id}:${r.width}`);
+
+  it('uses registry order and widths, skipping default-hidden and inaccessible widgets', () => {
+    expect(run(grants())).toEqual(['a:third', 'b:full']);
+    expect(run(allow)).toEqual(['a:third', 'b:full', 'c:third']);
+  });
+
+  it('shows a default-hidden widget when a layer lists it as shown', () => {
+    expect(run(allow, [layer({ shown: ['d'] })])).toEqual(['a:third', 'b:full', 'c:third', 'd:third']);
+  });
+
+  it('keeps a lower layer\'s shown widgets when a higher layer only hides another', () => {
+    const role = layer({ shown: ['d'] });
+    const user = layer({ hidden: ['a'] });
+    expect(run(allow, [role, user])).toEqual(['b:full', 'c:third', 'd:third']);
+  });
+
+  it('applies order and per-widget width, the highest layer winning', () => {
+    const role = layer({ order: ['b', 'a'], width: { a: 'half', b: 'half' } });
+    const user = layer({ width: { a: 'sixth' } });
+    expect(run(allow, [role, user])).toEqual(['b:half', 'a:sixth', 'c:third']);
+  });
+
+  it('cannot bring back an inaccessible widget, and may hide every widget', () => {
+    expect(run(grants(), [layer({ shown: ['c'], order: ['c'] })])).toEqual(['a:third', 'b:full']);
+    expect(run(grants(), [layer({ hidden: ['a', 'b'] })])).toEqual([]);
+  });
+
+  it('ignores unknown widths and other areas', () => {
+    expect(run(allow, [layer({ width: { a: 'huge' as never } })])[0]).toBe('a:third');
+    expect(run(allow, [layer({ hidden: ['a'] }, 'other')])[0]).toBe('a:third');
   });
 });

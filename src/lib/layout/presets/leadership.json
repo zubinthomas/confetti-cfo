@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "widgets": {
+    "overview": {
+      "hidden": [
+        "group.header",
+        "group.kpi.fnbRevenue",
+        "group.kpi.storeRevenue",
+        "group.kpi.fnbProfit",
+        "group.kpi.storePL",
+        "group.kpi.fnbLatest",
+        "group.kpi.storeLatest",
+        "group.targets",
+        "group.chart.monthlyRevenue",
+        "group.chart.monthlyPL",
+        "group.chart.annualRevenue",
+        "group.chart.annualPL",
+        "group.health"
+      ],
+      "shown": [
+        "leadership.header",
+        "leadership.kpi.revenue",
+        "leadership.kpi.margin",
+        "leadership.kpi.assets",
+        "leadership.kpi.balanceCheck",
+        "leadership.kpi.cashNet",
+        "leadership.kpi.storeFnbTarget",
+        "leadership.interventions",
+        "leadership.unavailable",
+        "leadership.footnote"
+      ],
+      "order": [
+        "leadership.header",
+        "leadership.kpi.revenue",
+        "leadership.kpi.margin",
+        "leadership.kpi.assets",
+        "leadership.kpi.balanceCheck",
+        "leadership.kpi.cashNet",
+        "leadership.kpi.storeFnbTarget",
+        "leadership.interventions",
+        "leadership.unavailable",
+        "leadership.footnote"
+      ]
+    }
+  }
+}

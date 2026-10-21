@@ -30,8 +30,8 @@ const throwsLayout = async (fn: () => unknown, label: string) => {
 const good = {
   v: 1,
   nav: { items: { hr: { hidden: true, placement: 'sidebar' } }, order: { sidebar: ['hr', 'overview'] } },
-  tabs: { hr: { hidden: ['roster'], order: ['leave'], default: 'leave' } },
-  widgets: { overview: { hidden: ['x'], order: ['a', 'b'], width: { a: 'half' } } },
+  tabs: { hr: { hidden: ['roster'], shown: ['leave'], order: ['leave'], default: 'leave' } },
+  widgets: { overview: { hidden: ['x'], shown: ['y'], order: ['a', 'b'], width: { a: 'half' } } },
 };
 assert.deepEqual(validateLayout(good), good, 'a well-formed layout round-trips unchanged');
 assert.deepEqual(validateLayout({ v: 1 }), { v: 1 }, 'an empty layout is valid');
@@ -137,6 +137,19 @@ assert.equal((await db.select().from(schema.userLayouts)).length, 0, 'deleting a
 const remaining = await db.select().from(schema.permissionLayouts);
 assert.equal(remaining.length, 2, 'permission layouts survive their editor being deleted');
 assert.ok(remaining.every((r) => r.updatedByUserId === null), 'editor reference nulled');
+
+// ── Leadership preset seed ───────────────────────────────────────────────────
+const { applyLeadershipLayoutSeed } = await import('./seed-leadership-layout.ts');
+assert.equal(await applyLeadershipLayoutSeed(), 'no-role', 'nothing to do without a Leadership role');
+const [lead] = await db.insert(schema.roles).values({ name: 'Leadership', rank: 777, createdAt: now }).returning();
+assert.equal(await applyLeadershipLayoutSeed(), 'created');
+const seeded = await db.select().from(schema.roleLayouts).where(eq(schema.roleLayouts.roleId, lead.id));
+assert.equal(seeded.length, 1);
+assert.ok(seeded[0].config.widgets?.overview?.shown?.includes('leadership.header'), 'preset shows the leadership widgets');
+assert.ok(seeded[0].config.widgets?.overview?.hidden?.includes('group.header'), 'preset hides the group widgets');
+await setRoleLayout(alice.id, lead.id, layout('edited'));
+assert.equal(await applyLeadershipLayoutSeed(), 'kept', 're-running keeps an admin\'s edits');
+assert.equal(await applyLeadershipLayoutSeed(true), 'replaced', '--force restores the preset');
 
 console.log('layouts verify: all checks passed');
 fs.rmSync(dir, { recursive: true, force: true });

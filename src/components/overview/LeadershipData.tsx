@@ -1,12 +1,6 @@
-import React, { useMemo } from "react";
-import { Link } from "react-router-dom";
-import KpiCard, { type KpiData } from "./KpiCard";
-import DashCard from "./DashCard";
-import StatusBadge from "./StatusBadge";
-import type { StatusRowData } from "./StatusRow";
-import PageSpinner from "./PageSpinner";
-import ReconciledBadge from "./ReconciledBadge";
-import ExceptionAssignmentPanel from "./ExceptionAssignmentPanel";
+import React, { createContext, useContext, useMemo } from "react";
+import type { KpiData } from "@/components/dashboard/KpiCard";
+import type { StatusRowData } from "@/components/dashboard/StatusRow";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useExceptionAssignments } from "@/hooks/useExceptionAssignments";
 import { useFinancialRecords } from "@/hooks/useFinancialRecords";
@@ -14,23 +8,48 @@ import { useRevenueTargets } from "@/hooks/useRevenueTargets";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useOverviewYear } from "@/hooks/useOverviewYear";
 import { useCashFlowYear } from "@/hooks/useCashFlowYear";
+import { useImportFreshness } from "@/hooks/useImportFreshness";
 import { computeCompanyPL, resolveCplBu, resolveCplLi, type CompanyPL } from "@/data/companyPL";
 import { computeBalanceSheet, latestAsOfPeriod, resolveBsBu, resolveBsLi, type BalanceSheet } from "@/data/balanceSheet";
 import { targetSeries } from "@/data/revenueTargets";
-import { UNAVAILABLE_METRICS, type StoreFnbTargetPace } from "@/data/leadershipOverview";
+import type { StoreFnbTargetPace } from "@/data/leadershipOverview";
 import { L, pct, sum, buildFrIndex, monthPeriodIds } from "@/data/seriesKernel";
 import type { CashFlowYearData } from "@/data/cashFlowFinancials";
 import type { Period } from "@/data/types";
-import { useImportFreshness } from "@/hooks/useImportFreshness";
 
-// Leadership's single landing view: the five standing questions from the
-// client spec's "Executive leadership overview" (how's the business now /
-// are we on target / what changed / what's next / where to intervene),
-// answered from data already computed elsewhere - this page fetches and
-// assembles, it doesn't recompute. See implementation-guidelines-gap-
-// analysis.md section 5/15 for what's intentionally left as "not available"
-// below rather than faked.
-export default function LeadershipCommandCentre() {
+export const LEADERSHIP_KPI_KEYS = ["revenue", "margin", "assets", "balanceCheck", "cashNet", "storeFnbTarget"] as const;
+export type LeadershipKpiKey = (typeof LEADERSHIP_KPI_KEYS)[number];
+
+export interface HealthCheckItem { row: StatusRowData; exceptionKey?: string; reason?: string; href?: string }
+
+export interface LeadershipReady {
+  status: "ready";
+  companyPL: CompanyPL;
+  companyPLFy: string;
+  balanceSheet: BalanceSheet | null;
+  bsAsOf: Period | null;
+  cashFlow: CashFlowYearData | null;
+  storeFnbTarget: StoreFnbTargetPace | null;
+  kpis: Record<LeadershipKpiKey, KpiData>;
+  healthChecks: HealthCheckItem[];
+  hasAssignment: (key: string) => boolean | undefined;
+}
+
+/** "empty" = the Tally agent hasn't pushed a company P&L yet. */
+export type LeadershipData = { status: "loading" } | { status: "empty" } | LeadershipReady;
+
+const LeadershipContext = createContext<LeadershipData | null>(null);
+
+/** null when no Leadership provider is mounted (no leadership widget is visible). */
+export const useLeadershipData = () => useContext(LeadershipContext);
+
+// The five standing questions from the client spec's "Executive leadership
+// overview" (how's the business now / are we on target / what changed / what's
+// next / where to intervene), answered from data already computed elsewhere -
+// this fetches and assembles, it doesn't recompute. See implementation-
+// guidelines-gap-analysis.md section 5/15 for what's intentionally left as
+// "not available" rather than faked.
+export function LeadershipProvider({ children }: { children: React.ReactNode }) {
   const { data: ref } = useReferenceData();
   const cplBu = ref ? resolveCplBu(ref.businessUnits) : -1;
   const bsBu = ref ? resolveBsBu(ref.businessUnits) : -1;
@@ -90,8 +109,8 @@ export default function LeadershipCommandCentre() {
 
   // Store + F&B revenue vs target - fixed to FY26-27/FY25-26, same scope as
   // Overview/Store/SiennaTab's own targets cards. This is the ONLY revenue
-  // figure on this page that target data exists for; it is a different,
-  // non-comparable number from the company P&L revenue above (see footnote).
+  // figure here that target data exists for; it is a different, non-comparable
+  // number from the company P&L revenue (see the footnote widget).
   const overviewYear = useOverviewYear("2026-2027", "2025-2026");
   const { data: targets2627 } = useRevenueTargets({ category: ["store", "fnb"], fiscalYear: ["2026-2027"] });
   const targetPeriodIds = ref ? monthPeriodIds(ref.periods, "2026-2027") : [];
@@ -121,45 +140,54 @@ export default function LeadershipCommandCentre() {
     return { actual, target, gap: actual - target };
   }, [overviewYear, targets2627, targetPeriodIds]);
 
-  if (!ref || companyPLFys === undefined) return <PageSpinner />;
+  // Three freshness groups, not one blanket source - the widgets composite
+  // genuinely different pipelines (see the footnote widget), so a single
+  // "Tally" badge on every card would misrepresent the cash and targets cards.
+  const plFreshness = useImportFreshness(["tally"]);
+  const cashFreshness = useImportFreshness(["cepl", "fnbMonthly", "fnbWeekly"]);
+  const storeFnbFreshness = useImportFreshness(["sienna", "cepl", "fnbMonthly", "fnbWeekly", "target"]);
+  const { data: exceptionAssignments } = useExceptionAssignments();
 
-  if (companyPLFys.length === 0) {
-    return (
-      <DashCard title="Leadership Command Centre">
-        <p className="text-sm text-muted-foreground">
-          No company-wide Profit &amp; Loss data has been pushed yet. This view populates
-          automatically once the Tally agent syncs the "Profit &amp; Loss" business unit.
-        </p>
-      </DashCard>
-    );
+  let value: LeadershipData = { status: "loading" };
+  if (ref && companyPLFys !== undefined) {
+    if (companyPLFys.length === 0) value = { status: "empty" };
+    else if (companyPLFy && companyPL) {
+      const hasAssignment = (key: string) => exceptionAssignments?.some((a) => a.exceptionKey === key
+        && (a.ownerUserId != null || a.deadline != null || a.note != null));
+      value = {
+        status: "ready",
+        companyPL,
+        companyPLFy,
+        balanceSheet,
+        bsAsOf: bsAsOf ?? null,
+        cashFlow: cashFlow ?? null,
+        storeFnbTarget,
+        hasAssignment,
+        ...derive({
+          companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel: bsAsOf ? bsAsOf.endDate : null,
+          cashFlow: cashFlow ?? null, storeFnbTarget, plFreshness, cashFreshness, storeFnbFreshness,
+        }),
+      };
+    }
   }
 
-  if (!companyPLFy || !companyPL) return <PageSpinner />;
-
-  return (
-    <Detail
-      companyPL={companyPL}
-      companyPLFy={companyPLFy}
-      balanceSheet={balanceSheet}
-      balanceSheetAsOfLabel={bsAsOf ? bsAsOf.endDate : null}
-      bsAsOf={bsAsOf ?? null}
-      cashFlow={cashFlow ?? null}
-      storeFnbTarget={storeFnbTarget}
-    />
-  );
+  return <LeadershipContext.Provider value={value}>{children}</LeadershipContext.Provider>;
 }
 
-function Detail({
-  companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel, bsAsOf, cashFlow, storeFnbTarget,
+function derive({
+  companyPL, companyPLFy, balanceSheet, balanceSheetAsOfLabel, cashFlow, storeFnbTarget,
+  plFreshness, cashFreshness, storeFnbFreshness,
 }: {
   companyPL: CompanyPL;
   companyPLFy: string;
   balanceSheet: BalanceSheet | null;
   balanceSheetAsOfLabel: string | null;
-  bsAsOf: Period | null;
   cashFlow: CashFlowYearData | null;
   storeFnbTarget: StoreFnbTargetPace | null;
-}) {
+  plFreshness: ReturnType<typeof useImportFreshness>;
+  cashFreshness: ReturnType<typeof useImportFreshness>;
+  storeFnbFreshness: ReturnType<typeof useImportFreshness>;
+}): Pick<LeadershipReady, "kpis" | "healthChecks"> {
   const fyRevenue = sum(companyPL.revenue);
   const fyNetPL = sum(companyPL.netPL);
   const fyNetMarginPct = fyRevenue ? (fyNetPL / fyRevenue) * 100 : 0;
@@ -172,23 +200,15 @@ function Detail({
   const cashNegativeMonths = cashHasDetail ? cashFlow!.net.filter((v) => v < 0).length : 0;
   const cashFyNet = cashHasDetail ? sum(cashFlow!.inflows) - sum(cashFlow!.outflows) : 0;
 
-  // Three freshness groups, not one blanket page-level source - this page
-  // composites genuinely different pipelines (see the footnote below), so a
-  // single "Tally" badge on every card would misrepresent the cash and
-  // targets cards.
-  const plFreshness = useImportFreshness(["tally"]);
-  const cashFreshness = useImportFreshness(["cepl", "fnbMonthly", "fnbWeekly"]);
-  const storeFnbFreshness = useImportFreshness(["sienna", "cepl", "fnbMonthly", "fnbWeekly", "target"]);
-
-  const kpis: KpiData[] = [
-    {
+  const kpis: Record<LeadershipKpiKey, KpiData> = {
+    revenue: {
       label: "Company Revenue (FY, Tally)",
       value: `₹${L(fyRevenue)}`,
       href: `/finance/profit-loss?fy=${companyPLFy}`,
       definition: "Total company-wide revenue for the fiscal year, from the Tally agent's consolidated Profit & Loss push.",
       ...plFreshness,
     },
-    {
+    margin: {
       label: "Net Margin (FY, Tally)",
       value: pct(fyNetMarginPct),
       status: fyNetMarginPct >= 0 ? "green" : "red",
@@ -196,7 +216,7 @@ function Detail({
       definition: "Net profit as a percentage of company-wide revenue for the fiscal year, from the Tally P&L.",
       ...plFreshness,
     },
-    {
+    assets: {
       label: `Total Assets${balanceSheetAsOfLabel ? ` (${balanceSheetAsOfLabel})` : ""}`,
       value: balanceSheet ? `₹${L(balanceSheet.totalAssets)}` : "Not available",
       sub: balanceSheet ? undefined : "Not available",
@@ -205,7 +225,7 @@ function Detail({
       definition: "Total assets on the company balance sheet as of the latest Tally sync, before liabilities are subtracted.",
       ...plFreshness,
     },
-    {
+    balanceCheck: {
       label: "Balance Check",
       value: balanceSheet ? (bsNearZero ? "Balanced" : `₹${L(balanceSheet.imbalance)} gap`) : "Not available",
       sub: balanceSheet ? undefined : "Not available",
@@ -214,7 +234,7 @@ function Detail({
       definition: "Confirms the balance sheet balances - total assets should equal total liabilities plus equity. A non-zero gap usually means data is still mid-import or a ledger entry is missing.",
       ...plFreshness,
     },
-    {
+    cashNet: {
       label: `Group Cash Net${cashFlow ? ` (${cashFlow.label}, P&L basis)` : ""}`,
       value: cashHasDetail ? `₹${L(cashFyNet)}` : "Not available",
       sub: cashHasDetail ? undefined : "Not available",
@@ -223,7 +243,7 @@ function Detail({
       definition: "Cash inflows minus outflows across all departments for the fiscal year, on a P&L (not bank-balance) basis - same figure as the Cash Flow page.",
       ...cashFreshness,
     },
-    {
+    storeFnbTarget: {
       label: "Store + F&B vs Target (FY 26-27)",
       value: storeFnbTarget ? `${storeFnbTarget.gap >= 0 ? "+" : ""}₹${L(storeFnbTarget.gap)}` : "Not available",
       sub: storeFnbTarget ? "Store + F&B retail/outlet scope only" : "Not available",
@@ -232,19 +252,13 @@ function Detail({
       definition: "Actual Store and F&B retail/outlet revenue for FY 26-27 against the FY 26-27 target plan, elapsed months only. Not the same revenue figure as Company Revenue above.",
       ...storeFnbFreshness,
     },
-  ];
+  };
 
-  // The three items below carry a reason/action/owner/deadline (Section 2's
-  // "red/amber exceptions carry a structured record") - scoped to this page's
-  // go-fix-it list specifically, not the other StatusRow call sites, which
-  // are page-local stats with no real destination to send someone to.
-  // "Company net margin" stays a bare StatusRowData: it has no separate page
-  // to link to (this page already is the company-margin view).
-  type HealthCheckItem = { row: StatusRowData; exceptionKey?: string; reason?: string; href?: string };
-  const { data: exceptionAssignments } = useExceptionAssignments();
-  const hasAssignment = (key: string) => exceptionAssignments?.some((a) => a.exceptionKey === key
-    && (a.ownerUserId != null || a.deadline != null || a.note != null));
-
+  // The items below carry a reason/action/owner/deadline (Section 2's
+  // "red/amber exceptions carry a structured record") - scoped to the go-fix-it
+  // list specifically, not the other StatusRow call sites, which are page-local
+  // stats with no real destination to send someone to. "Company net margin"
+  // stays a bare StatusRowData: it has no separate page to link to.
   const healthChecks: HealthCheckItem[] = [
     {
       row: {
@@ -289,71 +303,5 @@ function Detail({
     });
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 flex-wrap mb-3">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-          Leadership Command Centre
-        </p>
-        <ReconciledBadge period={bsAsOf} />
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
-      </div>
-
-      <DashCard title="Where to Intervene">
-        {healthChecks.map((item, i) => {
-          const showExtra = !!item.exceptionKey
-            && (item.row.status !== "green" || hasAssignment(item.exceptionKey));
-          return (
-            <div
-              key={item.row.label}
-              className={i < healthChecks.length - 1 ? "border-b border-border" : ""}
-            >
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-muted-foreground">{item.row.label}</span>
-                <StatusBadge status={item.row.status}>{item.row.value}</StatusBadge>
-              </div>
-              {showExtra && (
-                <div className="pb-3 -mt-1 space-y-1.5">
-                  {item.reason && <p className="text-xs text-muted-foreground">{item.reason}</p>}
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {item.href && (
-                      <Link to={item.href} className="text-xs text-primary hover:underline shrink-0">
-                        View details
-                      </Link>
-                    )}
-                    <ExceptionAssignmentPanel exceptionKey={item.exceptionKey!} />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </DashCard>
-
-      <DashCard title="Not Yet Available">
-        <ul className="space-y-2">
-          {UNAVAILABLE_METRICS.map((m) => (
-            <li key={m} className="flex items-start gap-2 text-sm text-muted-foreground">
-              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-              {m}
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs text-muted-foreground mt-3">
-          None of these are derivable from any source data connected today - shown here rather
-          than silently left out, so the gap stays visible.
-        </p>
-      </DashCard>
-
-      <p className="text-xs text-muted-foreground">
-        Company Revenue and Net Margin above come from the Tally agent&rsquo;s consolidated
-        Profit &amp; Loss push. The Store + F&B vs Target figure is a separate, narrower number
-        from the Store and F&B sales trackers - the two are not the same revenue and must not be
-        added together.
-      </p>
-    </div>
-  );
+  return { kpis, healthChecks };
 }

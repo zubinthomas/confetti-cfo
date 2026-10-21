@@ -11,7 +11,7 @@ import { listUsers, type UserListItem } from "@/api/usersApi";
 // Owner/deadline/note for one named recurring exception (Section 2's "red/
 // amber exceptions carry a reason, owner, deadline, and action" - scoped to
 // Leadership Command Centre's three go-fix-it items, see
-// LeadershipCommandCentre.tsx). A real assignable record, not just a link -
+// components/overview/LeadershipWidgets.tsx). A real assignable record, not just a link -
 // see exception_assignments in schema.ts. Read-only display without
 // ExceptionAssignment:write; the inline edit form is gated on it.
 export default function ExceptionAssignmentPanel({ exceptionKey }: { exceptionKey: string }) {

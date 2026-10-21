@@ -1,7 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import AccessRestricted from "@/components/AccessRestricted";
-import OverviewTab from "@/components/dashboard/OverviewTab";
+import OverviewGrid from "@/components/overview/OverviewGrid";
 import { useAuth } from "@/lib/AuthContext";
 import { GATES } from "@/lib/layout/registry";
 import { firstAccessibleRoute, gateAllows } from "@/lib/layout/resolve";
@@ -13,7 +13,7 @@ export default function Landing() {
   const { can } = useAuth();
   const nav = useNav();
 
-  if (gateAllows(GATES.financial, can)) return <OverviewTab />;
+  if (gateAllows(GATES.financial, can)) return <OverviewGrid />;
 
   const home = firstAccessibleRoute(nav);
   if (home && home !== "/") return <Navigate to={home} replace />;

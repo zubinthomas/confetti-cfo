@@ -21,8 +21,8 @@ export interface StoredLayout {
     items?: Record<string, { hidden?: boolean; placement?: Placement }>;
     order?: Partial<Record<Placement, string[]>>;
   };
-  tabs?: Record<string, { hidden?: string[]; order?: string[]; default?: string }>;
-  widgets?: Record<string, { hidden?: string[]; order?: string[]; width?: Record<string, Width> }>;
+  tabs?: Record<string, { hidden?: string[]; shown?: string[]; order?: string[]; default?: string }>;
+  widgets?: Record<string, { hidden?: string[]; shown?: string[]; order?: string[]; width?: Record<string, Width> }>;
 }
 
 const MAX_BYTES = 20_000;
@@ -102,9 +102,10 @@ export function validateLayout(input: unknown): StoredLayout {
     out.tabs = {};
     for (const [page, raw] of asRecord(input.tabs, 'tabs')) {
       if (!isObject(raw)) throw new LayoutError(`tabs.${page} must be an object`);
-      checkKeys(raw, ['hidden', 'order', 'default'], `tabs.${page}`);
-      const tabs: { hidden?: string[]; order?: string[]; default?: string } = {};
+      checkKeys(raw, ['hidden', 'shown', 'order', 'default'], `tabs.${page}`);
+      const tabs: { hidden?: string[]; shown?: string[]; order?: string[]; default?: string } = {};
       if (raw.hidden !== undefined) tabs.hidden = asIdList(raw.hidden, `tabs.${page}.hidden`);
+      if (raw.shown !== undefined) tabs.shown = asIdList(raw.shown, `tabs.${page}.shown`);
       if (raw.order !== undefined) tabs.order = asIdList(raw.order, `tabs.${page}.order`);
       if (raw.default !== undefined) tabs.default = asId(raw.default, `tabs.${page}.default`);
       out.tabs[page] = tabs;
@@ -115,9 +116,10 @@ export function validateLayout(input: unknown): StoredLayout {
     out.widgets = {};
     for (const [area, raw] of asRecord(input.widgets, 'widgets')) {
       if (!isObject(raw)) throw new LayoutError(`widgets.${area} must be an object`);
-      checkKeys(raw, ['hidden', 'order', 'width'], `widgets.${area}`);
-      const widgets: { hidden?: string[]; order?: string[]; width?: Record<string, Width> } = {};
+      checkKeys(raw, ['hidden', 'shown', 'order', 'width'], `widgets.${area}`);
+      const widgets: { hidden?: string[]; shown?: string[]; order?: string[]; width?: Record<string, Width> } = {};
       if (raw.hidden !== undefined) widgets.hidden = asIdList(raw.hidden, `widgets.${area}.hidden`);
+      if (raw.shown !== undefined) widgets.shown = asIdList(raw.shown, `widgets.${area}.shown`);
       if (raw.order !== undefined) widgets.order = asIdList(raw.order, `widgets.${area}.order`);
       if (raw.width !== undefined) {
         widgets.width = {};

@@ -48,20 +48,33 @@ export interface TabBase {
   gate?: Gate;
 }
 
-export type WidgetWidth = 'sixth' | 'third' | 'half' | 'full';
+export const WIDTHS = ['sixth', 'third', 'half', 'full'] as const;
+export type WidgetWidth = (typeof WIDTHS)[number];
+
+/** A widget on a page area (the overview, for now). Ids are a stable contract
+ *  like nav ids. */
+export interface WidgetBase {
+  id: string;
+  label: string;
+  gate?: Gate;
+  defaultWidth: WidgetWidth;
+  /** Starts hidden until a layer lists it under `shown`. */
+  defaultHidden?: boolean;
+}
 
 /** One layer of layout overrides. Sparse: anything missing falls through to
  *  the layer below. Mirrors the server's StoredLayout (server/db/layouts.ts).
- *  Only `nav` is resolved so far; tabs and widgets arrive with their own
- *  phases. */
+ *  Tabs and widgets use two additive id lists: `hidden` hides, `shown` brings
+ *  back something a lower layer (or the registry default) hid. Within a layer
+ *  `shown` wins; across layers the higher one wins. */
 export interface LayoutConfig {
   v: 1;
   nav?: {
     items?: Record<string, { hidden?: boolean; placement?: Placement }>;
     order?: Partial<Record<Placement, string[]>>;
   };
-  tabs?: Record<string, { hidden?: string[]; order?: string[]; default?: string }>;
-  widgets?: Record<string, { hidden?: string[]; order?: string[]; width?: Record<string, WidgetWidth> }>;
+  tabs?: Record<string, { hidden?: string[]; shown?: string[]; order?: string[]; default?: string }>;
+  widgets?: Record<string, { hidden?: string[]; shown?: string[]; order?: string[]; width?: Record<string, WidgetWidth> }>;
 }
 
 /** What GET /auth/me returns: the layers that apply to this user, each list

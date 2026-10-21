@@ -9,6 +9,7 @@
     "db:seed-settings": "node db/seed-settings.ts",
     "db:verify": "node db/verify.ts",
     "db:seed-cost-centres": "node db/seed-cost-centres.ts",
+    "db:seed-leadership-layout": "node db/seed-leadership-layout.ts",
     "db:rename-dining-room": "node db/rename-cafe-dining-room.ts",
     "costcentres:verify": "node db/verify-cost-centres.ts",
     "layouts:verify": "node db/verify-layouts.ts",

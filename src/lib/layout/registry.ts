@@ -10,7 +10,7 @@ import {
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
   CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2,
 } from 'lucide-react';
-import type { Gate, NavItemBase, TabBase } from './types';
+import type { Gate, NavItemBase, TabBase, WidgetBase } from './types';
 
 const read = (resource: string) => ({ resource, action: 'read' as const });
 
@@ -141,3 +141,52 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'item', label: 'By Item' },
   ],
 };
+
+// ── Overview widgets ─────────────────────────────────────────────────────────
+// Metadata only. The components live in src/components/overview/ and are keyed
+// by these ids; a test checks the two lists stay in step. Order here is the
+// default order. Ids are stored in layouts, never rename one without migrating.
+
+/** Which data provider a widget reads from. Providers mount only when a
+ *  visible widget needs them, so hidden widgets cost no requests. */
+export type OverviewSource = 'group' | 'leadership';
+
+export interface OverviewWidget extends WidgetBase {
+  source: OverviewSource;
+  /** header and kpi render bare; card and text get the spacing of a section. */
+  kind: 'header' | 'kpi' | 'card' | 'text';
+}
+
+export const OVERVIEW_AREA = 'overview';
+
+const group = (id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth']): OverviewWidget =>
+  ({ id: `group.${id}`, label, kind, defaultWidth, source: 'group', gate: GATES.financial });
+const leadership = (id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth']): OverviewWidget =>
+  ({ id: `leadership.${id}`, label, kind, defaultWidth, source: 'leadership', gate: GATES.financial, defaultHidden: true });
+
+export const OVERVIEW_WIDGETS: OverviewWidget[] = [
+  group('header', 'Group snapshot heading and year picker', 'header', 'full'),
+  group('kpi.fnbRevenue', 'F&B revenue (year)', 'kpi', 'sixth'),
+  group('kpi.storeRevenue', 'Store revenue (year)', 'kpi', 'sixth'),
+  group('kpi.fnbProfit', 'F&B net profit (year)', 'kpi', 'sixth'),
+  group('kpi.storePL', 'Store net P&L (year)', 'kpi', 'sixth'),
+  group('kpi.fnbLatest', 'F&B revenue (latest month)', 'kpi', 'sixth'),
+  group('kpi.storeLatest', 'Store revenue (latest month)', 'kpi', 'sixth'),
+  group('targets', 'FY 26-27 targets (Store + F&B)', 'card', 'full'),
+  group('chart.monthlyRevenue', 'Monthly revenue chart', 'card', 'full'),
+  group('chart.monthlyPL', 'Monthly net P&L chart', 'card', 'full'),
+  group('chart.annualRevenue', 'Annual revenue chart', 'card', 'full'),
+  group('chart.annualPL', 'Annual net P&L chart', 'card', 'full'),
+  group('health', 'Performance health check', 'card', 'full'),
+
+  leadership('header', 'Leadership Command Centre heading', 'header', 'full'),
+  leadership('kpi.revenue', 'Company revenue (Tally)', 'kpi', 'sixth'),
+  leadership('kpi.margin', 'Net margin (Tally)', 'kpi', 'sixth'),
+  leadership('kpi.assets', 'Total assets', 'kpi', 'sixth'),
+  leadership('kpi.balanceCheck', 'Balance check', 'kpi', 'sixth'),
+  leadership('kpi.cashNet', 'Group cash net', 'kpi', 'sixth'),
+  leadership('kpi.storeFnbTarget', 'Store + F&B vs target', 'kpi', 'sixth'),
+  leadership('interventions', 'Where to intervene', 'card', 'full'),
+  leadership('unavailable', 'Not yet available', 'card', 'full'),
+  leadership('footnote', 'Data sources note', 'text', 'full'),
+];
