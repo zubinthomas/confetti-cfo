@@ -6,12 +6,18 @@ import KpiCard from "@/components/dashboard/KpiCard";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import FormField from "./FormField";
 import SearchableSelect from "@/components/SearchableSelect";
+import { useAuth } from "@/lib/AuthContext";
 
 const EMPTY = { employee_id: "", employee_name: "", division: "", leave_type: "Sick", from_date: "", to_date: "", days: "", reason: "", status: "Pending" };
 
 const statusMap: Record<string, "green" | "amber" | "red"> = { Approved: "green", Pending: "amber", Rejected: "red" };
 
 export default function LeaveTab() {
+  const { can } = useAuth();
+  // The employee list only feeds the "new request" picker, and it needs
+  // Employee:read. Someone who can read leave requests but not employees
+  // still gets the list rather than a tab stuck on its spinner.
+  const canReadEmployees = can("Employee", "read");
   const [leaves, setLeaves] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +32,7 @@ export default function LeaveTab() {
     setLoading(true);
     const [leaveData, employeeData] = await Promise.all([
       LeaveRequest.list("-created_date"),
-      Employee.list(),
+      canReadEmployees ? Employee.list() : Promise.resolve([]),
     ]);
     setLeaves(leaveData);
     setEmployees(employeeData);
@@ -169,9 +175,9 @@ export default function LeaveTab() {
                   getKey={(e) => e.id}
                   getLabel={(e) => e.full_name}
                   getDescription={(e) => e.division}
-                  placeholder={employees.length ? "Select employee…" : "No employees yet"}
+                  placeholder={employees.length ? "Select employee…" : canReadEmployees ? "No employees yet" : "Employee list unavailable"}
                   searchPlaceholder="Search name, division, role, phone…"
-                  emptyMessage={employees.length ? "No matching employees." : "Add one in Headcount & Payroll first."}
+                  emptyMessage={employees.length ? "No matching employees." : canReadEmployees ? "Add one in Headcount & Payroll first." : "You don't have access to the employee list."}
                 />
               </div>
               <FormField label="Department" name="division" value={form.division ?? ""} onChange={updateField} disabled />
