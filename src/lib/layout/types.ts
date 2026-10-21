@@ -60,6 +60,12 @@ export interface WidgetBase {
   defaultWidth: WidgetWidth;
   /** Starts hidden until a layer lists it under `shown`. */
   defaultHidden?: boolean;
+  /** A named group of widgets that belong together (e.g. all the Group ones). */
+  section?: string;
+  /** Heads its section. No layer can hide, show, move or resize it: it sits
+   *  directly above the section's first visible widget, and is left out when
+   *  the section has none. */
+  sectionHeader?: boolean;
 }
 
 /** One layer of layout overrides. Sparse: anything missing falls through to

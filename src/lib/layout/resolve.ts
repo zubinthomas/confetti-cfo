@@ -177,7 +177,8 @@ export interface ResolvedWidget<T extends WidgetBase> {
 /** Widgets for one area. Access (the gate) is the hard filter. The registry's
  *  defaultHidden widgets start hidden; each layer can reorder, hide or re-show
  *  (additive) and set per-widget widths. Unlike tabs, hiding everything is
- *  allowed: an empty overview is a valid choice. */
+ *  allowed: an empty overview is a valid choice. Section headers are outside
+ *  all of that: layers can't touch them, they are placed afterwards. */
 export function resolveWidgets<T extends WidgetBase>(
   { areaId, widgets, can, layers = [] }: {
     areaId: string;
@@ -186,7 +187,9 @@ export function resolveWidgets<T extends WidgetBase>(
     layers?: (LayoutConfig | null | undefined)[];
   },
 ): ResolvedWidget<T>[] {
-  const accessible = widgets.filter((w) => gateAllows(w.gate, can));
+  const allowed = widgets.filter((w) => gateAllows(w.gate, can));
+  const headers = allowed.filter((w) => w.sectionHeader);
+  const accessible = allowed.filter((w) => !w.sectionHeader);
   const byId = new Map(accessible.map((w) => [w.id, w]));
 
   let order = accessible.map((w) => w.id);
@@ -202,7 +205,13 @@ export function resolveWidgets<T extends WidgetBase>(
     }
   }
 
-  return order
+  const resolved = order
     .filter((id) => !hidden.has(id))
     .map((id) => ({ widget: byId.get(id)!, width: widths.get(id) ?? byId.get(id)!.defaultWidth }));
+
+  for (const header of headers) {
+    const at = resolved.findIndex((r) => r.widget.section !== undefined && r.widget.section === header.section);
+    if (at >= 0) resolved.splice(at, 0, { widget: header as T, width: header.defaultWidth });
+  }
+  return resolved;
 }

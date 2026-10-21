@@ -3,7 +3,6 @@
   "widgets": {
     "overview": {
       "hidden": [
-        "group.header",
         "group.kpi.fnbRevenue",
         "group.kpi.storeRevenue",
         "group.kpi.fnbProfit",

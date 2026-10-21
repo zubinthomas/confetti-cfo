@@ -146,7 +146,7 @@ assert.equal(await applyLeadershipLayoutSeed(), 'created');
 const seeded = await db.select().from(schema.roleLayouts).where(eq(schema.roleLayouts.roleId, lead.id));
 assert.equal(seeded.length, 1);
 assert.ok(seeded[0].config.widgets?.overview?.shown?.includes('leadership.header'), 'preset shows the leadership widgets');
-assert.ok(seeded[0].config.widgets?.overview?.hidden?.includes('group.header'), 'preset hides the group widgets');
+assert.ok(seeded[0].config.widgets?.overview?.hidden?.includes('group.health'), 'preset hides the group widgets');
 await setRoleLayout(alice.id, lead.id, layout('edited'));
 assert.equal(await applyLeadershipLayoutSeed(), 'kept', 're-running keeps an admin\'s edits');
 assert.equal(await applyLeadershipLayoutSeed(true), 'replaced', '--force restores the preset');

@@ -27,7 +27,8 @@ describe('overview widgets', () => {
   it('keeps the Leadership preset in step with the registry', () => {
     const area = leadershipPreset.widgets.overview;
     const leadership = OVERVIEW_WIDGETS.filter((w) => w.source === 'leadership').map((w) => w.id);
-    const group = OVERVIEW_WIDGETS.filter((w) => w.source === 'group').map((w) => w.id);
+    // The group header follows its section, so a preset never needs to list it.
+    const group = OVERVIEW_WIDGETS.filter((w) => w.source === 'group' && !w.sectionHeader).map((w) => w.id);
     expect(area.shown).toEqual(leadership);
     expect(area.order).toEqual(leadership);
     expect(area.hidden).toEqual(group);
@@ -51,6 +52,7 @@ describe('overview widgets', () => {
     expect(visibleFor('SalesRecord:read')).toEqual([]);
     const financialOnly = visibleFor('FinancialRecord:read');
     expect(financialOnly).toHaveLength(OVERVIEW_WIDGETS.length - 1);
+    expect(financialOnly).toContain('group.header');
     expect(financialOnly).not.toContain('group.targets');
     expect(visibleFor('FinancialRecord:read', 'SalesRecord:read')).toContain('group.targets');
   });

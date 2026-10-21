@@ -168,12 +168,13 @@ export const OVERVIEW_AREA = 'overview';
 const group = (
   id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth'],
   gate: Gate = GATES.financial,
-): OverviewWidget => ({ id: `group.${id}`, label, kind, defaultWidth, source: 'group', gate });
+): OverviewWidget => ({ id: `group.${id}`, label, kind, defaultWidth, source: 'group', section: 'group', gate });
 const leadership = (id: string, label: string, kind: OverviewWidget['kind'], defaultWidth: OverviewWidget['defaultWidth']): OverviewWidget =>
-  ({ id: `leadership.${id}`, label, kind, defaultWidth, source: 'leadership', gate: GATES.financial, defaultHidden: true });
+  ({ id: `leadership.${id}`, label, kind, defaultWidth, source: 'leadership', section: 'leadership', gate: GATES.financial, defaultHidden: true });
 
 export const OVERVIEW_WIDGETS: OverviewWidget[] = [
-  group('header', 'Group snapshot heading and year picker', 'header', 'full'),
+  // Heads the Group section: not hideable, movable or resizable (sectionHeader).
+  { ...group('header', 'Group snapshot heading and year picker', 'header', 'full'), sectionHeader: true },
   group('kpi.fnbRevenue', 'F&B revenue (year)', 'kpi', 'sixth'),
   group('kpi.storeRevenue', 'Store revenue (year)', 'kpi', 'sixth'),
   group('kpi.fnbProfit', 'F&B net profit (year)', 'kpi', 'sixth'),

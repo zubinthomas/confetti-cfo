@@ -264,4 +264,30 @@ describe('resolveWidgets', () => {
     expect(run(allow, [layer({ width: { a: 'huge' as never } })])[0]).toBe('a:third');
     expect(run(allow, [layer({ hidden: ['a'] }, 'other')])[0]).toBe('a:third');
   });
+
+  describe('section headers', () => {
+    const sectioned = [
+      widget('gh', { section: 'g', sectionHeader: true, defaultWidth: 'full' }),
+      widget('g1', { section: 'g' }),
+      widget('g2', { section: 'g' }),
+      widget('l1', { section: 'l' }),
+    ];
+    const go = (layers: LayoutConfig[]) =>
+      resolveWidgets({ areaId: 'o', widgets: sectioned, can: allow, layers }).map((r) => `${r.widget.id}:${r.width}`);
+
+    it('sits directly above its section\'s first visible widget', () => {
+      expect(go([])).toEqual(['gh:full', 'g1:third', 'g2:third', 'l1:third']);
+      expect(go([layer({ order: ['l1', 'g2'] })])).toEqual(['l1:third', 'gh:full', 'g2:third', 'g1:third']);
+      expect(go([layer({ hidden: ['g1'] })])).toEqual(['gh:full', 'g2:third', 'l1:third']);
+    });
+
+    it('is left out when its section has nothing visible', () => {
+      expect(go([layer({ hidden: ['g1', 'g2'] })])).toEqual(['l1:third']);
+    });
+
+    it('ignores hide, show, order and width aimed at it', () => {
+      const attempt = layer({ hidden: ['gh'], shown: ['gh'], order: ['l1', 'gh'], width: { gh: 'sixth' } });
+      expect(go([attempt])).toEqual(['l1:third', 'gh:full', 'g1:third', 'g2:third']);
+    });
+  });
 });
