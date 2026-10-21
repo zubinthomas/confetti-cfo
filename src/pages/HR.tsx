@@ -2,6 +2,10 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Employee } from "@/api/entities";
+import { useAuth } from "@/lib/AuthContext";
+import { HR_SUMMARY_KEY, hrSubtitle, summariseEmployees } from "@/lib/hrSummary";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import HeadcountTab from "@/components/hr/HeadcountTab";
 import LeaveTab from "@/components/hr/LeaveTab";
@@ -23,6 +27,16 @@ export default function HR() {
   // gated by the permission it reads from the API (see PAGE_TABS in
   // src/lib/layout/registry.ts), not just the module-level gate in App.tsx.
   const { tabs, active: activeTab, setActive: setActiveTab } = useTabs("hr");
+  // Headcount line under the title. Only fetched for viewers who can read
+  // employees; HeadcountTab also writes into this cache whenever it reloads,
+  // so the line follows adds and offboardings without another request.
+  const { can } = useAuth();
+  const { data: summary } = useQuery({
+    queryKey: HR_SUMMARY_KEY,
+    queryFn: async () => summariseEmployees(await Employee.list()),
+    enabled: can("Employee", "read"),
+    staleTime: 60_000,
+  });
   const ActiveComponent = activeTab ? tabContent[activeTab] : undefined;
 
   return (
@@ -36,6 +50,7 @@ export default function HR() {
             <span className="text-muted-foreground/40">|</span>
             <div>
               <h1 className="text-xl font-bold font-heading text-foreground tracking-tight">HR Module</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">{hrSubtitle(summary)}</p>
             </div>
           </div>
           <SpotlightSearchButton className="ml-auto" />

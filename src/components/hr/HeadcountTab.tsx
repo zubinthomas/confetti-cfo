@@ -9,8 +9,10 @@ import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "./FormField";
 import EmployeeDocumentsPanel from "./EmployeeDocumentsPanel";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
 import { DIVISIONS } from "@/lib/hrDivisions";
+import { HR_SUMMARY_KEY, summariseEmployees } from "@/lib/hrSummary";
 import { useDraftPersistence } from "@/hooks/useDraftPersistence";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -436,6 +438,7 @@ function OnboardingPanel({ employeeId, record, canWrite, onChanged }: {
 
 export default function HeadcountTab() {
   const { user, can } = useAuth();
+  const queryClient = useQueryClient();
   const canWrite = can("Employee", "write");
   const canDelete = can("Employee", "delete");
   const canInvite = can("Invite", "write");
@@ -492,6 +495,7 @@ export default function HeadcountTab() {
       listOnboarding().catch((): OnboardingRecord[] => []),
     ]);
     setEmployees(empData);
+    queryClient.setQueryData(HR_SUMMARY_KEY, summariseEmployees(empData));
     setPayrollRecords(payrollData);
     setExits(exitData);
     setOnboardingRecords(onboardingData);
