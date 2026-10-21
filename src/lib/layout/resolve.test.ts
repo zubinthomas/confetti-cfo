@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, flattenLayers, gateAllows, resolveNav } from './resolve';
+import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, resolveNav } from './resolve';
 import type { CanFn, LayoutConfig, NavItemBase } from './types';
 
 const item = (id: string, over: Partial<NavItemBase> = {}): NavItemBase => ({
@@ -123,5 +123,36 @@ describe('flattenLayers', () => {
   it('copes with a missing layout or user layer', () => {
     expect(flattenLayers(undefined)).toEqual([]);
     expect(flattenLayers({ permission: [], roles: [], user: null })).toEqual([]);
+  });
+});
+
+describe('firstAccessibleRoute', () => {
+  const items = [
+    item('a', { group: 'G', gate: { requires: [{ resource: 'A', action: 'read' }] } }),
+    item('b', { group: 'G', gate: { requires: [{ resource: 'B', action: 'read' }] } }),
+    item('hr', { group: 'M', defaultPlacement: 'header', gate: { requires: [{ resource: 'HR', action: 'read' }] } }),
+    item('menu', { group: 'S', defaultPlacement: 'userMenu' }),
+  ];
+
+  it('prefers the first sidebar page the user can see', () => {
+    const nav = resolveNav({ items, can: grants('B:read', 'HR:read'), hasEmployee: false });
+    expect(firstAccessibleRoute(nav)).toBe('/b');
+  });
+
+  it('falls back to the header when the sidebar is empty', () => {
+    const nav = resolveNav({ items, can: grants('HR:read'), hasEmployee: false });
+    expect(firstAccessibleRoute(nav)).toBe('/hr');
+  });
+
+  it('ignores the user menu, so no real access means no landing page', () => {
+    const nav = resolveNav({ items, can: grants(), hasEmployee: false });
+    expect(nav.userMenu).toHaveLength(1);
+    expect(firstAccessibleRoute(nav)).toBeNull();
+  });
+
+  it('follows the user\'s own order and hidden items', () => {
+    const layer: LayoutConfig = { v: 1, nav: { items: { a: { hidden: true } } } };
+    const nav = resolveNav({ items, can: grants('A:read', 'B:read'), hasEmployee: false, layers: [layer] });
+    expect(firstAccessibleRoute(nav)).toBe('/b');
   });
 });

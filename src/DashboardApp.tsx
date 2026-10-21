@@ -16,7 +16,7 @@ import PageNotFound from '@/lib/PageNotFound';
 import RequirePermission from '@/components/RequirePermission';
 import { GATES } from '@/lib/layout/registry';
 import DashboardShell from '@/components/dashboard/DashboardShell';
-import OverviewTab from '@/components/dashboard/OverviewTab';
+import Landing from '@/components/dashboard/Landing';
 import RoadmapPage from '@/components/dashboard/RoadmapPage';
 import SiennaTab from '@/components/dashboard/SiennaTab';
 import StoreTab from '@/components/dashboard/StoreTab';
@@ -62,8 +62,11 @@ export default function DashboardApp() {
   return (
     <Routes>
       <Route element={<DashboardShell />}>
+        {/* The Overview for anyone who can open it, otherwise a redirect to the
+            first page they can see. Gated inside, not by RequirePermission. */}
+        <Route index element={<Landing />} />
+
         <Route element={<RequirePermission {...GATES.financial} />}>
-          <Route index element={<OverviewTab />} />
           <Route path="fnb" element={<SiennaTab />} />
           <Route path="fnb/cafe" element={<CafePage />} />
           <Route path="fnb/restaurant" element={<RestaurantPage />} />

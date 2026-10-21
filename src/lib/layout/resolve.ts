@@ -45,6 +45,15 @@ export interface ResolvedNav<T extends NavItemBase> {
   userMenu: T[];
 }
 
+/** Where a user who can't open the Overview should land: the first page they
+ *  can see in their own sidebar, then in their header. The user menu is left
+ *  out on purpose (settings pages aren't a home page), so someone with no real
+ *  access gets null and keeps the access-restricted screen. */
+export function firstAccessibleRoute<T extends NavItemBase>(nav: ResolvedNav<T>): string | null {
+  const first = nav.sidebar.flatMap((section) => section.items)[0] ?? nav.header[0];
+  return first?.to ?? null;
+}
+
 interface ResolveNavOptions<T extends NavItemBase> {
   items: T[];
   can: CanFn;
