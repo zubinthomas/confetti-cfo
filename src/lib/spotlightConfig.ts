@@ -1,65 +1,37 @@
-// Static data for SpotlightSearch (src/components/SpotlightSearch.tsx) -
-// pages/permissions mirror the route tree in src/App.tsx/src/DashboardApp.tsx,
-// and business-unit/taxonomy routes mirror src/components/dashboard/DashboardShell.tsx's
-// NAV_SECTIONS plus src/data/outletData.ts's Cafe-business outlet naming.
-// Hand-authored, like DashboardShell's own EXTRA_TITLES map for standalone
-// routes - needs a manual update if the route tree changes.
+// Static data for SpotlightSearch (src/components/SpotlightSearch.tsx). The
+// page list is derived from the nav registry (src/lib/layout/registry.ts), so
+// it follows the route gates automatically. The business-unit and taxonomy
+// routes below are hand-authored: they mirror the sidebar routes plus
+// src/data/outletData.ts's Cafe-business outlet naming, and need a manual
+// update if those routes move.
 import type { PermissionAction } from '@/lib/AuthContext';
+import { NAV_ITEMS } from '@/lib/layout/registry';
+import { gateAllows } from '@/lib/layout/resolve';
 
 export interface SpotlightPage {
   to: string;
   label: string;
   /** Omitted entirely for a page that's open to any authenticated user
-   *  (Roadmap, /me, /settings/user - see src/App.tsx/DashboardApp.tsx). */
+   *  (Roadmap - see src/DashboardApp.tsx). */
   requires?: { resource: string; action: PermissionAction }[];
   /** Default 'all' (every requirement must hold), matching RequirePermission's
    *  own default - see src/components/RequirePermission.tsx. */
   mode?: 'all' | 'any';
 }
 
-export const SPOTLIGHT_PAGES: SpotlightPage[] = [
-  { to: '/', label: 'Overview', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/fnb', label: 'F&B P&L', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/fnb/cafe', label: 'Cafe', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/fnb/restaurant', label: 'Restaurant', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/fnb/bar', label: 'Bar', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/fnb/events', label: 'Events', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/fnb/rannaghor', label: 'Rannaghor', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/store', label: 'Store P&L', mode: 'all', requires: [{ resource: 'FinancialRecord', action: 'read' }, { resource: 'SalesRecord', action: 'read' }] },
-  { to: '/store/consignment', label: 'Consignment', requires: [{ resource: 'ConsignmentRecord', action: 'read' }] },
-  { to: '/crafts/pottery', label: 'Pottery', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/crafts/batik', label: 'Batik', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/crafts/stitching', label: 'Stitching', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/crafts/trading-items', label: 'Trading Items', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/finance/profit-loss', label: 'Profit & Loss', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/finance/balance-sheet', label: 'Balance Sheet', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/cashflow', label: 'Cash Flow', requires: [{ resource: 'FinancialRecord', action: 'read' }] },
-  { to: '/ai', label: 'AI Queries', requires: [{ resource: 'Integration', action: 'read' }] },
-  { to: '/ops/production', label: 'Daily Production', requires: [{ resource: 'Operations', action: 'read' }] },
-  { to: '/ops/items', label: 'Items Produced', requires: [{ resource: 'Operations', action: 'read' }] },
-  { to: '/ops/quality', label: 'Rejection & QC', requires: [{ resource: 'Operations', action: 'read' }] },
-  { to: '/ops/kiln-energy', label: 'Kiln & Energy', requires: [{ resource: 'Operations', action: 'read' }] },
-  { to: '/ops/labour', label: 'Labour Efficiency', requires: [{ resource: 'Operations', action: 'read' }] },
-  { to: '/ops/orders', label: 'Orders & Dispatch', requires: [{ resource: 'Operations', action: 'read' }] },
-  { to: '/hr', label: 'HR Module', mode: 'any', requires: [{ resource: 'Employee', action: 'read' }, { resource: 'LeaveRequest', action: 'read' }, { resource: 'Recruitment', action: 'read' }] },
-  { to: '/compliance', label: 'Compliance', requires: [{ resource: 'Licence', action: 'read' }] },
-  { to: '/inventory', label: 'Inventory', requires: [{ resource: 'Inventory', action: 'read' }] },
-  { to: '/reservations', label: 'Reservations', requires: [{ resource: 'Reservation', action: 'read' }] },
-  { to: '/roadmap', label: 'Roadmap' },
-  { to: '/data/import', label: 'Import Workbooks', mode: 'any', requires: [{ resource: 'Import', action: 'read' }, { resource: 'SheetSource', action: 'read' }] },
-  { to: '/data/tally', label: 'Tally Integration', requires: [{ resource: 'TallySource', action: 'read' }] },
-  { to: '/settings', label: 'General Settings', requires: [{ resource: 'Settings', action: 'read' }] },
-  { to: '/settings/users', label: 'Users and Permissions', mode: 'any', requires: [{ resource: 'User', action: 'read' }, { resource: 'Invite', action: 'read' }, { resource: 'Role', action: 'read' }] },
-  { to: '/settings/cost-centres', label: 'Cost Centres', requires: [{ resource: 'CostCentre', action: 'read' }] },
-];
+export const SPOTLIGHT_PAGES: SpotlightPage[] = NAV_ITEMS
+  .filter((item) => item.searchable !== false)
+  .map((item) => ({
+    to: item.to,
+    label: item.title ?? item.label,
+    requires: item.gate?.requires,
+    mode: item.gate?.mode,
+  }));
 
-/** `requires`/`mode` check, mirroring RequirePermission.tsx's own logic
- *  exactly (src/components/RequirePermission.tsx) - a page with no
- *  `requires` at all is open to any authenticated user. */
+/** `requires`/`mode` check, same rule as RequirePermission.tsx - a page with
+ *  no `requires` at all is open to any authenticated user. */
 export function pageIsVisible(page: SpotlightPage, can: (resource: string, action: PermissionAction) => boolean): boolean {
-  if (!page.requires || page.requires.length === 0) return true;
-  const checks = page.requires.map(({ resource, action }) => can(resource, action));
-  return page.mode === 'any' ? checks.some(Boolean) : checks.every(Boolean);
+  return gateAllows(page.requires ? { requires: page.requires, mode: page.mode } : undefined, can);
 }
 
 /** The 11 real business_units rows (see src/data/outletData.ts's

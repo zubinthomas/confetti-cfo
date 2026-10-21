@@ -1,13 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Layers, UserCog, Settings, FileSpreadsheet, Cable, Users, IdCard, Map, Sun, Moon, Monitor, LogOut } from "lucide-react";
+import { Sun, Moon, Monitor, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/AuthContext";
+import { useNav } from "@/lib/layout/useNav";
 import { auth } from "@/api/auth";
 
 const THEME_OPTIONS = [
@@ -23,7 +24,8 @@ function initials(name: string | null | undefined) {
 }
 
 export default function UserMenu() {
-  const { user, can } = useAuth();
+  const { user } = useAuth();
+  const nav = useNav();
   const { theme, setTheme } = useTheme();
 
   return (
@@ -41,38 +43,11 @@ export default function UserMenu() {
           <p className="text-xs font-normal text-muted-foreground">{user.email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link to="/settings/user"><UserCog className="w-4 h-4" /> User settings</Link>
-        </DropdownMenuItem>
-        {user.employee && (
-          <DropdownMenuItem asChild>
-            <Link to="/me"><IdCard className="w-4 h-4" /> My Profile</Link>
+        {nav.userMenu.map(({ id, to, label, icon: Icon }) => (
+          <DropdownMenuItem key={id} asChild>
+            <Link to={to}><Icon className="w-4 h-4" /> {label}</Link>
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild>
-          <Link to="/settings"><Settings className="w-4 h-4" /> General settings</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/roadmap"><Map className="w-4 h-4" /> Roadmap</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/data/import"><FileSpreadsheet className="w-4 h-4" /> Import Workbooks</Link>
-        </DropdownMenuItem>
-        {can("TallySource", "read") && (
-          <DropdownMenuItem asChild>
-            <Link to="/data/tally"><Cable className="w-4 h-4" /> Tally Integration</Link>
-          </DropdownMenuItem>
-        )}
-        {can("CostCentre", "read") && (
-          <DropdownMenuItem asChild>
-            <Link to="/settings/cost-centres"><Layers className="w-4 h-4" /> Cost Centres</Link>
-          </DropdownMenuItem>
-        )}
-        {(can("User", "read") || can("Invite", "read") || can("Role", "read")) && (
-          <DropdownMenuItem asChild>
-            <Link to="/settings/users"><Users className="w-4 h-4" /> Users and Permissions</Link>
-          </DropdownMenuItem>
-        )}
+        ))}
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 flex items-center gap-1">
           {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (

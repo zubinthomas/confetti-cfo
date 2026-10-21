@@ -14,6 +14,7 @@ import React, { lazy, useEffect } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import PageNotFound from '@/lib/PageNotFound';
 import RequirePermission from '@/components/RequirePermission';
+import { GATES } from '@/lib/layout/registry';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import OverviewTab from '@/components/dashboard/OverviewTab';
 import RoadmapPage from '@/components/dashboard/RoadmapPage';
@@ -61,7 +62,7 @@ export default function DashboardApp() {
   return (
     <Routes>
       <Route element={<DashboardShell />}>
-        <Route element={<RequirePermission requires={[{ resource: 'FinancialRecord', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.financial} />}>
           <Route index element={<OverviewTab />} />
           <Route path="fnb" element={<SiennaTab />} />
           <Route path="fnb/cafe" element={<CafePage />} />
@@ -78,45 +79,35 @@ export default function DashboardApp() {
           <Route path="finance/balance-sheet" element={<BalanceSheetPage />} />
         </Route>
 
-        <Route element={<RequirePermission mode="all" requires={[
-          { resource: 'FinancialRecord', action: 'read' },
-          { resource: 'SalesRecord', action: 'read' },
-        ]} />}>
+        <Route element={<RequirePermission {...GATES.store} />}>
           <Route path="store" element={<StoreTab />} />
         </Route>
 
-        <Route element={<RequirePermission requires={[{ resource: 'ConsignmentRecord', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.consignment} />}>
           <Route path="store/consignment" element={<ConsignmentPage />} />
         </Route>
 
-        <Route element={<RequirePermission requires={[{ resource: 'Integration', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.ai} />}>
           <Route path="ai" element={<AIQueriesTab />} />
         </Route>
 
-        <Route element={<RequirePermission mode="any" requires={[
-          { resource: 'Import', action: 'read' },
-          { resource: 'SheetSource', action: 'read' },
-        ]} />}>
+        <Route element={<RequirePermission {...GATES.import} />}>
           <Route path="data/import" element={<ImportPage />} />
         </Route>
 
-        <Route element={<RequirePermission requires={[{ resource: 'TallySource', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.tally} />}>
           <Route path="data/tally" element={<TallyPage />} />
         </Route>
 
-        <Route element={<RequirePermission requires={[{ resource: 'Settings', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.settings} />}>
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
-        <Route element={<RequirePermission mode="any" requires={[
-          { resource: 'User', action: 'read' },
-          { resource: 'Invite', action: 'read' },
-          { resource: 'Role', action: 'read' },
-        ]} />}>
+        <Route element={<RequirePermission {...GATES.users} />}>
           <Route path="settings/users" element={<UsersPage />} />
         </Route>
 
-        <Route element={<RequirePermission requires={[{ resource: 'CostCentre', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.costCentres} />}>
           <Route path="settings/cost-centres" element={<CostCentresPanel />} />
         </Route>
 
@@ -126,7 +117,7 @@ export default function DashboardApp() {
         {/* Roadmap is not RBAC-gated yet - open to any authenticated user, see server/routes/roadmap.ts */}
         <Route path="roadmap" element={<RoadmapPage />} />
 
-        <Route element={<RequirePermission requires={[{ resource: 'Operations', action: 'read' }]} />}>
+        <Route element={<RequirePermission {...GATES.operations} />}>
           <Route path="ops/:section" element={<OpsPage />} />
         </Route>
       </Route>

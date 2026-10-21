@@ -9,6 +9,7 @@ import AccessRestricted from '@/components/AccessRestricted';
 import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import RequirePermission from '@/components/RequirePermission';
+import { GATES } from '@/lib/layout/registry';
 import { Navigate } from 'react-router-dom';
 import Login from '@/pages/Login';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -102,20 +103,16 @@ const AuthenticatedApp = () => {
         <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
           {/* Coarse "can enter the module at all" gate - each tab inside HR.tsx
               additionally self-checks its own specific permission via can(). */}
-          <Route element={<RequirePermission mode="any" requires={[
-            { resource: 'Employee', action: 'read' },
-            { resource: 'LeaveRequest', action: 'read' },
-            { resource: 'Recruitment', action: 'read' },
-          ]} />}>
+          <Route element={<RequirePermission {...GATES.hr} />}>
             <Route path="/hr" element={<Suspense fallback={<Splash />}><HR /></Suspense>} />
           </Route>
-          <Route element={<RequirePermission requires={[{ resource: 'Licence', action: 'read' }]} />}>
+          <Route element={<RequirePermission {...GATES.compliance} />}>
             <Route path="/compliance" element={<Suspense fallback={<Splash />}><Compliance /></Suspense>} />
           </Route>
-          <Route element={<RequirePermission requires={[{ resource: 'Inventory', action: 'read' }]} />}>
+          <Route element={<RequirePermission {...GATES.inventory} />}>
             <Route path="/inventory" element={<Suspense fallback={<Splash />}><InventoryPage /></Suspense>} />
           </Route>
-          <Route element={<RequirePermission requires={[{ resource: 'Reservation', action: 'read' }]} />}>
+          <Route element={<RequirePermission {...GATES.reservations} />}>
             <Route path="/reservations" element={<Suspense fallback={<Splash />}><ReservationsPage /></Suspense>} />
           </Route>
           {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.

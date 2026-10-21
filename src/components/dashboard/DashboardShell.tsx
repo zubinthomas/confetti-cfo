@@ -1,100 +1,28 @@
 import React, { Suspense, useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import PageSpinner from "./PageSpinner";
-import {
-  LayoutDashboard, UtensilsCrossed, Coffee, Soup, Wine, PartyPopper, CookingPot,
-  Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
-  ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
-  MenuIcon, X, Plus, FileBarChart, Scale,
-} from "lucide-react";
+import { MenuIcon, X, Plus } from "lucide-react";
 import UserMenu from "./UserMenu";
 import InstallBanner from "./InstallBanner";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
-import { useAuth } from "@/lib/AuthContext";
-
-// Routes not shown in NAV_SECTIONS (relocated into the header/user menu) but
-// that still need a header title/subtitle.
-const EXTRA_TITLES: Record<string, string> = {
-  "/roadmap": "Roadmap",
-  "/data/import": "Import Workbooks",
-  "/data/tally": "Tally Integration",
-  "/settings": "General Settings",
-  "/settings/user": "User Settings",
-  "/settings/users": "Users and Permissions",
-  "/settings/cost-centres": "Cost Centres",
-};
-
-const NAV_SECTIONS = [
-  {
-    title: null,
-    items: [
-      { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-    ],
-  },
-  {
-    title: "F&B",
-    items: [
-      { to: "/fnb", label: "F&B P&L", icon: UtensilsCrossed, end: true },
-      { to: "/fnb/cafe", label: "Cafe", icon: Coffee },
-      { to: "/fnb/restaurant", label: "Restaurant", icon: Soup },
-      { to: "/fnb/bar", label: "Bar", icon: Wine },
-      { to: "/fnb/events", label: "Events", icon: PartyPopper },
-      { to: "/fnb/rannaghor", label: "Rannaghor", icon: CookingPot },
-    ],
-  },
-  {
-    title: "Retail",
-    items: [
-      { to: "/store", label: "Store P&L", icon: Store, end: true },
-      { to: "/store/consignment", label: "Consignment", icon: Handshake },
-    ],
-  },
-  {
-    title: "Non-F&B",
-    items: [
-      { to: "/crafts/pottery", label: "Pottery", icon: Factory },
-      { to: "/crafts/batik", label: "Batik", icon: Paintbrush },
-      { to: "/crafts/stitching", label: "Stitching", icon: Scissors },
-      { to: "/crafts/trading-items", label: "Trading Items", icon: Package },
-    ],
-  },
-  {
-    title: "Finance",
-    items: [
-      { to: "/finance/profit-loss", label: "Profit & Loss", icon: FileBarChart },
-      { to: "/finance/balance-sheet", label: "Balance Sheet", icon: Scale },
-      { to: "/cashflow", label: "Cash Flow", icon: Banknote },
-      { to: "/ai", label: "AI Queries", icon: Sparkles },
-    ],
-  },
-  {
-    title: "Operations",
-    items: [
-      { to: "/ops/production", label: "Daily Production", icon: ClipboardList },
-      { to: "/ops/items", label: "Items Produced", icon: Package },
-      { to: "/ops/quality", label: "Rejection & QC", icon: ShieldAlert },
-      { to: "/ops/kiln-energy", label: "Kiln & Energy", icon: Flame },
-      { to: "/ops/labour", label: "Labour Efficiency", icon: HardHat },
-      { to: "/ops/orders", label: "Orders & Dispatch", icon: Truck },
-    ],
-  },
-];
+import { useNav } from "@/lib/layout/useNav";
+import { navTitle } from "@/lib/layout/registry";
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
-  const { can } = useAuth();
+  const nav = useNav();
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-      {NAV_SECTIONS.map((section, i) => (
-        <div key={section.title || i}>
-          {section.title && (
+      {nav.sidebar.map((section, i) => (
+        <div key={section.group || i}>
+          {section.group && (
             <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
-              {section.title}
+              {section.group}
             </p>
           )}
           <div className="space-y-0.5">
-            {section.items.map(({ to, label, icon: Icon, end }) => (
+            {section.items.map(({ id, to, label, icon: Icon, end }) => (
               <NavLink
-                key={to}
+                key={id}
                 to={to}
                 end={end}
                 onClick={onNavigate}
@@ -113,59 +41,30 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         </div>
       ))}
-      <div className="pt-3 border-t border-border space-y-0.5">
-        <Link
-          to="/hr"
-          onClick={onNavigate}
-          className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Users className="w-4 h-4 shrink-0" /> HR Module
-        </Link>
-        <Link
-          to="/compliance"
-          onClick={onNavigate}
-          className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
-        </Link>
-        {can("Inventory", "read") && (
-          <Link
-            to="/inventory"
-            onClick={onNavigate}
-            className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <Boxes className="w-4 h-4 shrink-0" /> Inventory
-          </Link>
-        )}
-        {can("Reservation", "read") && (
-          <Link
-            to="/reservations"
-            onClick={onNavigate}
-            className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <CalendarDays className="w-4 h-4 shrink-0" /> Reservations
-          </Link>
-        )}
-      </div>
+      {/* Header links collapse into the drawer on small screens */}
+      {nav.header.length > 0 && (
+        <div className="pt-3 border-t border-border space-y-0.5">
+          {nav.header.map(({ id, to, label, icon: Icon }) => (
+            <Link
+              key={id}
+              to={to}
+              onClick={onNavigate}
+              className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <Icon className="w-4 h-4 shrink-0" /> {label}
+            </Link>
+          ))}
+        </div>
+      )}
     </nav>
   );
-}
-
-// Current-page title from the nav config, for the header
-function pageTitle(pathname: string) {
-  for (const section of NAV_SECTIONS) {
-    for (const item of section.items) {
-      if (item.to === pathname) return item.label;
-    }
-  }
-  return EXTRA_TITLES[pathname] ?? null;
 }
 
 export default function DashboardShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
-  const { can } = useAuth();
-  const title = pageTitle(pathname);
+  const nav = useNav();
+  const title = navTitle(pathname);
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -222,34 +121,15 @@ export default function DashboardShell() {
             <div className="flex items-center gap-4 ml-auto">
               <SpotlightSearchButton showHint />
               <div className="hidden md:flex items-center gap-4">
-                <Link
-                  to="/hr"
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Users className="w-4 h-4 shrink-0" /> HR Module
-                </Link>
-                <Link
-                  to="/compliance"
-                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ShieldCheck className="w-4 h-4 shrink-0" /> Compliance
-                </Link>
-                {can("Inventory", "read") && (
+                {nav.header.map(({ id, to, label, icon: Icon }) => (
                   <Link
-                    to="/inventory"
+                    key={id}
+                    to={to}
                     className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <Boxes className="w-4 h-4 shrink-0" /> Inventory
+                    <Icon className="w-4 h-4 shrink-0" /> {label}
                   </Link>
-                )}
-                {can("Reservation", "read") && (
-                  <Link
-                    to="/reservations"
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <CalendarDays className="w-4 h-4 shrink-0" /> Reservations
-                  </Link>
-                )}
+                ))}
               </div>
               <UserMenu />
             </div>
