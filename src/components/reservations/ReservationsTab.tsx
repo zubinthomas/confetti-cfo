@@ -8,13 +8,14 @@ import {
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
-import { Plus, X, Loader2, Settings2, CalendarDays, Trash2, Pencil, DoorOpen, Clock, Link2, Link2Off } from "lucide-react";
+import { Plus, X, Loader2, Trash2, Pencil, Clock, Link2, Link2Off } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import GuestRegister from "@/components/reservations/GuestRegister";
 import { useAuth } from "@/lib/AuthContext";
+import { useTabs } from "@/lib/layout/useTabs";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
 
 const todayStr = () => istDateStr();
@@ -333,7 +334,8 @@ export default function ReservationsTab() {
   const canWrite = can("Reservation", "write");
   const canDelete = can("Reservation", "delete");
 
-  const [view, setView] = useState<"day" | "manage" | "signin">("signin");
+  // Order and opening view come from the layout registry (PAGE_TABS.reservations).
+  const { tabs: viewTabs, active: view, setActive: setView } = useTabs("reservations");
   const [locations, setLocations] = useState<ReservationLocation[]>([]);
   const [tables, setTables] = useState<ReservationTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
@@ -541,24 +543,18 @@ export default function ReservationsTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => setView("signin")}
-          className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "signin" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-        >
-          <DoorOpen className="w-4 h-4" /> Guest Register
-        </button>
-        <button
-          onClick={() => setView("day")}
-          className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "day" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-        >
-          <CalendarDays className="w-4 h-4" /> Reservations
-        </button>
-        <button
-          onClick={() => setView("manage")}
-          className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === "manage" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-        >
-          <Settings2 className="w-4 h-4" /> Locations &amp; Tables
-        </button>
+        {viewTabs.map((tab) => {
+          const Icon = tab.icon!;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setView(tab.id)}
+              className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${view === tab.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+            >
+              <Icon className="w-4 h-4" /> {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

@@ -4,11 +4,10 @@ import UsersTab from "./UsersTab";
 import InvitedUsersTab from "./InvitedUsersTab";
 import RolesTab from "./RolesTab";
 import { useAuth } from "@/lib/AuthContext";
+import { useTabs } from "@/lib/layout/useTabs";
 import { listRoles, type RoleWithPermissions } from "@/api/rolesApi";
 import type { Invite } from "@/api/invitesApi";
-import { Plus, Users, UserPlus, Shield } from "lucide-react";
-
-type TabId = "users" | "invites" | "roles";
+import { Plus } from "lucide-react";
 
 export default function UsersPage() {
   const { user, can } = useAuth();
@@ -19,7 +18,9 @@ export default function UsersPage() {
   const canRoleWrite = can("Role", "write");
   const heldPerms = useMemo(() => new Set(user?.permissions ?? []), [user]);
 
-  const [activeTab, setActiveTab] = useState<TabId>(canSeeUsers ? "users" : canSeeInvites ? "invites" : "roles");
+  // Which tabs exist (each needs its own read permission), their order and
+  // the one that opens first come from the layout registry.
+  const { tabs, active: activeTab, setActive: setActiveTab } = useTabs("users");
   const [roles, setRoles] = useState<RoleWithPermissions[] | null>(null);
   const [rolesError, setRolesError] = useState("");
   const [formInvite, setFormInvite] = useState<Invite | null | undefined>(undefined); // undefined = closed
@@ -31,13 +32,7 @@ export default function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const tabs = [
-    canSeeUsers && { id: "users" as const, label: "Users", icon: Users },
-    canSeeInvites && { id: "invites" as const, label: "Invited Users", icon: UserPlus },
-    canSeeRoles && { id: "roles" as const, label: "Roles", icon: Shield },
-  ].filter(Boolean) as { id: TabId; label: string; icon: typeof Users }[];
-
-  const soloLabel = activeTab === "users" ? "Users" : activeTab === "invites" ? "Invited Users" : "Roles";
+  const soloLabel = tabs.find((tab) => tab.id === activeTab)?.label ?? "";
 
   return (
     <div className="space-y-6">
@@ -45,7 +40,7 @@ export default function UsersPage() {
         {tabs.length > 1 ? (
           <div className="flex items-center gap-1.5">
             {tabs.map((tab) => {
-              const Icon = tab.icon;
+              const Icon = tab.icon!;
               const active = activeTab === tab.id;
               return (
                 <button

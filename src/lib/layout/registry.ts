@@ -8,8 +8,9 @@ import {
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
+  CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2,
 } from 'lucide-react';
-import type { Gate, NavItemBase } from './types';
+import type { Gate, NavItemBase, TabBase } from './types';
 
 const read = (resource: string) => ({ resource, action: 'read' as const });
 
@@ -90,3 +91,53 @@ const TITLES = new Map(NAV_ITEMS.map((item) => [item.to, item.title ?? item.labe
 export function navTitle(pathname: string): string | null {
   return TITLES.get(pathname) ?? null;
 }
+
+export interface TabItem extends TabBase {
+  icon?: LucideIcon;
+}
+
+export type PageId = 'hr' | 'users' | 'reservations' | 'store' | 'fnb-view' | 'fnb-detail';
+
+const needs = (resource: string): Gate => ({ requires: [read(resource)] });
+
+/** Tabs and view switchers per page, in default order. Gates are what each
+ *  tab actually reads from the API, so a tab never opens onto a 403. The
+ *  pages that conditionally show a switcher (F&B detail, only when venue data
+ *  exists) keep that condition themselves; this only decides which tabs
+ *  exist, their order and which one opens first. */
+export const PAGE_TABS: Record<PageId, TabItem[]> = {
+  hr: [
+    { id: 'headcount', label: 'Headcount & Payroll', icon: Users, gate: needs('Employee') },
+    { id: 'leave', label: 'Leave & Attendance', icon: CalendarOff, gate: needs('LeaveRequest') },
+    { id: 'roster', label: 'Roster', icon: CalendarDays, gate: needs('Employee') },
+    { id: 'recruitment', label: 'Recruitment', icon: UserSearch, gate: needs('Recruitment') },
+    { id: 'documents', label: 'Documents', icon: FileCheck, gate: needs('Employee') },
+  ],
+  users: [
+    { id: 'users', label: 'Users', icon: Users, gate: needs('User') },
+    { id: 'invites', label: 'Invited Users', icon: UserPlus, gate: needs('Invite') },
+    { id: 'roles', label: 'Roles', icon: Shield, gate: needs('Role') },
+  ],
+  reservations: [
+    { id: 'signin', label: 'Guest Register', icon: DoorOpen },
+    { id: 'day', label: 'Reservations', icon: CalendarDays },
+    { id: 'manage', label: 'Locations & Tables', icon: Settings2 },
+  ],
+  store: [
+    { id: 'channels', label: 'Channel Mix' },
+    { id: 'categories', label: 'Categories' },
+    { id: 'yoy', label: 'YoY Comparison' },
+    { id: 'costs', label: 'Cost Structure' },
+  ],
+  'fnb-view': [
+    { id: 'revenue', label: 'Revenue Mix' },
+    { id: 'margins', label: 'Margin Trends' },
+    { id: 'pl', label: 'Net P&L' },
+    { id: 'costs', label: 'Cost Breakdown' },
+  ],
+  'fnb-detail': [
+    { id: 'targets', label: 'Targets' },
+    { id: 'venue', label: 'By Venue' },
+    { id: 'item', label: 'By Item' },
+  ],
+};

@@ -40,6 +40,14 @@ export interface NavItemBase {
   searchable?: boolean;
 }
 
+/** A tab (or view switcher button) on a page. Ids are a stable contract like
+ *  nav ids. A tab with no gate is open to anyone who can see the page. */
+export interface TabBase {
+  id: string;
+  label: string;
+  gate?: Gate;
+}
+
 export type WidgetWidth = 'sixth' | 'third' | 'half' | 'full';
 
 /** One layer of layout overrides. Sparse: anything missing falls through to

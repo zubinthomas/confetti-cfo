@@ -8,6 +8,7 @@ import TrackerImportBadge from "./TrackerImportBadge";
 import { MenuMixCard } from "@/components/fnb/OutletPage";
 import { useOverviewFiscalYears } from "@/hooks/useOverviewFiscalYears";
 import { useFyParam } from "@/hooks/useFyParam";
+import { useTabs } from "@/lib/layout/useTabs";
 import { useFabYear } from "@/hooks/useFabYear";
 import { useReferenceData } from "@/hooks/useReferenceData";
 import { useRevenueTargets } from "@/hooks/useRevenueTargets";
@@ -50,8 +51,8 @@ const COGS_TARGET_PCT = 35;
 const FNB_BUSINESS_UNIT_KEY = "F&B";
 
 export default function SiennaTab() {
-  const [view, setView] = useState("revenue");
-  const [fyDetailView, setFyDetailView] = useState<"targets" | "venue" | "item">("targets");
+  const { tabs: viewTabs, active: view, setActive: setView } = useTabs("fnb-view");
+  const { tabs: detailTabs, active: fyDetailView, setActive: setFyDetailView } = useTabs("fnb-detail");
   const [drillCategory, setDrillCategory] = useState<string | null>(null);
   const fys = useOverviewFiscalYears();
   // "2026-2027" is always handled as the synthetic/projected targets entry
@@ -166,14 +167,10 @@ export default function SiennaTab() {
 
         {venueData && (
           <div className="flex gap-1.5 flex-wrap">
-            {[
-              { key: "targets", label: "Targets" },
-              { key: "venue", label: "By Venue" },
-              { key: "item", label: "By Item" },
-            ].map(({ key, label }) => (
+            {detailTabs.map(({ id: key, label }) => (
               <button
                 key={key}
-                onClick={() => setFyDetailView(key as typeof fyDetailView)}
+                onClick={() => setFyDetailView(key)}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                   fyDetailView === key
                     ? "bg-primary text-primary-foreground border-primary"
@@ -448,12 +445,7 @@ export default function SiennaTab() {
         <>
           {/* View switcher */}
           <div className="flex gap-1.5 flex-wrap">
-            {[
-              { key: "revenue", label: "Revenue Mix" },
-              { key: "margins", label: "Margin Trends" },
-              { key: "pl",      label: "Net P&L" },
-              { key: "costs",   label: "Cost Breakdown" },
-            ].map(({ key, label }) => (
+            {viewTabs.map(({ id: key, label }) => (
               <button
                 key={key}
                 onClick={() => setView(key)}

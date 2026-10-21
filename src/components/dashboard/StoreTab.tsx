@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React from "react";
+import { useTabs } from "@/lib/layout/useTabs";
 import KpiCard, { type KpiData } from "./KpiCard";
 import DashCard from "./DashCard";
 import StatusRow, { type StatusRowData } from "./StatusRow";
@@ -48,7 +49,7 @@ const STORE_FY_CHIPS = [...STORE_FYS, "2026-2027"];
 
 export default function StoreTab() {
   const storeData = useStoreData();
-  const [view, setView] = useState("channels");
+  const { tabs: viewTabs, active: view, setActive: setView } = useTabs("store");
   const [fy, setFy] = useFyParam(STORE_FY_CHIPS, STORE_FYS.at(-1));
   const isTargetsFy = fy === "2026-2027";
 
@@ -343,12 +344,7 @@ export default function StoreTab() {
 
       {/* View switcher */}
       <div className="flex gap-1.5 flex-wrap">
-        {[
-          { key: "channels",   label: "Channel Mix" },
-          { key: "categories", label: "Categories" },
-          { key: "yoy",        label: "YoY Comparison" },
-          { key: "costs",      label: "Cost Structure" },
-        ].map(({ key, label }) => (
+        {viewTabs.map(({ id: key, label }) => (
           <button
             key={key}
             onClick={() => setView(key)}

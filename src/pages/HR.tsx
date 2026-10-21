@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, CalendarOff, UserSearch, FileCheck, CalendarDays, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import HeadcountTab from "@/components/hr/HeadcountTab";
@@ -8,14 +8,7 @@ import LeaveTab from "@/components/hr/LeaveTab";
 import RecruitmentTab from "@/components/hr/RecruitmentTab";
 import DocumentsTab from "@/components/hr/DocumentsTab";
 import RosterTab from "@/components/hr/RosterTab";
-
-const tabs = [
-  { id: "headcount", label: "Headcount & Payroll", icon: Users },
-  { id: "leave", label: "Leave & Attendance", icon: CalendarOff },
-  { id: "roster", label: "Roster", icon: CalendarDays },
-  { id: "recruitment", label: "Recruitment", icon: UserSearch },
-  { id: "documents", label: "Documents", icon: FileCheck },
-];
+import { useTabs } from "@/lib/layout/useTabs";
 
 const tabContent: Record<string, React.ComponentType> = {
   headcount: HeadcountTab,
@@ -26,8 +19,11 @@ const tabContent: Record<string, React.ComponentType> = {
 };
 
 export default function HR() {
-  const [activeTab, setActiveTab] = useState("headcount");
-  const ActiveComponent = tabContent[activeTab];
+  // Tab list, order and default come from the layout registry; each tab is
+  // gated by the permission it reads from the API (see PAGE_TABS in
+  // src/lib/layout/registry.ts), not just the module-level gate in App.tsx.
+  const { tabs, active: activeTab, setActive: setActiveTab } = useTabs("hr");
+  const ActiveComponent = activeTab ? tabContent[activeTab] : undefined;
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,7 +46,7 @@ export default function HR() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex gap-1.5 flex-wrap mb-6">
           {tabs.map((tab) => {
-            const Icon = tab.icon;
+            const Icon = tab.icon!;
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -77,7 +73,7 @@ export default function HR() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            <ActiveComponent />
+            {ActiveComponent && <ActiveComponent />}
           </motion.div>
         </AnimatePresence>
       </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, resolveNav } from './resolve';
-import type { CanFn, LayoutConfig, NavItemBase } from './types';
+import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, resolveNav, resolveTabs } from './resolve';
+import type { CanFn, LayoutConfig, NavItemBase, TabBase } from './types';
 
 const item = (id: string, over: Partial<NavItemBase> = {}): NavItemBase => ({
   id, label: id, to: `/${id}`, group: 'G', defaultPlacement: 'sidebar', ...over,
@@ -154,5 +154,62 @@ describe('firstAccessibleRoute', () => {
     const layer: LayoutConfig = { v: 1, nav: { items: { a: { hidden: true } } } };
     const nav = resolveNav({ items, can: grants('A:read', 'B:read'), hasEmployee: false, layers: [layer] });
     expect(firstAccessibleRoute(nav)).toBe('/b');
+  });
+});
+
+describe('resolveTabs', () => {
+  const tab = (id: string, resource?: string): TabBase => ({
+    id, label: id, gate: resource ? { requires: [{ resource, action: 'read' as const }] } : undefined,
+  });
+  const tabs = [tab('a', 'A'), tab('b', 'B'), tab('c'), tab('d', 'D')];
+  const tabLayer = (cfg: NonNullable<LayoutConfig['tabs']>[string], page = 'p'): LayoutConfig => ({ v: 1, tabs: { [page]: cfg } });
+  const run = (can: CanFn, layers?: LayoutConfig[]) => resolveTabs({ pageId: 'p', tabs, can, layers });
+
+  it('keeps registry order and drops tabs the user cannot access', () => {
+    const r = run(grants('A:read', 'D:read'));
+    expect(r.tabs.map((t) => t.id)).toEqual(['a', 'c', 'd']);
+    expect(r.defaultId).toBe('a');
+  });
+
+  it('opens on the first tab the user can access, not the first tab', () => {
+    expect(run(grants('D:read')).defaultId).toBe('c');
+    expect(run(grants()).defaultId).toBe('c');
+  });
+
+  it('reports no default when nothing is accessible', () => {
+    const only = resolveTabs({ pageId: 'p', tabs: [tab('a', 'A')], can: grants() });
+    expect(only).toEqual({ tabs: [], defaultId: null });
+  });
+
+  it('applies order, hidden and default from a layer', () => {
+    const r = run(allow, [tabLayer({ order: ['d', 'c'], hidden: ['a'], default: 'c' })]);
+    expect(r.tabs.map((t) => t.id)).toEqual(['d', 'c', 'b']);
+    expect(r.defaultId).toBe('c');
+  });
+
+  it('lets a later layer replace an earlier hidden list', () => {
+    const role = tabLayer({ hidden: ['a', 'b'] });
+    const user = tabLayer({ hidden: ['b'] });
+    expect(run(allow, [role, user]).tabs.map((t) => t.id)).toEqual(['a', 'c', 'd']);
+  });
+
+  it('ignores a default that is hidden or inaccessible', () => {
+    expect(run(grants(), [tabLayer({ default: 'a' })]).defaultId).toBe('c');
+    expect(run(allow, [tabLayer({ hidden: ['b'], default: 'b' })]).defaultId).toBe('a');
+  });
+
+  it('never hides every tab', () => {
+    const r = run(grants(), [tabLayer({ hidden: ['c'] })]);
+    expect(r.tabs.map((t) => t.id)).toEqual(['c']);
+  });
+
+  it('only reads the layer config for its own page', () => {
+    const r = run(allow, [tabLayer({ hidden: ['a'] }, 'other')]);
+    expect(r.tabs.map((t) => t.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('cannot bring back an inaccessible tab through order or default', () => {
+    const r = run(grants(), [tabLayer({ order: ['a', 'b', 'd'], default: 'd' })]);
+    expect(r.tabs.map((t) => t.id)).toEqual(['c']);
   });
 });

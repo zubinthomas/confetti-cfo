@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GATES, NAV_ITEMS, navTitle } from './registry';
+import { GATES, NAV_ITEMS, PAGE_TABS, navTitle } from './registry';
 import { PLACEMENTS } from './types';
 import { SPOTLIGHT_PAGES } from '@/lib/spotlightConfig';
 
@@ -56,5 +56,27 @@ describe('spotlight pages', () => {
       expect(page.requires).toEqual(nav.gate?.requires);
       expect(page.mode).toEqual(nav.gate?.mode);
     }
+  });
+});
+
+describe('page tabs', () => {
+  it('have unique ids within each page and a label', () => {
+    for (const [page, tabs] of Object.entries(PAGE_TABS)) {
+      const ids = tabs.map((t) => t.id);
+      expect(new Set(ids).size, page).toBe(ids.length);
+      for (const tab of tabs) expect(tab.label.length, `${page}.${tab.id}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('keep the HR tabs and the permission each one reads from the API', () => {
+    const hr = Object.fromEntries(PAGE_TABS.hr.map((t) => [t.id, t.gate?.requires.map((r) => r.resource)]));
+    expect(hr).toEqual({
+      headcount: ['Employee'], leave: ['LeaveRequest'], roster: ['Employee'],
+      recruitment: ['Recruitment'], documents: ['Employee'],
+    });
+  });
+
+  it('keep the users-page tabs in the order the page always used', () => {
+    expect(PAGE_TABS.users.map((t) => t.id)).toEqual(['users', 'invites', 'roles']);
   });
 });

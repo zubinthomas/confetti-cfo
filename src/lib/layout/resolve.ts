@@ -1,7 +1,7 @@
 // Pure layout resolution. No React, no icons, so it can be unit-tested.
 import {
   PLACEMENTS,
-  type CanFn, type Gate, type LayoutConfig, type LayoutLayers, type NavItemBase, type Placement,
+  type CanFn, type Gate, type LayoutConfig, type LayoutLayers, type NavItemBase, type Placement, type TabBase,
 } from './types';
 
 /** Same rule as RequirePermission: a gate with no requirements is open. */
@@ -117,4 +117,45 @@ export function resolveNav<T extends NavItemBase>(
     .filter((section) => section.items.length > 0);
 
   return { sidebar, header: shown('header'), userMenu: shown('userMenu') };
+}
+
+export interface ResolvedTabs<T extends TabBase> {
+  tabs: T[];
+  /** The tab to open first: the highest layer's choice if it is visible,
+   *  otherwise the first visible tab. null only when nothing is accessible. */
+  defaultId: string | null;
+}
+
+/** Tabs for one page. Access (the gate) is the hard filter. Then each layer
+ *  in turn can reorder (same rule as applyOrder), replace the hidden list (a
+ *  layer that lists `hidden` is a full statement, so a user can un-hide what a
+ *  role hid by saving a shorter list) and pick a default tab. If hiding would
+ *  leave the page with no tabs the hidden list is ignored. */
+export function resolveTabs<T extends TabBase>(
+  { pageId, tabs, can, layers = [] }: {
+    pageId: string;
+    tabs: T[];
+    can: CanFn;
+    layers?: (LayoutConfig | null | undefined)[];
+  },
+): ResolvedTabs<T> {
+  const accessible = tabs.filter((tab) => gateAllows(tab.gate, can));
+  const byId = new Map(accessible.map((tab) => [tab.id, tab]));
+
+  let order = accessible.map((tab) => tab.id);
+  let hidden = new Set<string>();
+  let preferred: string | undefined;
+  for (const layer of layers) {
+    const config = layer?.tabs?.[pageId];
+    if (!config) continue;
+    if (config.hidden) hidden = new Set(config.hidden);
+    order = applyOrder(order, config.order);
+    if (config.default !== undefined) preferred = config.default;
+  }
+
+  let shownIds = order.filter((id) => !hidden.has(id));
+  if (shownIds.length === 0) shownIds = order;
+  const shown = shownIds.map((id) => byId.get(id)!);
+  const defaultId = preferred && shownIds.includes(preferred) ? preferred : shown[0]?.id ?? null;
+  return { tabs: shown, defaultId };
 }
