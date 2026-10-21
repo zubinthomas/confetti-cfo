@@ -6,6 +6,7 @@ import { db, ready, schema } from '../db/client.ts';
 import { authMiddleware, signToken, type AuthedRequest } from '../middleware/auth.ts';
 import { getEffectivePermissions } from '../db/permissions.ts';
 import { getUserDivisionScope } from '../db/divisionScope.ts';
+import { getLayoutLayers } from '../db/layouts.ts';
 import { getSelfEmployeeView, getDepartmentRoster } from '../db/employeeSelf.ts';
 import { sendMail, MailNotConfiguredError } from '../email/sendMail.ts';
 
@@ -48,6 +49,7 @@ router.get('/me', authMiddleware, async (req: AuthedRequest, res) => {
   const effective = await getEffectivePermissions(user.id);
   const divisionScope = await getUserDivisionScope(user.id);
   const employee = await getSelfEmployeeView(user.id);
+  const layout = await getLayoutLayers(user.id);
   res.json({
     id: user.id,
     email: user.email,
@@ -56,6 +58,7 @@ router.get('/me', authMiddleware, async (req: AuthedRequest, res) => {
     permissions: effective.map((p) => `${p.resource}:${p.action}`),
     divisionScope,
     employee,
+    layout,
   });
 });
 

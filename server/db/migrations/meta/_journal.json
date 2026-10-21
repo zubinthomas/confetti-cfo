@@ -337,6 +337,13 @@
       "when": 1792477126293,
       "tag": "0047_motionless_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792623518944,
+      "tag": "0048_married_silver_samurai",
+      "breakpoints": true
     }
   ]
 }

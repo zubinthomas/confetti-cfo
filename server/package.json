@@ -11,6 +11,7 @@
     "db:seed-cost-centres": "node db/seed-cost-centres.ts",
     "db:rename-dining-room": "node db/rename-cafe-dining-room.ts",
     "costcentres:verify": "node db/verify-cost-centres.ts",
+    "layouts:verify": "node db/verify-layouts.ts",
     "db:generate": "drizzle-kit generate",
     "import:verify": "node import/verify-parsers.ts && node import/verify-import.ts && node import/verify-financial-aggregation.ts",
     "sheets:verify": "node sheets/verify-sheets.ts",

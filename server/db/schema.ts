@@ -17,6 +17,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type { ParsedWorkbook, RecordChange } from '../import/types.ts';
+import type { StoredLayout } from './layouts.ts';
 
 // ── Closed value sets (verified distinct values) ─────────────────────────────
 export const unitTypeEnum = pgEnum('unit_type', ['department', 'outlet']);
@@ -254,6 +255,42 @@ export const userPermissions = pgTable('user_permissions', {
   effect: permissionEffectEnum('effect').notNull(),
 }, (t) => [
   uniqueIndex('user_permissions_user_permission').on(t.userId, t.permissionId),
+]);
+
+// ── Layouts (nav, page tabs and overview widgets). One sparse config per
+// permission, role or user, merged client-side as permission < role < user -
+// see server/db/layouts.ts for the shape and src/lib/layout/resolve.ts for
+// the merge. Presentation only: nothing here grants or denies access. ───────
+export const permissionLayouts = pgTable('permission_layouts', {
+  id: serial('id').primaryKey(),
+  permissionId: integer('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  // Lower wins when a user holds several permissions that each have a layout
+  // (same direction as roles.rank). Ties fall back to the permission id.
+  priority: integer('priority').notNull(),
+  config: jsonb('config').$type<StoredLayout>().notNull(),
+  updatedAt: text('updated_at').notNull(), // ISO-8601
+  updatedByUserId: integer('updated_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  uniqueIndex('permission_layouts_permission').on(t.permissionId),
+]);
+
+export const roleLayouts = pgTable('role_layouts', {
+  id: serial('id').primaryKey(),
+  roleId: integer('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  config: jsonb('config').$type<StoredLayout>().notNull(),
+  updatedAt: text('updated_at').notNull(), // ISO-8601
+  updatedByUserId: integer('updated_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  uniqueIndex('role_layouts_role').on(t.roleId),
+]);
+
+export const userLayouts = pgTable('user_layouts', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  config: jsonb('config').$type<StoredLayout>().notNull(),
+  updatedAt: text('updated_at').notNull(), // ISO-8601
+}, (t) => [
+  uniqueIndex('user_layouts_user').on(t.userId),
 ]);
 
 // ── Invites (accounts are created via the CLI or by accepting an invite -

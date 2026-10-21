@@ -16,7 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Reservation',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
-  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre',
+  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -45,7 +45,11 @@ const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRec
 // CostCentre: assigning, excluding and returning a unit to "undecided" are all
 // `write` - there is no destructive delete of a cost centre or its history to
 // guard separately, and the seven centres themselves aren't editable here.
-const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre'];
+// Layout: authoring the nav/tab/widget layouts attached to a permission or a
+// role. Presentation only (hiding an item never denies access), so it needs no
+// grant-clamping like Role does. A user editing their own layout needs no
+// permission at all, and clearing a layout is a `write`.
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
   ...FULL_CRUD.flatMap((resource) => ACTIONS.map((action) => ({ resource, action }))),
