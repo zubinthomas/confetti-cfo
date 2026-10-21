@@ -7,6 +7,7 @@ import {
   type ReservationLocation, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
+import { checkWaitlistMatch } from "@/lib/waitlistMatch";
 import { Plus, X, Loader2, Settings2, CalendarDays, Trash2, Pencil, DoorOpen, Clock, Link2, Link2Off } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
@@ -476,9 +477,10 @@ export default function ReservationsTab() {
     }
   };
 
-  const freeTable = (floor: ReturnType<typeof tableFloor>) => runFloorAction(async () => {
+  const freeTable = (floor: ReturnType<typeof tableFloor>, table: ReservationTable) => runFloorAction(async () => {
     if (floor.seatedBooking) await endReservationEarly(floor.seatedBooking.id);
     await Promise.all(floor.guests.map((g) => signOutGuest(g.id)));
+    checkWaitlistMatch(table);
   });
 
   const extendFloor = (floor: ReturnType<typeof tableFloor>, minutes: number) => runFloorAction(async () => {
@@ -488,7 +490,13 @@ export default function ReservationsTab() {
     await Promise.all(floor.guests.map((g) => extendSignIn(g.id, minutes)));
   });
 
-  const splitMerge = (mergeId: string) => runFloorAction(() => releaseTableMerge(mergeId));
+  const splitMerge = (merge: TableMerge) => runFloorAction(async () => {
+    await releaseTableMerge(merge.id);
+    for (const id of merge.tableIds) {
+      const t = tables.find((x) => x.id === id);
+      if (t) checkWaitlistMatch(t);
+    }
+  });
 
   const removeReservation = async (id: string) => {
     setError("");
@@ -616,7 +624,7 @@ export default function ReservationsTab() {
                                 <span className="text-xs text-muted-foreground flex items-center gap-2">
                                   seats {merge ? `${merge.combinedCapacity} (merged)` : `${t.capacity}${t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""}`}
                                   {merge && canWrite && (
-                                    <button onClick={() => splitMerge(merge.id)} className="text-primary hover:underline flex items-center gap-1">
+                                    <button onClick={() => splitMerge(merge)} className="text-primary hover:underline flex items-center gap-1">
                                       <Link2Off className="w-3.5 h-3.5" /> Split
                                     </button>
                                   )}
@@ -626,7 +634,7 @@ export default function ReservationsTab() {
                                 floor={floor}
                                 canWrite={canWrite}
                                 onExtend={(m) => extendFloor(floor, m)}
-                                onFree={() => freeTable(floor)}
+                                onFree={() => freeTable(floor, t)}
                               />
                               {bookings.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">No bookings today</p>

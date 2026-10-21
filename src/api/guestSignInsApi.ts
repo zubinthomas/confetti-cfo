@@ -32,6 +32,10 @@ export interface GuestSignIn {
   expectedUntil: string | null;
   signedOutAt: string | null;
   notes: string | null;
+  sortOrder: number;
+  quotedWaitMinutes: number | null;
+  notifiedAt: string | null;
+  notifiedVia: string | null;
   createdByUserId: number | null;
 }
 
@@ -47,6 +51,7 @@ export interface CreateSignInPayload {
   reservationId?: string | null;
   signedInAt?: string;
   notes?: string;
+  quotedWaitMinutes?: number;
 }
 
 export interface AssignTableClashDetail {
@@ -59,13 +64,23 @@ export interface AssignTableClashDetail {
   combined?: number;
 }
 
-export const listSignIns = (params: { date?: string; locationId?: string; onPremisesOnly?: boolean } = {}) => {
+export const listSignIns = (
+  params: { date?: string; locationId?: string; onPremisesOnly?: boolean; unseatedOnly?: boolean } = {},
+) => {
   const query = new URLSearchParams();
   if (params.date) query.set("date", params.date);
   if (params.locationId) query.set("locationId", params.locationId);
   if (params.onPremisesOnly) query.set("onPremisesOnly", "true");
+  if (params.unseatedOnly) query.set("unseatedOnly", "true");
   const qs = query.toString();
   return get<GuestSignIn[]>(`/guest-sign-ins${qs ? `?${qs}` : ""}`);
+};
+
+export const estimateWait = (params: { locationId?: string; partySize: number }) => {
+  const query = new URLSearchParams();
+  if (params.locationId) query.set("locationId", params.locationId);
+  query.set("partySize", String(params.partySize));
+  return get<{ minutes: number | null }>(`/guest-sign-ins/estimate?${query.toString()}`);
 };
 
 export const createSignIn = (data: CreateSignInPayload) =>
@@ -86,5 +101,11 @@ export const extendSignIn = (id: string, minutes: number) =>
 
 export const signOutGuest = (id: string) =>
   patch<GuestSignIn>(`/guest-sign-ins/${id}/sign-out`, {});
+
+export const notifyGuest = (id: string, notifiedVia?: string) =>
+  patch<GuestSignIn>(`/guest-sign-ins/${id}/notify`, { notifiedVia });
+
+export const reorderSignIn = (id: string, direction: "up" | "down") =>
+  patch<GuestSignIn>(`/guest-sign-ins/${id}/reorder`, { direction });
 
 export const deleteSignIn = (id: string) => del(`/guest-sign-ins/${id}`);

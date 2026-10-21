@@ -7,6 +7,7 @@ import { authMiddleware, requirePermission, type AuthedRequest } from '../middle
 import {
   GuestSignInError,
   listSignIns, createSignIn, updateSignIn, assignTable, extendSignIn, signOut, deleteSignIn,
+  estimateWaitMinutes, markNotified, reorder,
 } from '../db/guestSignIns.ts';
 
 const router = Router();
@@ -29,7 +30,21 @@ router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequ
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
     const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
     const onPremisesOnly = req.query.onPremisesOnly === 'true';
-    res.json(await listSignIns({ date, locationId, onPremisesOnly }));
+    const unseatedOnly = req.query.unseatedOnly === 'true';
+    res.json(await listSignIns({ date, locationId, onPremisesOnly, unseatedOnly }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.get('/estimate', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
+  try {
+    const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
+    const partySize = Number(req.query.partySize);
+    if (!Number.isInteger(partySize) || partySize <= 0) {
+      return res.status(400).json({ message: 'partySize must be a positive whole number' });
+    }
+    res.json({ minutes: await estimateWaitMinutes({ locationId, partySize }) });
   } catch (err) {
     fail(res, err);
   }
@@ -70,6 +85,25 @@ router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (re
     const { minutes } = req.body ?? {};
     if (typeof minutes !== 'number') return res.status(400).json({ message: 'minutes must be a number' });
     res.json(await extendSignIn(req.params.id, { minutes }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.patch('/:id/notify', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { notifiedVia } = req.body ?? {};
+    res.json(await markNotified(req.params.id, { notifiedVia }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.patch('/:id/reorder', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { direction } = req.body ?? {};
+    if (direction !== 'up' && direction !== 'down') return res.status(400).json({ message: 'direction must be "up" or "down"' });
+    res.json(await reorder(req.params.id, direction));
   } catch (err) {
     fail(res, err);
   }

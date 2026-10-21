@@ -938,6 +938,13 @@ export const reservations = pgTable('reservations', {
 // own, and often no table yet. locationId / tableId / reservationId all reuse
 // the reservations catalogue and all null out (never cascade-delete) if the
 // referenced row goes away - a register entry is a historical record.
+//
+// A sign-in with no tableId yet IS the physical queue at the door - there's
+// no separate "wait list" entity. sortOrder/quotedWaitMinutes/notifiedAt/
+// notifiedVia only matter for that unseated state (staff bumping priority,
+// quoting a wait, logging a manual call when a table frees up); they're
+// harmless once a table's assigned. Status is derived, not stored: tableId
+// set = seated, notifiedAt set = notified, signedOutAt set = left.
 export const guestVisitTypeEnum = pgEnum('guest_visit_type', ['walk_in', 'event']);
 
 export const guestSignIns = pgTable('guest_sign_ins', {
@@ -958,6 +965,10 @@ export const guestSignIns = pgTable('guest_sign_ins', {
   expectedUntil: text('expected_until'),       // ISO-8601, editable turn-time projection
   signedOutAt: text('signed_out_at'),          // ISO-8601, null = still on premises
   notes: text('notes'),
+  sortOrder: integer('sort_order').notNull().default(0), // manual queue priority while unseated
+  quotedWaitMinutes: integer('quoted_wait_minutes'),
+  notifiedAt: text('notified_at'),             // ISO-8601, staff called/texted to come to the table
+  notifiedVia: text('notified_via'),
   createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
 

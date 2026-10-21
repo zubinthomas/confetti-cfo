@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, X, Loader2, Trash2, Pencil, LogOut, Armchair, Clock } from "lucide-react";
+import { Plus, X, Loader2, Trash2, Pencil, LogOut, Armchair, Clock, Phone, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
@@ -7,13 +7,15 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import ReservationRescheduleModal from "@/components/reservations/ReservationRescheduleModal";
 import { ApiError } from "@/api/http";
 import {
-  listSignIns, createSignIn, updateSignIn, assignTable, extendSignIn, signOutGuest, deleteSignIn,
+  listSignIns, createSignIn, updateSignIn, assignTable, extendSignIn, signOutGuest, deleteSignIn, estimateWait,
+  notifyGuest, reorderSignIn,
   type GuestSignIn, type GuestVisitType,
 } from "@/api/guestSignInsApi";
 import {
   listReservations, listTableMerges, createTableMerge, canMergeTables,
   type Reservation, type ReservationLocation, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
+import { checkWaitlistMatch } from "@/lib/waitlistMatch";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
 import { useDraftPersistence } from "@/hooks/useDraftPersistence";
 import { toast } from "@/components/ui/use-toast";
@@ -36,6 +38,28 @@ const suggestCombined = (ts: ReservationTable[], kind: MergeKind) => {
   return kind === "end_to_end" ? Math.max(1, sum - END_TO_END_SEAT_LOSS) : sum;
 };
 
+// A host stops seeing this as "the system still has it handled" after this
+// long without a seat - an advisory flag only, staff still decide what to do.
+const GRACE_MINUTES = 12;
+const isAtRisk = (s: GuestSignIn) =>
+  s.notifiedAt != null && (Date.now() - new Date(s.notifiedAt).getTime()) / 60_000 > GRACE_MINUTES;
+
+function elapsed(iso: string): string {
+  const totalSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function formatDuration(ms: number): string {
+  const totalMin = Math.floor(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 // ── Sign-in create / edit ────────────────────────────────────────────────
 
 const EMPTY = {
@@ -44,9 +68,10 @@ const EMPTY = {
   guestName: "", guestPhone: "", guestEmail: "",
   partySize: "2", locationId: "", purpose: "", host: "", notes: "",
   timeIn: nowTimeValue(),
+  quotedWaitMinutes: "",
 };
 
-function SignInModal({
+export function SignInModal({
   locations, existing, onClose, onSaved,
 }: {
   locations: ReservationLocation[];
@@ -69,6 +94,7 @@ function SignInModal({
     notes: existing.notes ?? "",
   } : (draft ? { ...blankSignIn(), ...draft } : blankSignIn()));
   const [todaysBookings, setTodaysBookings] = useState<Reservation[]>([]);
+  const [suggestedWait, setSuggestedWait] = useState<number | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
@@ -103,6 +129,20 @@ function SignInModal({
       .then((rs) => setTodaysBookings(rs.filter((r) => ["pending", "confirmed"].includes(r.status))))
       .catch(() => setTodaysBookings([]));
   }, [existing]);
+
+  // SignInModal never sets a table at creation - every new sign-in starts
+  // unseated, i.e. at the back of the physical queue - so a wait estimate is
+  // relevant here regardless of which button opened this modal.
+  useEffect(() => {
+    if (existing) return;
+    const partySize = Number(form.partySize);
+    if (!partySize || partySize <= 0) { setSuggestedWait(undefined); return; }
+    let cancelled = false;
+    estimateWait({ locationId: form.locationId || undefined, partySize })
+      .then((r) => { if (!cancelled) setSuggestedWait(r.minutes); })
+      .catch(() => { if (!cancelled) setSuggestedWait(undefined); });
+    return () => { cancelled = true; };
+  }, [existing, form.locationId, form.partySize]);
 
   const linkBooking = (id: string) => {
     const b = todaysBookings.find((r) => r.id === id);
@@ -150,6 +190,7 @@ function SignInModal({
           host: form.host.trim() || undefined,
           notes: form.notes.trim() || undefined,
           signedInAt: form.timeIn !== nowTimeValue() ? isoFromTimeToday(form.timeIn) : undefined,
+          quotedWaitMinutes: form.quotedWaitMinutes ? Number(form.quotedWaitMinutes) : undefined,
         });
       }
       clearDraft();
@@ -213,6 +254,18 @@ function SignInModal({
           {!existing && (
             <FormField label="Time in" name="timeIn" type="time" value={form.timeIn} onChange={update} />
           )}
+          {!existing && (
+            <FormField label="Quoted wait (min)" name="quotedWaitMinutes" type="number" value={form.quotedWaitMinutes} onChange={update} />
+          )}
+          {!existing && (
+            <div className="sm:col-span-2 -mt-2">
+              {suggestedWait === null ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400">No table at this area can seat a party this size.</p>
+              ) : suggestedWait !== undefined ? (
+                <p className="text-xs text-muted-foreground">Estimated wait for a table right now: ~{suggestedWait}m</p>
+              ) : null}
+            </div>
+          )}
           <FormField label="Here to see (host)" name="host" value={form.host} onChange={update} />
           <div className="sm:col-span-2"><FormField label="Purpose" name="purpose" value={form.purpose} onChange={update} /></div>
           <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes} onChange={update} /></div>
@@ -231,7 +284,7 @@ function SignInModal({
 
 // ── Assign / change table ────────────────────────────────────────────────
 
-function AssignTableModal({
+export function AssignTableModal({
   signIn, tables, merges, occupiedTableIds, onClose, onSaved,
 }: {
   signIn: GuestSignIn;
@@ -309,6 +362,13 @@ function AssignTableModal({
     }
   };
 
+  // No table fits right now - the guest is already an unseated sign-in (that
+  // IS the wait list), so there's nothing to create. Just stop trying.
+  const keepWaiting = () => {
+    toast({ title: "Still waiting", description: `${signIn.guestName} (party of ${signIn.partySize}) stays on the wait list.` });
+    onClose();
+  };
+
   const unseat = async () => {
     setSaving(true);
     try { await assignTable(signIn.id, { tableId: null }); onSaved(); }
@@ -381,6 +441,10 @@ function AssignTableModal({
                   Join with another table
                 </button>
               ) : null}
+              <button onClick={keepWaiting}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-destructive/40 text-destructive hover:bg-destructive/10">
+                Keep waiting
+              </button>
             </div>
           )}
 
@@ -455,7 +519,73 @@ function AssignTableModal({
   );
 }
 
-// ── Row ──────────────────────────────────────────────────────────────────
+// ── Rows ─────────────────────────────────────────────────────────────────
+
+function WaitingRow({
+  s, canWrite, canDelete, isFirst, isLast, atRisk, notifying, reordering,
+  onNotify, onAssign, onCancel, onDelete, onMoveUp, onMoveDown,
+}: {
+  s: GuestSignIn;
+  canWrite: boolean; canDelete: boolean;
+  isFirst: boolean; isLast: boolean; atRisk: boolean;
+  notifying: boolean; reordering: boolean;
+  onNotify: () => void; onAssign: () => void; onCancel: () => void; onDelete: () => void;
+  onMoveUp: () => void; onMoveDown: () => void;
+}) {
+  const notified = s.notifiedAt != null;
+  return (
+    <div className="border border-border rounded-lg p-3 flex flex-wrap items-start justify-between gap-2">
+      <div className="min-w-0 space-y-0.5">
+        <div className="text-sm flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-foreground">{s.guestName}</span>
+          <span className="text-muted-foreground">party of {s.partySize}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full"
+            style={notified ? { backgroundColor: "#3b82f620", color: "#3b82f6" } : { backgroundColor: "#f59e0b20", color: "#f59e0b" }}>
+            {notified ? "Notified" : "Waiting"}
+          </span>
+          {atRisk && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> At risk
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {s.locationName ?? "Any area"} · waiting {elapsed(s.signedInAt)}
+          {s.quotedWaitMinutes != null && ` · quoted ~${s.quotedWaitMinutes}m`}
+          {s.notifiedAt && ` · notified ${elapsed(s.notifiedAt)} ago`}
+        </div>
+        {s.guestPhone && (
+          <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" /> {s.guestPhone}</div>
+        )}
+        {s.notes && <div className="text-xs text-muted-foreground">{s.notes}</div>}
+      </div>
+      {canWrite && (
+        <div className="flex items-center gap-2 shrink-0 text-xs">
+          <div className="flex flex-col">
+            <button onClick={onMoveUp} disabled={isFirst || reordering} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
+              <ArrowUp className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={onMoveDown} disabled={isLast || reordering} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
+              <ArrowDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {!notified && (
+            <button onClick={onNotify} disabled={notifying} className="flex items-center gap-1 text-primary hover:underline disabled:opacity-50">
+              {notifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} Notify
+            </button>
+          )}
+          <button onClick={onAssign} className="flex items-center gap-1 text-primary hover:underline">
+            <Armchair className="w-3.5 h-3.5" /> Assign table
+          </button>
+          <button onClick={onCancel} className="text-muted-foreground hover:text-destructive">Cancel</button>
+          {canDelete && (
+            <button onClick={onDelete} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SignInRow({
   s, canWrite, canDelete, onAssign, onEdit, onSignOut, onDelete, onExtend,
@@ -557,6 +687,9 @@ export default function GuestRegister({
   const [deleteTarget, setDeleteTarget] = useState<GuestSignIn | null>(null);
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
 
   const load = async () => {
     setError("");
@@ -574,7 +707,20 @@ export default function GuestRegister({
     }
   };
 
-  useEffect(() => { load(); }, [selectedDate]);
+  // Re-created whenever selectedDate changes, so the 25s refresh always
+  // closes over the current date rather than the one at mount time.
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 25_000);
+    return () => clearInterval(id);
+  }, [selectedDate]);
+
+  // Forces a re-render every second for the live "waiting Xm" / at-risk
+  // display in the Waiting card - stops as soon as this tab unmounts.
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const signedOut = useMemo(
     () => (dayHistory ?? []).filter((s) => s.signedOutAt),
@@ -582,6 +728,20 @@ export default function GuestRegister({
   );
   const coversOnPremises = (onPremises ?? []).reduce((n, s) => n + s.partySize, 0);
   const seatedNow = (onPremises ?? []).filter((s) => s.tableId).length;
+
+  // The physical queue at the door: on premises, no table yet. Sorted the
+  // same way the server does for unseatedOnly, so the up/down reorder
+  // buttons match what's on screen.
+  const waiting = useMemo(
+    () => (onPremises ?? [])
+      .filter((s) => !s.tableId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.signedInAt.localeCompare(b.signedInAt)),
+    [onPremises],
+  );
+  const seated = useMemo(() => (onPremises ?? []).filter((s) => s.tableId), [onPremises]);
+  const longestWaitMs = tick >= 0
+    ? waiting.reduce((max, s) => Math.max(max, Date.now() - new Date(s.signedInAt).getTime()), 0)
+    : 0;
 
   // Tables with a walk-in sitting at them now, so the merge picker can skip
   // them. Seated *bookings* aren't in this list (the register doesn't load
@@ -600,20 +760,33 @@ export default function GuestRegister({
   const doExtend = (s: GuestSignIn, minutes: number) =>
     runAction(() => extendSignIn(s.id, minutes));
 
+  const doNotify = async (s: GuestSignIn) => {
+    setNotifyingId(s.id);
+    await runAction(() => notifyGuest(s.id));
+    setNotifyingId(null);
+  };
+
+  const doReorder = async (s: GuestSignIn, direction: "up" | "down") => {
+    setReorderingId(s.id);
+    await runAction(() => reorderSignIn(s.id, direction));
+    setReorderingId(null);
+  };
+
   return (
     <div className="space-y-6">
       {error && <p className="text-sm text-destructive">{error}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="On premises now" value={onPremises?.length ?? "—"} definition="Guests currently checked in and on premises." />
-        <KpiCard label="Covers on premises" value={coversOnPremises} definition="Total guest count currently on premises." />
-        <KpiCard label="Seated now" value={seatedNow} definition="Guests currently seated at a table." />
-        <KpiCard label="Guests today" value={dayHistory?.length ?? "—"} definition="All guests checked in today, including those who have since left." />
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <KpiCard label="On premises now" value={onPremises?.length ?? "—"} definition="Parties currently checked in and on premises, regardless of party size." />
+        <KpiCard label="Covers on premises" value={coversOnPremises} definition="Total guest count currently on premises, across all parties." />
+        <KpiCard label="Seated now" value={seatedNow} definition="Parties currently seated at a table, regardless of party size." />
+        <KpiCard label="Guests today" value={dayHistory?.length ?? "—"} definition="All parties checked in today, including those who have since left." />
+        <KpiCard label="Longest wait" value={waiting.length > 0 ? formatDuration(longestWaitMs) : "—"} definition="How long the longest-waiting party in the queue has been waiting." />
       </div>
 
       <DashCard
-        title="On premises now"
+        title="Waiting"
         action={canWrite && (
           <button
             onClick={() => setShowSignIn(true)}
@@ -626,11 +799,38 @@ export default function GuestRegister({
       >
         {onPremises === null ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : onPremises.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No guests signed in right now.</p>
+        ) : waiting.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">No one is waiting right now.</p>
         ) : (
           <div className="space-y-2">
-            {onPremises.map((s) => (
+            {waiting.map((s, i) => (
+              <WaitingRow
+                key={s.id} s={s}
+                canWrite={canWrite} canDelete={canDelete}
+                isFirst={i === 0} isLast={i === waiting.length - 1}
+                atRisk={isAtRisk(s)}
+                notifying={notifyingId === s.id}
+                reordering={reorderingId === s.id}
+                onNotify={() => doNotify(s)}
+                onAssign={() => setAssignTarget(s)}
+                onCancel={() => setSignOutTarget(s)}
+                onDelete={() => setDeleteTarget(s)}
+                onMoveUp={() => doReorder(s, "up")}
+                onMoveDown={() => doReorder(s, "down")}
+              />
+            ))}
+          </div>
+        )}
+      </DashCard>
+
+      <DashCard title="Seated">
+        {onPremises === null ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : seated.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">No one is currently seated.</p>
+        ) : (
+          <div className="space-y-2">
+            {seated.map((s) => (
               <SignInRow
                 key={s.id} s={s} canWrite={canWrite} canDelete={canDelete}
                 onAssign={() => setAssignTarget(s)}
@@ -696,15 +896,26 @@ export default function GuestRegister({
         onOpenChange={(open) => { if (!open) { setSignOutTarget(null); setActionError(""); } }}
         title="Sign this guest out?"
         description={actionError || (signOutTarget
-          ? `${signOutTarget.guestName} — party of ${signOutTarget.partySize}. Their table is released.`
+          ? `${signOutTarget.guestName} — party of ${signOutTarget.partySize}. ${signOutTarget.tableId ? "Their table is released." : "They'll be marked as left without being seated."}`
           : "")}
         confirmLabel="Sign out"
         loading={busy}
         onConfirm={async () => {
           setBusy(true);
-          const done = await runAction(() => signOutGuest(signOutTarget!.id));
+          const target = signOutTarget!;
+          const done = await runAction(() => signOutGuest(target.id));
           setBusy(false);
-          if (done) setSignOutTarget(null);
+          if (done) {
+            setSignOutTarget(null);
+            if (target.tableId && target.tableName && target.locationId) {
+              checkWaitlistMatch({
+                name: target.tableName,
+                locationId: target.locationId,
+                capacity: target.tableCapacity ?? 0,
+                maxExtraCapacity: target.tableMaxExtraCapacity ?? 0,
+              });
+            }
+          }
         }}
       />
       <ConfirmDialog

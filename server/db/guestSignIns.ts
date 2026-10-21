@@ -16,11 +16,11 @@
 // / istDayBounds, which apply the fixed UTC+5:30 offset explicitly - so this
 // is correct regardless of the server process timezone.
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import {
   ReservationError, updateReservationStatus,
-  listActiveReservationOverlaps, toMinutes, fromMinutes, istNow, istDayBounds,
+  listActiveReservationOverlaps, listTables, toMinutes, fromMinutes, istNow, istDayBounds,
 } from './reservations.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable } from './tableMerges.ts';
 
@@ -65,6 +65,7 @@ export interface CreateSignInInput {
   expectedUntil?: string;
   notes?: string;
   acknowledgeMerge?: boolean;
+  quotedWaitMinutes?: number;
 }
 
 // ── Read ─────────────────────────────────────────────────────────────────
@@ -96,6 +97,10 @@ function signInQuery() {
       expectedUntil: schema.guestSignIns.expectedUntil,
       signedOutAt: schema.guestSignIns.signedOutAt,
       notes: schema.guestSignIns.notes,
+      sortOrder: schema.guestSignIns.sortOrder,
+      quotedWaitMinutes: schema.guestSignIns.quotedWaitMinutes,
+      notifiedAt: schema.guestSignIns.notifiedAt,
+      notifiedVia: schema.guestSignIns.notifiedVia,
       createdByUserId: schema.guestSignIns.createdByUserId,
     })
     .from(schema.guestSignIns)
@@ -106,7 +111,8 @@ function signInQuery() {
 }
 
 export async function listSignIns(
-  { date, locationId, onPremisesOnly }: { date?: string; locationId?: string; onPremisesOnly?: boolean } = {},
+  { date, locationId, onPremisesOnly, unseatedOnly }:
+  { date?: string; locationId?: string; onPremisesOnly?: boolean; unseatedOnly?: boolean } = {},
 ) {
   await ready();
   let query = signInQuery();
@@ -120,13 +126,79 @@ export async function listSignIns(
   }
   if (locationId) conditions.push(eq(schema.guestSignIns.locationId, locationId));
   if (onPremisesOnly) conditions.push(isNull(schema.guestSignIns.signedOutAt));
+  // The physical queue at the door: on premises, no table assigned yet.
+  if (unseatedOnly) conditions.push(isNull(schema.guestSignIns.tableId));
   if (conditions.length > 0) query = query.where(and(...conditions));
-  return query.orderBy(desc(schema.guestSignIns.signedInAt));
+  return unseatedOnly
+    ? query.orderBy(asc(schema.guestSignIns.sortOrder), asc(schema.guestSignIns.signedInAt))
+    : query.orderBy(desc(schema.guestSignIns.signedInAt));
 }
 
 async function getSignIn(id: string) {
   const [row] = await signInQuery().where(eq(schema.guestSignIns.id, id));
   return row;
+}
+
+/** Next sortOrder for a new queue entry, scoped to parties still unseated and
+ *  on premises at the same location (including unassigned, locationId null) -
+ *  so a new walk-in joins at the back of its own area's line. */
+async function nextSortOrder(locationId: string | null): Promise<number> {
+  const rows = await db
+    .select({ sortOrder: schema.guestSignIns.sortOrder, locationId: schema.guestSignIns.locationId })
+    .from(schema.guestSignIns)
+    .where(and(isNull(schema.guestSignIns.tableId), isNull(schema.guestSignIns.signedOutAt)));
+  const scoped = rows.filter((r) => r.locationId === locationId);
+  return scoped.length > 0 ? Math.max(...scoped.map((r) => r.sortOrder)) + 1 : 1;
+}
+
+// ── Wait estimate (read-only) ───────────────────────────────────────────
+
+/** Minutes until the soonest capacity-eligible table is free, or `0` if one
+ *  already is, or `null` if no table at this location could ever seat a party
+ *  this size. Scoped per-table, not merge-aware - this is a soft estimate,
+ *  not the hard gate checkTableAssignment runs at actual seating time. */
+export async function estimateWaitMinutes(
+  { locationId, partySize }: { locationId?: string; partySize: number },
+) {
+  await ready();
+  if (!Number.isInteger(partySize) || partySize <= 0) {
+    throw new GuestSignInError('Party size must be a positive whole number');
+  }
+
+  const tables = (await listTables({ locationId })).filter((t) => t.capacity + t.maxExtraCapacity >= partySize);
+  if (tables.length === 0) return null;
+  const tableIds = tables.map((t) => t.id);
+
+  const { date: today, minutes: nowMin } = istNow(new Date());
+  const { gte: dayFrom, lt: dayUntil } = istDayBounds(today);
+
+  const seatedRes = await db.select().from(schema.reservations).where(and(
+    inArray(schema.reservations.tableId, tableIds),
+    eq(schema.reservations.status, 'seated'),
+    eq(schema.reservations.date, today),
+  ));
+  const seatedGuests = (await db.select().from(schema.guestSignIns).where(and(
+    inArray(schema.guestSignIns.tableId, tableIds),
+    isNull(schema.guestSignIns.signedOutAt),
+  ))).filter((g) => {
+    const at = g.seatedAt ?? g.signedInAt;
+    return at >= dayFrom && at < dayUntil;
+  });
+
+  let best: number | null = null;
+  for (const table of tables) {
+    const resEnds = seatedRes
+      .filter((r) => r.tableId === table.id)
+      .map((r) => toMinutes(r.time) + r.durationMinutes);
+    const guestEnds = seatedGuests
+      .filter((g) => g.tableId === table.id)
+      .map((g) => istNow(new Date(g.expectedUntil ?? addMinutesIso(g.seatedAt ?? g.signedInAt, DEFAULT_TURN_MINUTES))).minutes);
+    const ends = [...resEnds, ...guestEnds];
+    if (ends.length === 0) return 0; // this table is free right now
+    const minutesUntilFree = Math.max(0, Math.min(...ends) - nowMin);
+    if (best === null || minutesUntilFree < best) best = minutesUntilFree;
+  }
+  return best;
 }
 
 // ── Table assignment checks ──────────────────────────────────────────────
@@ -261,10 +333,16 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
   if (input.expectedUntil !== undefined && input.expectedUntil !== null && !isIso(input.expectedUntil)) {
     throw new GuestSignInError('expectedUntil must be an ISO timestamp');
   }
+  if (input.quotedWaitMinutes !== undefined && input.quotedWaitMinutes !== null) {
+    if (!Number.isInteger(input.quotedWaitMinutes) || input.quotedWaitMinutes < 0) {
+      throw new GuestSignInError('Quoted wait must be a whole number of minutes');
+    }
+  }
 
   let tableId = input.tableId ?? null;
   let seatedAt: string | null = null;
   let expectedUntil: string | null = input.expectedUntil ?? null;
+  let sortOrder = 0;
   if (tableId) {
     const table = await checkTableAssignment({
       tableId, partySize, seatIso: signedInAt, expectedUntil,
@@ -277,6 +355,9 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
   } else {
     tableId = null;
     expectedUntil = null;
+    // Joining the physical queue at the door - takes a spot at the back of
+    // its area's line.
+    sortOrder = await nextSortOrder(locationId);
   }
 
   const id = randomUUID();
@@ -298,6 +379,8 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
     expectedUntil,
     signedOutAt: null,
     notes: input.notes?.trim() || null,
+    sortOrder,
+    quotedWaitMinutes: input.quotedWaitMinutes ?? null,
     createdByUserId: userId,
   });
 
@@ -382,6 +465,51 @@ export async function assignTable(
   }).where(eq(schema.guestSignIns.id, id));
   // Moving the party off a merged table ends that merge (they were holding it).
   if (existing.tableId && existing.tableId !== tableId) await releaseMergeForTable(existing.tableId);
+  return getSignIn(id);
+}
+
+/** Staff called/texted a waiting party that their table is ready. Only
+ *  meaningful while still unseated and on premises. */
+export async function markNotified(id: string, { notifiedVia }: { notifiedVia?: string } = {}) {
+  await ready();
+  const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
+  if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
+  if (existing.signedOutAt) throw new GuestSignInError('This guest has already signed out');
+  if (existing.tableId) throw new GuestSignInError('This guest already has a table');
+
+  await db.update(schema.guestSignIns).set({
+    notifiedAt: new Date().toISOString(),
+    notifiedVia: notifiedVia?.trim() || 'staff_call',
+  }).where(eq(schema.guestSignIns.id, id));
+  return getSignIn(id);
+}
+
+/** Bump a waiting party up or down against its line neighbor (same location,
+ *  unseated + on-premises only), swapping sortOrder atomically. No-op at
+ *  either end of the line. */
+export async function reorder(id: string, direction: 'up' | 'down') {
+  await ready();
+  if (direction !== 'up' && direction !== 'down') throw new GuestSignInError('direction must be "up" or "down"');
+  const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
+  if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
+  if (existing.tableId || existing.signedOutAt) {
+    throw new GuestSignInError('Only parties still waiting can be reordered');
+  }
+
+  const group = (await db.select().from(schema.guestSignIns)
+    .where(and(isNull(schema.guestSignIns.tableId), isNull(schema.guestSignIns.signedOutAt))))
+    .filter((e) => e.locationId === existing.locationId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.signedInAt.localeCompare(b.signedInAt));
+
+  const idx = group.findIndex((e) => e.id === id);
+  const neighborIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (neighborIdx < 0 || neighborIdx >= group.length) return getSignIn(id);
+  const neighbor = group[neighborIdx];
+
+  await db.transaction(async (tx) => {
+    await tx.update(schema.guestSignIns).set({ sortOrder: neighbor.sortOrder }).where(eq(schema.guestSignIns.id, existing.id));
+    await tx.update(schema.guestSignIns).set({ sortOrder: existing.sortOrder }).where(eq(schema.guestSignIns.id, neighbor.id));
+  });
   return getSignIn(id);
 }
 
