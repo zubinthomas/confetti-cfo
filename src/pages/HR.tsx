@@ -36,7 +36,6 @@ export default function HR() {
             <span className="text-muted-foreground/40">|</span>
             <div>
               <h1 className="text-xl font-bold font-heading text-foreground tracking-tight">HR Module</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">Confetti Exports · 3 divisions · 150 employees</p>
             </div>
           </div>
           <SpotlightSearchButton className="ml-auto" />
