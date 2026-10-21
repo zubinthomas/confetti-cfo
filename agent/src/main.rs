@@ -381,11 +381,70 @@ fn fetch_and_classify_bills(tally: &HttpTallyGateway) -> Vec<BillRecord> {
         }
     }
 
+    log_bill_discards(&raw, &ledger_parents);
+
     let mut seen = std::collections::HashSet::new();
     classify_bills(raw, &ledger_parents)
         .into_iter()
         .filter(|b| seen.insert((b.ledger_name.clone(), b.bill_ref.clone())))
         .collect()
+}
+
+/// Diagnostic pass over the same raw bills `classify_bills` is about to
+/// discard from, so a drop is visible instead of silent (2026-10-17: a real
+/// ~₹8.3M of outstanding receivables, confirmed live in Tally's own Bills
+/// Receivable report, never showed up synced - with no logging anywhere to
+/// say why). Two distinct discard reasons get counted separately, since they
+/// point at different root causes: `no_parent` means the ledger's own name
+/// never matched an entry in the ledger-balances pull at all (the working
+/// theory is the same NATIVEMETHOD-doesn't-resolve-for-this-ledger-type
+/// issue already suspected for CLOSINGBALANCE - see KNOWN_IMPRECISE_GROUPS);
+/// `unknown_group` means the ledger WAS found but its parent group isn't on
+/// either allow-list (expected and fine for genuine non-receivable/payable
+/// noise like Fixed Assets, but also what a too-narrow group list looks
+/// like). Logs up to 10 example ledger names per bucket - enough to
+/// recognize the pattern without flooding the log on a bad day.
+fn log_bill_discards(raw: &[RawBill], ledger_parents: &std::collections::HashMap<&str, &str>) {
+    let mut no_parent: Vec<&str> = Vec::new();
+    let mut unknown_group: std::collections::BTreeSet<(&str, &str)> = std::collections::BTreeSet::new();
+    let mut classified = 0usize;
+
+    for b in raw {
+        match ledger_parents.get(b.ledger_name.as_str()) {
+            None => no_parent.push(b.ledger_name.as_str()),
+            Some(&parent) => {
+                if RECEIVABLE_GROUPS.contains(&parent) || PAYABLE_GROUPS.contains(&parent) {
+                    classified += 1;
+                } else {
+                    unknown_group.insert((b.ledger_name.as_str(), parent));
+                }
+            }
+        }
+    }
+
+    let no_parent_unique: std::collections::BTreeSet<&str> = no_parent.iter().copied().collect();
+    log::info!(
+        "bills sync: {} raw row(s), {} classified, {} discarded (ledger not found: {}, unknown group: {})",
+        raw.len(),
+        classified,
+        no_parent.len() + unknown_group.len(),
+        no_parent.len(),
+        unknown_group.len(),
+    );
+    if !no_parent_unique.is_empty() {
+        log::warn!(
+            "bills sync: {} distinct ledger(s) not found in ledger-balances pull, e.g. {:?}",
+            no_parent_unique.len(),
+            no_parent_unique.iter().take(10).collect::<Vec<_>>(),
+        );
+    }
+    if !unknown_group.is_empty() {
+        log::warn!(
+            "bills sync: {} distinct ledger(s) found but outside known groups, e.g. {:?}",
+            unknown_group.len(),
+            unknown_group.iter().take(10).collect::<Vec<_>>(),
+        );
+    }
 }
 
 /// Groups whose raw rollup is known, as of 2026-10-09, not to match Tally's
