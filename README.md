@@ -100,6 +100,29 @@ Notes:
   see `npm run role:list` / `npm run permission:list` for what exists. The
   very first user ever created is auto-assigned the built-in `Admin` role.
 
+## Reservation locations, areas and tables
+
+Reservations are organised as location -> area -> table: a venue ("Sienna,
+Hindustan Park") holds areas (Cafe on the Ground Floor, Restaurant and Bar on
+the First Floor, Second Floor) and each area holds tables. Staff manage all
+three levels under Reservations -> Locations & Tables. A fresh database gets the
+location and the four empty areas at startup.
+
+The tables come from the POS bill-wise sales export. To load them into a
+database, in `server/` with the server stopped (PGlite is single-process):
+
+```bash
+npm run db:seed-reservation-tables
+```
+
+It creates 26 tables (Cafe 1-7, C1, T1, T2; Restaurant F1-F10; Bar BAR 1-3, B1,
+B3, B5) at 4 seats each, since the export has no seat counts, and prints what it
+made and what it left alone. Re-running is safe: existing tables are never
+changed and nothing is deleted. Delivery rows and the "N. C KOT" code are not
+seeded. Run it once on dev, staging and production, then fix capacities in the
+UI. `npm run reservation-seed:verify` checks the seed against a throwaway
+database.
+
 ## Layouts by permission, role and user
 
 What each person sees in the navigation, on page tabs and on the overview is

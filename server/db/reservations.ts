@@ -106,7 +106,10 @@ export async function seedDefaultReservationLocations() {
   await db.transaction(async (tx) => {
     await tx.insert(schema.reservationLocations).values({ id: locationId, createdDate: now, name: DEFAULT_LOCATION });
     await tx.insert(schema.reservationAreas).values(
-      DEFAULT_AREAS.map((a) => ({ id: randomUUID(), createdDate: now, locationId, name: a.name, floor: a.floor })),
+      // One millisecond apart so creation order keeps the list order.
+      DEFAULT_AREAS.map((a, i) => ({
+        id: randomUUID(), createdDate: new Date(Date.parse(now) + i).toISOString(), locationId, name: a.name, floor: a.floor,
+      })),
     );
   });
 }
@@ -169,7 +172,8 @@ export async function listAreas({ locationId }: { locationId?: string } = {}) {
   await ready();
   let query = db.select().from(schema.reservationAreas).$dynamic();
   if (locationId) query = query.where(eq(schema.reservationAreas.locationId, locationId));
-  return query.orderBy(asc(schema.reservationAreas.floor), asc(schema.reservationAreas.name));
+  // Creation order is the display order (Cafe, Restaurant, Bar, Second Floor), name as the tie-break.
+  return query.orderBy(asc(schema.reservationAreas.createdDate), asc(schema.reservationAreas.name));
 }
 
 export async function createArea(
@@ -259,7 +263,8 @@ export async function listTables({ areaId }: { areaId?: string } = {}): Promise<
   await ready();
   let query = db.select().from(schema.reservationTables).$dynamic();
   if (areaId) query = query.where(eq(schema.reservationTables.areaId, areaId));
-  const rows = await query.orderBy(asc(schema.reservationTables.name));
+  // Natural order, so F2 comes before F10 and BAR 1 before BAR 12.
+  const rows = (await query).sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
   const links = await mergeLinksByTable();
   return rows.map((r) => ({ ...r, mergeableWith: links.get(r.id) ?? [] }));
 }
