@@ -4,11 +4,13 @@ import { widgetSource } from "@/lib/layout/editor";
 import { OVERVIEW_AREA, OVERVIEW_WIDGETS, type OverviewWidget } from "@/lib/layout/registry";
 import { WIDTHS, type WidgetWidth } from "@/lib/layout/types";
 import SortableList from "./SortableList";
-import EditorRow, { SourceBadge } from "./EditorRow";
+import EditorRow, { ROW_SELECT, SourceBadge } from "./EditorRow";
 
 const WIDTH_LABELS: Record<WidgetWidth, string> = { sixth: "1/6", third: "1/3", half: "1/2", full: "Full" };
 const SECTION_LABELS = { group: "Group", leadership: "Leadership" } as const;
 const byId = new Map<string, OverviewWidget>(OVERVIEW_WIDGETS.map((w) => [w.id, w]));
+
+type Update = (fn: (s: EditorState) => EditorState) => void;
 
 /** Overview widgets: order, show/hide and width. The Group heading and year
  *  picker is not listed, it follows the Group widgets by itself. */
@@ -16,12 +18,13 @@ export default function WidgetsEditor({
   state, onChange, layers,
 }: {
   state: EditorState;
-  onChange: (next: EditorState) => void;
+  onChange: Update;
   layers: LabelledLayer[];
 }) {
-  const { order, hidden, widths } = state.widgets;
+  const { order, hidden } = state.widgets;
   const hiddenSet = new Set(hidden);
-  const update = (patch: Partial<EditorState["widgets"]>) => onChange({ ...state, widgets: { ...state.widgets, ...patch } });
+  const update = (fn: (w: EditorState["widgets"]) => EditorState["widgets"]) =>
+    onChange((s) => ({ ...s, widgets: fn(s.widgets) }));
 
   if (order.length === 0) return <p className="text-sm text-muted-foreground">There are no overview widgets you can see.</p>;
 
@@ -30,13 +33,14 @@ export default function WidgetsEditor({
       <SortableList
         listId="widgets"
         items={order.map((id) => ({ id }))}
-        onReorder={(ids) => update({ order: ids })}
-        renderItem={({ id }, handle, dragging) => {
+        onReorder={(ids) => update((w) => ({ ...w, order: ids }))}
+        renderItem={({ id }, handle, dragging, move) => {
           const widget = byId.get(id)!;
           return (
             <EditorRow
               handle={handle}
               dragging={dragging}
+              move={move}
               hidden={hiddenSet.has(id)}
               label={widget.label}
               badges={
@@ -49,16 +53,19 @@ export default function WidgetsEditor({
               }
               controls={
                 <select
-                  value={widths[id]}
-                  onChange={(e) => update({ widths: { ...widths, [id]: e.target.value as WidgetWidth } })}
+                  value={state.widgets.widths[id]}
+                  onChange={(e) => {
+                    const width = e.target.value as WidgetWidth;
+                    update((w) => ({ ...w, widths: { ...w.widths, [id]: width } }));
+                  }}
                   aria-label={`Width of ${widget.label}`}
-                  className="text-xs bg-background border border-border rounded px-1.5 py-1 text-muted-foreground"
+                  className={ROW_SELECT}
                 >
                   {WIDTHS.map((w) => <option key={w} value={w}>{WIDTH_LABELS[w]}</option>)}
                 </select>
               }
               onToggleHidden={() =>
-                update({ hidden: hiddenSet.has(id) ? hidden.filter((x) => x !== id) : [...hidden, id] })
+                update((w) => ({ ...w, hidden: w.hidden.includes(id) ? w.hidden.filter((x) => x !== id) : [...w.hidden, id] }))
               }
             />
           );

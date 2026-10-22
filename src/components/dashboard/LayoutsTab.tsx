@@ -23,13 +23,15 @@ const permLabel = (resource: string, action: string) => `${resource}:${action}`;
 export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
   const { can } = useAuth();
   const canWrite = can("Layout", "write");
+  // Role layouts are role data: they need Role:read to see and Layout:write to
+  // change. Role:read alone never lets anyone edit a layout.
+  const canSeeRoles = can("Role", "read");
 
   const [layouts, setLayouts] = useState<{ roles: RoleLayoutEntry[]; permissions: PermissionLayoutEntry[] } | null>(null);
   const [roles, setRoles] = useState<RoleWithPermissions[] | null>(null);
-  const [rolesNote, setRolesNote] = useState("");
   const [error, setError] = useState("");
 
-  const [scope, setScope] = useState<Scope>("role");
+  const [scope, setScope] = useState<Scope>(canSeeRoles ? "role" : "permission");
   const [roleId, setRoleId] = useState<number | null>(null);
   const [permission, setPermission] = useState<string>("");
   const [priority, setPriority] = useState<number>(DEFAULT_PRIORITY);
@@ -43,10 +45,8 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
   }, []);
   useEffect(() => {
     refresh();
-    // Listing roles needs Role:read (or Invite/User write); a layout-only admin
-    // can still edit the roles that already have a layout.
-    listRoles().then(setRoles).catch(() => setRolesNote("Listing every role needs the Role:read permission. Only roles that already have a layout can be edited here."));
-  }, [refresh]);
+    if (canSeeRoles) listRoles().then(setRoles).catch(() => setRoles(null));
+  }, [refresh, canSeeRoles]);
 
   // Roles to pick from: all of them when we can list them, otherwise the ones with a layout.
   const roleOptions = useMemo(() => {
@@ -83,7 +83,7 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
       : <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
-  const roleReady = scope === "role" && roleId !== null && (role !== null || roleEntry !== null);
+  const roleReady = scope === "role" && canSeeRoles && roleId !== null && (role !== null || roleEntry !== null);
   const permReady = scope === "permission" && permission !== "";
   const [permResource, permAction] = permission.split(":");
 
@@ -96,17 +96,19 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
           then their permissions (lowest priority number first), then the built-in default.
         </p>
         {error && <p className="text-sm text-destructive mb-3">{error}</p>}
-        {rolesNote && <p className="text-xs text-muted-foreground mb-3">{rolesNote}</p>}
         {!canWrite && <p className="text-xs text-muted-foreground mb-3">You can view layouts but not change them (needs Layout:write).</p>}
+        {canWrite && !canSeeRoles && (
+          <p className="text-xs text-muted-foreground mb-3">Role layouts also need the Role:read permission, so only permission layouts are shown.</p>
+        )}
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex gap-1.5">
-            {(["role", "permission"] as const).map((s) => (
+            {(canSeeRoles ? ["role", "permission"] as const : ["permission"] as const).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setScope(s)}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                className={`px-3 py-1.5 max-sm:min-h-11 rounded-lg text-sm transition-colors ${
                   scope === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
@@ -115,13 +117,13 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
             ))}
           </div>
 
-          {scope === "role" ? (
-            <label className="text-xs text-muted-foreground">
+          {scope === "role" && canSeeRoles ? (
+            <label className="text-xs text-muted-foreground max-sm:w-full">
               Role
               <select
                 value={roleId ?? ""}
                 onChange={(e) => setRoleId(e.target.value ? Number(e.target.value) : null)}
-                className="block mt-1 text-sm bg-background border border-border rounded-lg px-2 py-1.5 text-foreground min-w-48"
+                className="block mt-1 w-full sm:w-auto max-sm:text-base max-sm:min-h-11 text-sm bg-background border border-border rounded-lg px-2 py-1.5 text-foreground sm:min-w-48"
               >
                 <option value="">Choose a role...</option>
                 {roleOptions.map((r) => (
@@ -133,12 +135,12 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
             </label>
           ) : (
             <>
-              <label className="text-xs text-muted-foreground">
+              <label className="text-xs text-muted-foreground max-sm:w-full">
                 Permission
                 <select
                   value={permission}
                   onChange={(e) => setPermission(e.target.value)}
-                  className="block mt-1 text-sm bg-background border border-border rounded-lg px-2 py-1.5 text-foreground min-w-56"
+                  className="block mt-1 w-full sm:w-auto max-sm:text-base max-sm:min-h-11 text-sm bg-background border border-border rounded-lg px-2 py-1.5 text-foreground sm:min-w-56"
                 >
                   <option value="">Choose a permission...</option>
                   {permissionOptions.map((k) => (
@@ -155,7 +157,7 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
                   min={0}
                   value={priority}
                   onChange={(e) => setPriority(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                  className="block mt-1 w-28 text-sm bg-background border border-border rounded-lg px-2 py-1.5 text-foreground"
+                  className="block mt-1 w-28 max-sm:text-base max-sm:min-h-11 text-sm bg-background border border-border rounded-lg px-2 py-1.5 text-foreground"
                 />
               </label>
             </>
@@ -178,6 +180,7 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
             clearLabel="Clear role layout"
             clearHint="Removes this role's layout so its members fall back to the permission layouts and defaults"
             presets={canWrite ? PRESETS : []}
+            readOnly={!canWrite}
             saveLabel="Save role layout"
           />
         </DashCard>
@@ -196,6 +199,9 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
             onClear={async () => { await clearPermissionLayout(permResource, permAction); await refresh(); }}
             clearLabel="Clear permission layout"
             clearHint="Removes this permission's layout"
+            readOnly={!canWrite}
+            extraDirty={permEntry != null && priority !== permEntry.priority}
+            onDiscard={() => setPriority(permEntry?.priority ?? DEFAULT_PRIORITY)}
             saveLabel="Save permission layout"
           />
         </DashCard>
@@ -207,18 +213,18 @@ export default function LayoutsTab({ heldPerms }: { heldPerms: Set<string> }) {
         ) : (
           <ul className="text-sm space-y-1.5">
             {layouts.roles.map((r) => (
-              <li key={`r${r.roleId}`} className="flex items-center gap-2">
+              <li key={`r${r.roleId}`} className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Role</span>
-                <button type="button" className="text-primary hover:underline" onClick={() => { setScope("role"); setRoleId(r.roleId); }}>
+                <button type="button" className="text-primary hover:underline max-sm:py-2" onClick={() => { setScope("role"); setRoleId(r.roleId); }}>
                   {r.roleName}
                 </button>
                 <span className="text-xs text-muted-foreground">rank {r.rank}, updated {new Date(r.updatedAt).toLocaleDateString()}</span>
               </li>
             ))}
             {layouts.permissions.map((p) => (
-              <li key={`p${permLabel(p.resource, p.action)}`} className="flex items-center gap-2">
+              <li key={`p${permLabel(p.resource, p.action)}`} className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Permission</span>
-                <button type="button" className="text-primary hover:underline" onClick={() => { setScope("permission"); setPermission(permLabel(p.resource, p.action)); }}>
+                <button type="button" className="text-primary hover:underline max-sm:py-2" onClick={() => { setScope("permission"); setPermission(permLabel(p.resource, p.action)); }}>
                   {permLabel(p.resource, p.action)}
                 </button>
                 <span className="text-xs text-muted-foreground">priority {p.priority}, updated {new Date(p.updatedAt).toLocaleDateString()}</span>

@@ -3,41 +3,50 @@ import type { EditorState, LabelledLayer } from "@/lib/layout/editor";
 import { navItemSource } from "@/lib/layout/editor";
 import { NAV_ITEMS, type NavItem } from "@/lib/layout/registry";
 import { PLACEMENTS, type Placement } from "@/lib/layout/types";
-import SortableList from "./SortableList";
-import EditorRow, { SourceBadge } from "./EditorRow";
+import SortableList, { type RowMove } from "./SortableList";
+import EditorRow, { ROW_SELECT, SourceBadge } from "./EditorRow";
 
 const PLACEMENT_LABELS: Record<Placement, string> = { sidebar: "Sidebar", header: "Top bar", userMenu: "User menu" };
 const byId = new Map<string, NavItem>(NAV_ITEMS.map((i) => [i.id, i]));
 
+type Update = (fn: (s: EditorState) => EditorState) => void;
+
 /** Sidebar (grouped, reorder inside a group), top bar and user menu lists.
- *  Each item can be hidden or moved to another place. */
+ *  Each item can be hidden or moved to another place. Every change is a
+ *  functional update, so it always applies to the latest state. */
 export default function NavEditor({
   state, onChange, layers,
 }: {
   state: EditorState;
-  onChange: (next: EditorState) => void;
+  onChange: Update;
   layers: LabelledLayer[];
 }) {
   const { lists, hidden } = state.nav;
   const hiddenSet = new Set(hidden);
 
-  const setLists = (next: Record<Placement, string[]>) => onChange({ ...state, nav: { ...state.nav, lists: next } });
+  const setLists = (fn: (l: Record<Placement, string[]>) => Record<Placement, string[]>) =>
+    onChange((s) => ({ ...s, nav: { ...s.nav, lists: fn(s.nav.lists) } }));
   const toggle = (id: string) =>
-    onChange({ ...state, nav: { ...state.nav, hidden: hiddenSet.has(id) ? hidden.filter((x) => x !== id) : [...hidden, id] } });
-  const move = (id: string, to: Placement) => {
-    const next = { ...lists };
-    for (const p of PLACEMENTS) next[p] = next[p].filter((x) => x !== id);
-    next[to] = [...next[to], id];
-    setLists(next);
-  };
+    onChange((s) => ({
+      ...s,
+      nav: { ...s.nav, hidden: s.nav.hidden.includes(id) ? s.nav.hidden.filter((x) => x !== id) : [...s.nav.hidden, id] },
+    }));
+  const move = (id: string, to: Placement) =>
+    setLists((l) => {
+      const next = { ...l };
+      for (const p of PLACEMENTS) next[p] = next[p].filter((x) => x !== id);
+      next[to] = [...next[to], id];
+      return next;
+    });
 
-  const row = (id: string, handle: Parameters<typeof EditorRow>[0]["handle"], dragging: boolean, current: Placement) => {
+  const row = (id: string, handle: Parameters<typeof EditorRow>[0]["handle"], dragging: boolean, current: Placement, rowMove: RowMove) => {
     const item = byId.get(id)!;
     const Icon = item.icon;
     return (
       <EditorRow
         handle={handle}
         dragging={dragging}
+        move={rowMove}
         hidden={hiddenSet.has(id)}
         label={item.label}
         icon={<Icon className="w-4 h-4" />}
@@ -47,7 +56,7 @@ export default function NavEditor({
             value={current}
             onChange={(e) => move(id, e.target.value as Placement)}
             aria-label={`Where ${item.label} appears`}
-            className="text-xs bg-background border border-border rounded px-1.5 py-1 text-muted-foreground"
+            className={ROW_SELECT}
           >
             {PLACEMENTS.map((p) => <option key={p} value={p}>{PLACEMENT_LABELS[p]}</option>)}
           </select>
@@ -63,10 +72,13 @@ export default function NavEditor({
   const sidebarGroups = groups
     .map((group) => ({ group, ids: lists.sidebar.filter((id) => byId.get(id)?.group === group) }))
     .filter((g) => g.ids.length > 0);
-  const reorderGroup = (group: string | null, ids: string[]) => {
-    const rebuilt = sidebarGroups.flatMap((g) => (g.group === group ? ids : g.ids));
-    setLists({ ...lists, sidebar: rebuilt });
-  };
+  const reorderGroup = (group: string | null, ids: string[]) =>
+    setLists((l) => {
+      const current = groups
+        .map((g) => ({ group: g, ids: l.sidebar.filter((id) => byId.get(id)?.group === g) }))
+        .filter((g) => g.ids.length > 0);
+      return { ...l, sidebar: current.flatMap((g) => (g.group === group ? ids : g.ids)) };
+    });
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -79,7 +91,7 @@ export default function NavEditor({
               listId={`sidebar:${group ?? "top"}`}
               items={ids.map((id) => ({ id }))}
               onReorder={(next) => reorderGroup(group, next)}
-              renderItem={({ id }, handle, dragging) => row(id, handle, dragging, "sidebar")}
+              renderItem={({ id }, handle, dragging, rowMove) => row(id, handle, dragging, "sidebar", rowMove)}
             />
           </div>
         ))}
@@ -95,8 +107,8 @@ export default function NavEditor({
               <SortableList
                 listId={placement}
                 items={lists[placement].map((id) => ({ id }))}
-                onReorder={(next) => setLists({ ...lists, [placement]: next })}
-                renderItem={({ id }, handle, dragging) => row(id, handle, dragging, placement)}
+                onReorder={(next) => setLists((l) => ({ ...l, [placement]: next }))}
+                renderItem={({ id }, handle, dragging, rowMove) => row(id, handle, dragging, placement, rowMove)}
               />
             )}
           </section>

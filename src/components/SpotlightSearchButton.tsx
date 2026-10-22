@@ -21,7 +21,7 @@ export default function SpotlightSearchButton({
       type="button"
       onClick={openSearch}
       aria-label="Search"
-      className={`flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors ${className}`}
+      className={`flex items-center justify-center gap-1.5 max-sm:min-w-10 max-sm:min-h-10 text-muted-foreground hover:text-foreground transition-colors ${className}`}
     >
       <Search className="w-4 h-4 shrink-0" />
       {showHint && (

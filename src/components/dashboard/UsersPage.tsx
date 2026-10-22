@@ -40,7 +40,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         {tabs.length > 1 ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {tabs.map((tab) => {
               const Icon = tab.icon!;
               const active = activeTab === tab.id;
@@ -48,7 +48,7 @@ export default function UsersPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  className={`flex items-center gap-2 px-4 py-2 max-sm:min-h-11 rounded-lg text-sm font-medium transition-all duration-200 ${
                     active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                 >

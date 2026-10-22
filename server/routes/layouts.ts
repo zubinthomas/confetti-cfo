@@ -1,10 +1,14 @@
 // Nav/tab/widget layouts. Everyone edits their own (/me), no permission
-// needed: it only changes how the app looks to them. Role and permission
-// layouts need Layout:write, and resetting someone else's needs User:write.
+// needed: it only changes how the app looks to them. Permission layouts need
+// Layout:write. Role layouts need Layout:write AND Role:read (Role:read stays
+// read-only: it never lets anyone change a layout on its own, but you can't
+// edit a role's layout without being allowed to see roles). Resetting someone
+// else's own layout needs User:write.
 // The merge itself happens client-side (src/lib/layout/resolve.ts) from the
 // layers GET /auth/me returns.
 import { Router } from 'express';
 import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
+import { hasPermission } from '../db/permissions.ts';
 import {
   LayoutError, listLayouts, setUserLayout, clearUserLayout, setRoleLayout, clearRoleLayout,
   setPermissionLayout, clearPermissionLayout,
@@ -33,15 +37,18 @@ router.delete('/me', async (req: AuthedRequest, res) => {
   }
 });
 
-router.get('/', requirePermission('Layout', 'read'), async (_req, res) => {
+router.get('/', requirePermission('Layout', 'read'), async (req: AuthedRequest, res) => {
   try {
-    res.json(await listLayouts());
+    const all = await listLayouts();
+    // Role names and layouts are role data: only shown to people who can read roles.
+    const canSeeRoles = await hasPermission(req.user!.id, 'Role', 'read');
+    res.json({ ...all, roles: canSeeRoles ? all.roles : [] });
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
 });
 
-router.put('/roles/:id', requirePermission('Layout', 'write'), async (req: AuthedRequest, res) => {
+router.put('/roles/:id', requirePermission('Layout', 'write'), requirePermission('Role', 'read'), async (req: AuthedRequest, res) => {
   try {
     res.json({ config: await setRoleLayout(req.user!.id, Number(req.params.id), req.body?.config) });
   } catch (err) {
@@ -49,7 +56,7 @@ router.put('/roles/:id', requirePermission('Layout', 'write'), async (req: Authe
   }
 });
 
-router.delete('/roles/:id', requirePermission('Layout', 'write'), async (req, res) => {
+router.delete('/roles/:id', requirePermission('Layout', 'write'), requirePermission('Role', 'read'), async (req, res) => {
   try {
     await clearRoleLayout(Number(req.params.id));
     res.json({ ok: true });

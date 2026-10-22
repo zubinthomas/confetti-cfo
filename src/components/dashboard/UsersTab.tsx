@@ -307,7 +307,7 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
                             {canWrite && (
                               <button
                                 onClick={() => openEdit(u.id)} disabled={editLoadingId === u.id}
-                                className="text-xs text-primary hover:underline disabled:opacity-50"
+                                className="text-xs max-sm:py-3 text-primary hover:underline disabled:opacity-50"
                               >
                                 {editLoadingId === u.id ? "Loading…" : "Edit"}
                               </button>
@@ -315,7 +315,7 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
                             {canWrite && (
                               <button
                                 onClick={() => { setNotice(""); setResetTarget(u); }} disabled={busyId === u.id}
-                                className="text-xs text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+                                className="text-xs max-sm:py-3 text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
                               >
                                 Reset layout
                               </button>
@@ -324,7 +324,7 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
                               ? canDelete && (
                                 <button
                                   onClick={() => setDeactivateTarget(u)} disabled={busyId === u.id}
-                                  className="text-xs text-red-500 hover:underline disabled:opacity-50"
+                                  className="text-xs max-sm:py-3 text-red-500 hover:underline disabled:opacity-50"
                                 >
                                   Deactivate
                                 </button>
@@ -332,7 +332,7 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
                               : canWrite && (
                                 <button
                                   onClick={() => reactivate(u.id)} disabled={busyId === u.id}
-                                  className="text-xs text-emerald-600 hover:underline disabled:opacity-50"
+                                  className="text-xs max-sm:py-3 text-emerald-600 hover:underline disabled:opacity-50"
                                 >
                                   Reactivate
                                 </button>

@@ -4,7 +4,9 @@ import type { EditorState, LabelledLayer } from "@/lib/layout/editor";
 import { tabSource } from "@/lib/layout/editor";
 import { PAGE_LABELS, PAGE_TABS, type PageId, type TabItem } from "@/lib/layout/registry";
 import SortableList from "./SortableList";
-import EditorRow, { SourceBadge } from "./EditorRow";
+import EditorRow, { ICON_BUTTON, SourceBadge } from "./EditorRow";
+
+type Update = (fn: (s: EditorState) => EditorState) => void;
 
 /** Tab order, visibility and the tab a page opens on, for every page with
  *  more than one tab to choose between. */
@@ -12,7 +14,7 @@ export default function TabsEditor({
   state, onChange, layers,
 }: {
   state: EditorState;
-  onChange: (next: EditorState) => void;
+  onChange: Update;
   layers: LabelledLayer[];
 }) {
   const pages = (Object.keys(PAGE_TABS) as PageId[]).filter((p) => (state.tabs[p]?.order.length ?? 0) > 1);
@@ -20,8 +22,8 @@ export default function TabsEditor({
     return <p className="text-sm text-muted-foreground">No page you can open has more than one tab to arrange.</p>;
   }
 
-  const update = (page: PageId, patch: Partial<EditorState["tabs"][string]>) =>
-    onChange({ ...state, tabs: { ...state.tabs, [page]: { ...state.tabs[page], ...patch } } });
+  const update = (page: PageId, fn: (t: EditorState["tabs"][string]) => EditorState["tabs"][string]) =>
+    onChange((s) => ({ ...s, tabs: { ...s.tabs, [page]: fn(s.tabs[page]) } }));
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -36,8 +38,8 @@ export default function TabsEditor({
             <SortableList
               listId={`tabs:${page}`}
               items={tabs.order.map((id) => ({ id }))}
-              onReorder={(order) => update(page, { order })}
-              renderItem={({ id }, handle, dragging) => {
+              onReorder={(order) => update(page, (t) => ({ ...t, order }))}
+              renderItem={({ id }, handle, dragging, move) => {
                 const tab = meta.get(id)!;
                 const Icon = tab.icon;
                 const isHidden = hidden.has(id);
@@ -46,6 +48,7 @@ export default function TabsEditor({
                   <EditorRow
                     handle={handle}
                     dragging={dragging}
+                    move={move}
                     hidden={isHidden}
                     label={tab.label}
                     icon={Icon ? <Icon className="w-4 h-4" /> : undefined}
@@ -54,10 +57,10 @@ export default function TabsEditor({
                       <button
                         type="button"
                         disabled={isHidden}
-                        onClick={() => update(page, { default: id })}
+                        onClick={() => update(page, (t) => ({ ...t, default: id }))}
                         title={isDefault ? "Opens first" : "Open this tab first"}
                         aria-label={isDefault ? `${tab.label} opens first` : `Make ${tab.label} open first`}
-                        className={`p-1 rounded disabled:opacity-30 ${isDefault ? "text-amber-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                        className={`${ICON_BUTTON} ${isDefault ? "text-amber-500" : ""}`}
                       >
                         <Star className="w-4 h-4" fill={isDefault ? "currentColor" : "none"} />
                       </button>
@@ -65,13 +68,15 @@ export default function TabsEditor({
                     // The last visible tab can't be hidden: a page needs one.
                     canToggle={isHidden || visibleCount > 1}
                     toggleTitle={!isHidden && visibleCount <= 1 ? "A page needs at least one tab" : undefined}
-                    onToggleHidden={() => {
-                      const nextHidden = isHidden ? tabs.hidden.filter((x) => x !== id) : [...tabs.hidden, id];
-                      const stillShown = tabs.order.filter((x) => !nextHidden.includes(x));
-                      // Hiding the tab that opens first hands that role to the next visible one.
-                      const nextDefault = tabs.default && nextHidden.includes(tabs.default) ? stillShown[0] ?? null : tabs.default;
-                      update(page, { hidden: nextHidden, default: nextDefault });
-                    }}
+                    onToggleHidden={() =>
+                      update(page, (t) => {
+                        const nextHidden = t.hidden.includes(id) ? t.hidden.filter((x) => x !== id) : [...t.hidden, id];
+                        const stillShown = t.order.filter((x) => !nextHidden.includes(x));
+                        // Hiding the tab that opens first hands that role to the next visible one.
+                        const nextDefault = t.default && nextHidden.includes(t.default) ? stillShown[0] ?? null : t.default;
+                        return { ...t, hidden: nextHidden, default: nextDefault };
+                      })
+                    }
                   />
                 );
               }}

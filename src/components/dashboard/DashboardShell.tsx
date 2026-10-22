@@ -106,7 +106,7 @@ export default function DashboardShell() {
         <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
           <div className="px-4 sm:px-6 py-4 flex items-center gap-3">
             <button
-              className="lg:hidden text-muted-foreground hover:text-foreground"
+              className="lg:hidden inline-flex items-center justify-center w-10 h-10 -ml-2.5 text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
             >
@@ -122,9 +122,10 @@ export default function DashboardShell() {
               {pathname === "/" && (
                 <Link
                   to="/settings/user?section=widgets"
-                  className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Edit layout"
+                  className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors max-sm:w-10 max-sm:h-10"
                 >
-                  <LayoutTemplate className="w-4 h-4 shrink-0" /> Edit layout
+                  <LayoutTemplate className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Edit layout</span>
                 </Link>
               )}
               <SpotlightSearchButton showHint />
