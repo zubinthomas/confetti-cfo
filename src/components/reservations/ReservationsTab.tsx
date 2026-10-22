@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  listLocations, createLocation, updateLocation, deleteLocation,
-  listAreas, createArea, updateArea, deleteArea, areaLabel,
-  listTables, createTable, updateTable, deleteTable,
+  listLocations, createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
+  listAreas, createArea, updateArea, archiveArea, restoreArea, purgeArea, areaLabel,
+  listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, endReservationEarly, listTableMerges, releaseTableMerge,
   type ReservationLocation, type ReservationArea, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
-import { Plus, X, Loader2, Trash2, Pencil, Clock, Link2, Link2Off } from "lucide-react";
+import { Plus, X, Loader2, Trash2, Pencil, Clock, Link2, Link2Off, Archive, ArchiveRestore } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
@@ -352,6 +352,42 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
   );
 }
 
+type CatalogKind = "location" | "area" | "table";
+const CATALOG_CALLS: Record<"archive" | "restore" | "purge", Record<CatalogKind, (id: string) => Promise<unknown>>> = {
+  archive: { location: archiveLocation, area: archiveArea, table: archiveTable },
+  restore: { location: restoreLocation, area: restoreArea, table: restoreTable },
+  purge: { location: purgeLocation, area: purgeArea, table: purgeTable },
+};
+
+/** Edit / Archive on an active row; Restore / Delete permanently (never-used rows only) on an archived one. */
+function CatalogRowActions({ label, item, canWrite, canDelete, onEdit, onArchive, onRestore, onPurge }: {
+  label: string; item: { archivedAt: string | null; hasHistory: boolean }; canWrite: boolean; canDelete: boolean;
+  onEdit: () => void; onArchive: () => void; onRestore: () => void; onPurge: () => void;
+}) {
+  if (!canWrite) return null;
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      {item.archivedAt ? (
+        <>
+          <button onClick={onRestore} aria-label={`Restore ${label}`} title="Restore" className={ICON_BTN}><ArchiveRestore className="w-3.5 h-3.5" /></button>
+          {canDelete && !item.hasHistory && (
+            <button onClick={onPurge} aria-label={`Delete ${label} permanently`} title="Delete permanently" className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </>
+      ) : (
+        <>
+          <button onClick={onEdit} aria-label={`Edit ${label}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
+          {canDelete && (
+            <button onClick={onArchive} aria-label={`Archive ${label}`} title="Archive" className={`${ICON_BTN} hover:text-destructive`}><Archive className="w-3.5 h-3.5" /></button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+const ArchivedBadge = () => <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">Archived</span>;
+
 export default function ReservationsTab() {
   const { can } = useAuth();
   const canWrite = can("Restaurant", "write");
@@ -359,9 +395,16 @@ export default function ReservationsTab() {
 
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
   const { tabs: viewTabs, active: view, setActive: setView } = useTabs("restaurant");
-  const [locations, setLocations] = useState<ReservationLocation[]>([]);
-  const [areas, setAreas] = useState<ReservationArea[]>([]);
-  const [tables, setTables] = useState<ReservationTable[]>([]);
+  // Everything the server has, archived rows included. `locations`, `areas` and
+  // `tables` below are the active subset, which is what pickers, the guest
+  // register and the counts use; the full lists only feed the day view (an
+  // archived table still shows its past bookings) and the manager's archive view.
+  const [allLocations, setAllLocations] = useState<ReservationLocation[]>([]);
+  const [allAreas, setAllAreas] = useState<ReservationArea[]>([]);
+  const [allTables, setAllTables] = useState<ReservationTable[]>([]);
+  const locations = useMemo(() => allLocations.filter((l) => !l.archivedAt), [allLocations]);
+  const areas = useMemo(() => allAreas.filter((a) => !a.archivedAt), [allAreas]);
+  const tables = useMemo(() => allTables.filter((t) => !t.archivedAt), [allTables]);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [daySignIns, setDaySignIns] = useState<GuestSignIn[]>([]);
   const [merges, setMerges] = useState<TableMerge[]>([]);
@@ -376,19 +419,18 @@ export default function ReservationsTab() {
   const [locationModal, setLocationModal] = useState<{ location: ReservationLocation | null } | null>(null);
   const [areaModal, setAreaModal] = useState<{ area: ReservationArea | null; locationId: string; locationName: string } | null>(null);
   const [tableModal, setTableModal] = useState<{ table: ReservationTable | null; areaId: string; areaName: string } | null>(null);
-  const [deleteLocationTarget, setDeleteLocationTarget] = useState<ReservationLocation | null>(null);
-  const [deleteAreaTarget, setDeleteAreaTarget] = useState<ReservationArea | null>(null);
-  const [deleteTableTarget, setDeleteTableTarget] = useState<ReservationTable | null>(null);
+  const [catalogAction, setCatalogAction] = useState<{ mode: "archive" | "purge"; kind: CatalogKind; id: string; name: string } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   const loadCatalog = async () => {
     setLoadingCatalog(true);
     try {
-      const [locs, ars, tbls] = await Promise.all([listLocations(), listAreas(), listTables()]);
-      setLocations(locs);
-      setAreas(ars);
-      setTables(tbls);
+      const [locs, ars, tbls] = await Promise.all([listLocations("include"), listAreas(undefined, "include"), listTables(undefined, "include")]);
+      setAllLocations(locs);
+      setAllAreas(ars);
+      setAllTables(tbls);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load locations, areas and tables");
     } finally {
@@ -427,6 +469,17 @@ export default function ReservationsTab() {
     for (const list of map.values()) list.sort((a, b) => a.time.localeCompare(b.time));
     return map;
   }, [reservations]);
+
+  // Active tables, plus an archived one that has bookings on the selected day, so
+  // a past day never loses a booking just because its table was retired later.
+  const dayTables = useMemo(
+    () => allTables.filter((t) => !t.archivedAt || reservationsByTable.has(t.id)),
+    [allTables, reservationsByTable],
+  );
+  const dayAreas = useMemo(
+    () => allAreas.filter((a) => !a.archivedAt || dayTables.some((t) => t.areaId === a.id)),
+    [allAreas, dayTables],
+  );
 
   const signInsByTable = useMemo(() => {
     const map = new Map<string, GuestSignIn[]>();
@@ -540,48 +593,29 @@ export default function ReservationsTab() {
     }
   };
 
-  const confirmDeleteLocation = async () => {
-    if (!deleteLocationTarget) return;
+  const confirmCatalogAction = async () => {
+    if (!catalogAction) return;
+    const { mode, kind, id } = catalogAction;
     setDeleting(true);
     setDeleteError("");
     try {
-      await deleteLocation(deleteLocationTarget.id);
-      setDeleteLocationTarget(null);
+      await CATALOG_CALLS[mode][kind](id);
+      setCatalogAction(null);
       loadCatalog();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete location");
+      setDeleteError(err instanceof Error ? err.message : `Failed to ${mode === "archive" ? "archive" : "delete"} ${kind}`);
     } finally {
       setDeleting(false);
     }
   };
 
-  const confirmDeleteArea = async () => {
-    if (!deleteAreaTarget) return;
-    setDeleting(true);
-    setDeleteError("");
+  const restoreItem = async (kind: CatalogKind, id: string) => {
+    setError("");
     try {
-      await deleteArea(deleteAreaTarget.id);
-      setDeleteAreaTarget(null);
+      await CATALOG_CALLS.restore[kind](id);
       loadCatalog();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete area");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const confirmDeleteTable = async () => {
-    if (!deleteTableTarget) return;
-    setDeleting(true);
-    setDeleteError("");
-    try {
-      await deleteTable(deleteTableTarget.id);
-      setDeleteTableTarget(null);
-      loadCatalog();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete table");
-    } finally {
-      setDeleting(false);
+      setError(err instanceof Error ? err.message : `Failed to restore ${kind}`);
     }
   };
 
@@ -656,8 +690,8 @@ export default function ReservationsTab() {
               <p className="text-sm text-muted-foreground text-center py-8">No areas yet - add one under "Locations &amp; Tables".</p>
             ) : (
               <div className="space-y-5">
-                {areas.map((area) => {
-                  const locTables = tables.filter((t) => t.areaId === area.id);
+                {dayAreas.map((area) => {
+                  const locTables = dayTables.filter((t) => t.areaId === area.id);
                   if (locTables.length === 0) return null;
                   const locationName = locations.length > 1 ? locations.find((l) => l.id === area.locationId)?.name : null;
                   return (
@@ -681,6 +715,7 @@ export default function ReservationsTab() {
                                 <span className="text-sm font-medium text-foreground flex items-center gap-1.5">
                                   {merge && <Link2 className="w-3.5 h-3.5 text-primary" />}
                                   {merge ? merge.tableNames.join(" ＋ ") : t.name}
+                                  {t.archivedAt && <ArchivedBadge />}
                                 </span>
                                 <span className="text-xs text-muted-foreground flex items-center gap-2">
                                   seats {merge ? `${merge.combinedCapacity} (merged)` : `${t.capacity}${t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""}`}
@@ -745,35 +780,44 @@ export default function ReservationsTab() {
       ) : (
         <DashCard
           title="Locations & Tables"
-          action={canWrite && (
-            <button
-              onClick={() => setLocationModal({ location: null })}
-              className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 transition"
-            >
-              <Plus className="w-4 h-4" /> Add Location
-            </button>
+          action={(
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-1.5 text-sm text-muted-foreground max-sm:min-h-11">
+                <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                Show archived
+              </label>
+              {canWrite && (
+                <button
+                  onClick={() => setLocationModal({ location: null })}
+                  className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-3 py-1.5 max-sm:min-h-11 rounded-lg hover:opacity-90 transition"
+                >
+                  <Plus className="w-4 h-4" /> Add Location
+                </button>
+              )}
+            </div>
           )}
         >
           {loadingCatalog ? (
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : locations.length === 0 ? (
+          ) : (showArchived ? allLocations : locations).length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No locations yet.</p>
           ) : (
             <div className="space-y-6">
-              {locations.map((loc) => {
-                const locAreas = areas.filter((a) => a.locationId === loc.id);
+              {(showArchived ? allLocations : locations).map((loc) => {
+                const locAreas = (showArchived ? allAreas : areas).filter((a) => a.locationId === loc.id);
                 return (
-                  <div key={loc.id} className="border border-border rounded-lg p-4">
+                  <div key={loc.id} className={`border border-border rounded-lg p-4 ${loc.archivedAt ? "opacity-60" : ""}`}>
                     <div className="flex items-center justify-between gap-3 mb-3">
-                      <span className="text-sm font-semibold text-foreground min-w-0 break-words">{loc.name}</span>
-                      {canWrite && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => setLocationModal({ location: loc })} aria-label={`Edit ${loc.name}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
-                          {canDelete && (
-                            <button onClick={() => { setDeleteError(""); setDeleteLocationTarget(loc); }} aria-label={`Delete ${loc.name}`} className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
-                          )}
-                        </div>
-                      )}
+                      <span className="text-sm font-semibold text-foreground min-w-0 break-words flex items-center gap-2 flex-wrap">
+                        {loc.name} {loc.archivedAt && <ArchivedBadge />}
+                      </span>
+                      <CatalogRowActions
+                        label={loc.name} item={loc} canWrite={canWrite} canDelete={canDelete}
+                        onEdit={() => setLocationModal({ location: loc })}
+                        onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "location", id: loc.id, name: loc.name }); }}
+                        onRestore={() => restoreItem("location", loc.id)}
+                        onPurge={() => { setDeleteError(""); setCatalogAction({ mode: "purge", kind: "location", id: loc.id, name: loc.name }); }}
+                      />
                     </div>
 
                     {locAreas.length === 0 ? (
@@ -781,44 +825,46 @@ export default function ReservationsTab() {
                     ) : (
                       <div className="space-y-4 mb-3">
                         {locAreas.map((area) => {
-                          const areaTables = tables.filter((t) => t.areaId === area.id);
+                          const areaTables = (showArchived ? allTables : tables).filter((t) => t.areaId === area.id);
                           return (
-                            <div key={area.id} className="rounded-lg bg-muted/30 border border-border/60 p-3">
+                            <div key={area.id} className={`rounded-lg bg-muted/30 border border-border/60 p-3 ${area.archivedAt ? "opacity-60" : ""}`}>
                               <div className="flex items-center justify-between gap-3 mb-2">
                                 <div className="flex items-center gap-2 flex-wrap min-w-0">
                                   <span className="text-sm font-medium text-foreground">{area.name}</span>
                                   {area.floor && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{area.floor}</span>}
                                   {area.type && <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">{area.type}</span>}
+                                  {area.archivedAt && <ArchivedBadge />}
                                 </div>
-                                {canWrite && (
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <button onClick={() => setAreaModal({ area, locationId: loc.id, locationName: loc.name })} aria-label={`Edit ${area.name}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
-                                    {canDelete && (
-                                      <button onClick={() => { setDeleteError(""); setDeleteAreaTarget(area); }} aria-label={`Delete ${area.name}`} className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
-                                    )}
-                                  </div>
-                                )}
+                                <CatalogRowActions
+                                  label={area.name} item={area} canWrite={canWrite} canDelete={canDelete}
+                                  onEdit={() => setAreaModal({ area, locationId: loc.id, locationName: loc.name })}
+                                  onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "area", id: area.id, name: area.name }); }}
+                                  onRestore={() => restoreItem("area", area.id)}
+                                  onPurge={() => { setDeleteError(""); setCatalogAction({ mode: "purge", kind: "area", id: area.id, name: area.name }); }}
+                                />
                               </div>
                               {areaTables.length === 0 ? (
                                 <p className="text-xs text-muted-foreground mb-2">No tables yet.</p>
                               ) : (
                                 <div className="space-y-1 mb-2">
                                   {areaTables.map((t) => (
-                                    <div key={t.id} className="flex items-center justify-between gap-3 text-sm border-b border-border/60 last:border-b-0 py-1">
-                                      <span className="text-foreground min-w-0 break-words">{t.name} <span className="text-muted-foreground">· seats {t.capacity}{t.type ? ` · ${t.type}` : ""}</span></span>
-                                      {canWrite && (
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          <button onClick={() => setTableModal({ table: t, areaId: area.id, areaName: area.name })} aria-label={`Edit table ${t.name}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
-                                          {canDelete && (
-                                            <button onClick={() => { setDeleteError(""); setDeleteTableTarget(t); }} aria-label={`Delete table ${t.name}`} className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
-                                          )}
-                                        </div>
-                                      )}
+                                    <div key={t.id} className={`flex items-center justify-between gap-3 text-sm border-b border-border/60 last:border-b-0 py-1 ${t.archivedAt ? "opacity-60" : ""}`}>
+                                      <span className="text-foreground min-w-0 break-words">
+                                        {t.name} <span className="text-muted-foreground">· seats {t.capacity}{t.type ? ` · ${t.type}` : ""}</span>{" "}
+                                        {t.archivedAt && <ArchivedBadge />}
+                                      </span>
+                                      <CatalogRowActions
+                                        label={`table ${t.name}`} item={t} canWrite={canWrite} canDelete={canDelete}
+                                        onEdit={() => setTableModal({ table: t, areaId: area.id, areaName: area.name })}
+                                        onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "table", id: t.id, name: t.name }); }}
+                                        onRestore={() => restoreItem("table", t.id)}
+                                        onPurge={() => { setDeleteError(""); setCatalogAction({ mode: "purge", kind: "table", id: t.id, name: t.name }); }}
+                                      />
                                     </div>
                                   ))}
                                 </div>
                               )}
-                              {canWrite && (
+                              {canWrite && !area.archivedAt && (
                                 <button
                                   onClick={() => setTableModal({ table: null, areaId: area.id, areaName: area.name })}
                                   className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
@@ -831,7 +877,7 @@ export default function ReservationsTab() {
                         })}
                       </div>
                     )}
-                    {canWrite && (
+                    {canWrite && !loc.archivedAt && (
                       <button
                         onClick={() => setAreaModal({ area: null, locationId: loc.id, locationName: loc.name })}
                         className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
@@ -876,34 +922,18 @@ export default function ReservationsTab() {
         />
       )}
       <ConfirmDialog
-        open={deleteLocationTarget !== null}
-        onOpenChange={(open) => { if (!open) { setDeleteLocationTarget(null); setDeleteError(""); } }}
-        title="Delete this location?"
-        description={deleteError || (deleteLocationTarget ? `"${deleteLocationTarget.name}" will be permanently removed. This can't be undone.` : "")}
-        confirmLabel="Delete"
-        destructive
+        open={catalogAction !== null}
+        onOpenChange={(open) => { if (!open) { setCatalogAction(null); setDeleteError(""); } }}
+        title={catalogAction?.mode === "purge" ? `Delete this ${catalogAction.kind} permanently?` : `Archive this ${catalogAction?.kind ?? "item"}?`}
+        description={deleteError || (catalogAction
+          ? catalogAction.mode === "purge"
+            ? `"${catalogAction.name}" has no history and will be removed for good. This can't be undone.`
+            : `"${catalogAction.name}" will be hidden from lists and the booking form. Past bookings keep it, and you can restore it under Show archived.`
+          : "")}
+        confirmLabel={catalogAction?.mode === "purge" ? "Delete permanently" : "Archive"}
+        destructive={catalogAction?.mode === "purge"}
         loading={deleting}
-        onConfirm={confirmDeleteLocation}
-      />
-      <ConfirmDialog
-        open={deleteAreaTarget !== null}
-        onOpenChange={(open) => { if (!open) { setDeleteAreaTarget(null); setDeleteError(""); } }}
-        title="Delete this area?"
-        description={deleteError || (deleteAreaTarget ? `"${deleteAreaTarget.name}" will be permanently removed. This can't be undone.` : "")}
-        confirmLabel="Delete"
-        destructive
-        loading={deleting}
-        onConfirm={confirmDeleteArea}
-      />
-      <ConfirmDialog
-        open={deleteTableTarget !== null}
-        onOpenChange={(open) => { if (!open) { setDeleteTableTarget(null); setDeleteError(""); } }}
-        title="Delete this table?"
-        description={deleteError || (deleteTableTarget ? `"${deleteTableTarget.name}" will be permanently removed. This can't be undone.` : "")}
-        confirmLabel="Delete"
-        destructive
-        loading={deleting}
-        onConfirm={confirmDeleteTable}
+        onConfirm={confirmCatalogAction}
       />
     </div>
   );

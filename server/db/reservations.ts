@@ -5,7 +5,8 @@
 // (plus a party-size-vs-capacity check) is what gives every table real
 // capacity enforcement, the chef's table included, with no special-casing.
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db, ready, schema } from './client.ts';
 import { escapeLikeTerm } from '../db.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
@@ -32,6 +33,9 @@ export interface TableView {
   maxExtraCapacity: number;
   freeMerge: boolean;
   mergeableWith: string[];
+  archivedAt: string | null;
+  /** Ever booked or signed in: archive only, no permanent delete. */
+  hasHistory: boolean;
 }
 
 /** Validate a proposed merge-target list for a table in `areaId`: dedupe,
@@ -45,6 +49,7 @@ async function resolveMergeTargets(
   const partners = await db.select().from(schema.reservationTables)
     .where(inArray(schema.reservationTables.id, ids));
   if (partners.length !== ids.length) throw new ReservationError('One or more merge targets no longer exist');
+  if (partners.some((p) => p.archivedAt)) throw new ReservationError('Merge targets must not be archived');
   if (partners.some((p) => p.areaId !== areaId)) {
     throw new ReservationError('Merge targets must be in the same area as this table');
   }
@@ -114,38 +119,95 @@ export async function seedDefaultReservationLocations() {
   });
 }
 
+// ── Archiving ────────────────────────────────────────────────────────────
+// Locations, areas and tables are never hard-deleted once they have history:
+// "delete" archives them (archivedAt set), which hides them from lists and
+// pickers and refuses new bookings, sign-ins and merges, while reservations and
+// guest-register entries keep pointing at them and still show their names.
+
+export type ArchivedFilter = 'exclude' | 'include' | 'only';
+
+const archivedCondition = (column: AnyPgColumn, mode: ArchivedFilter) =>
+  mode === 'exclude' ? isNull(column) : mode === 'only' ? isNotNull(column) : undefined;
+
+/** What stops a set of tables being archived right now: bookings that are
+ *  coming up or in progress (a pending/confirmed one counts until
+ *  date+time+duration has passed, a seated one until someone completes it), a
+ *  party still signed in at the table, or a live table merge. Returns the
+ *  human-readable blockers, empty when the tables are free to go. */
+async function upcomingBlockers(tableIds: string[], now: Date): Promise<string[]> {
+  if (tableIds.length === 0) return [];
+  const { date: today, minutes: nowMin } = istNow(now);
+  const live = await db.select().from(schema.reservations).where(and(
+    inArray(schema.reservations.tableId, tableIds),
+    inArray(schema.reservations.status, ['pending', 'confirmed', 'seated']),
+  ));
+  // A pending/confirmed booking that already ended is not "upcoming"; a seated
+  // one is, whatever its end, because the party is still there.
+  const all = live
+    .filter((r) => r.status === 'seated'
+      || r.date > today
+      || (r.date === today && toMinutes(r.time) + r.durationMinutes > nowMin))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  const blockers: string[] = [];
+  if (all.length > 0) {
+    const next = all[0];
+    blockers.push(`${all.length} upcoming reservation${all.length === 1 ? '' : 's'} (next: ${next.date} ${next.time}, ${next.guestName})`);
+  }
+  const [signedIn] = await db.select({ n: count() }).from(schema.guestSignIns).where(and(
+    inArray(schema.guestSignIns.tableId, tableIds), isNull(schema.guestSignIns.signedOutAt),
+  ));
+  if (Number(signedIn.n) > 0) blockers.push('a party is signed in at it right now');
+  const [merged] = await db.select({ n: count() }).from(schema.tableMergeMembers)
+    .innerJoin(schema.tableMerges, eq(schema.tableMerges.id, schema.tableMergeMembers.mergeId))
+    .where(and(inArray(schema.tableMergeMembers.tableId, tableIds), isNull(schema.tableMerges.releasedAt)));
+  if (Number(merged.n) > 0) blockers.push('it is part of a live table merge');
+  return blockers;
+}
+
+const blockedMessage = (kind: string, name: string, blockers: string[]) =>
+  `Can't archive ${kind} ${name}: ${blockers.join('; ')}.`;
+
 // ── Locations (venues) ───────────────────────────────────────────────────
 
-export async function listLocations() {
+export async function listLocations({ archived = 'exclude' }: { archived?: ArchivedFilter } = {}) {
   await ready();
-  return db.select().from(schema.reservationLocations).orderBy(asc(schema.reservationLocations.name));
+  const rows = await db.select().from(schema.reservationLocations)
+    .where(archivedCondition(schema.reservationLocations.archivedAt, archived))
+    .orderBy(asc(schema.reservationLocations.name));
+  const withAreas = new Set((await db.select({ id: schema.reservationAreas.locationId }).from(schema.reservationAreas)).map((a) => a.id));
+  return rows.map((r) => ({ ...r, hasHistory: withAreas.has(r.id) }));
 }
 
 export async function createLocation({ name }: { name: string }) {
   await ready();
   const trimmed = name?.trim();
   if (!trimmed) throw new ReservationError('Location name is required');
-  const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.name, trimmed));
+  const [existing] = await db.select().from(schema.reservationLocations)
+    .where(and(eq(schema.reservationLocations.name, trimmed), isNull(schema.reservationLocations.archivedAt)));
   if (existing) throw new ReservationError(`A location named "${trimmed}" already exists`);
   const [row] = await db.insert(schema.reservationLocations).values({
     id: randomUUID(),
     createdDate: new Date().toISOString(),
     name: trimmed,
   }).returning();
-  return row;
+  return { ...row, hasHistory: false };
 }
 
 export async function updateLocation(id: string, { name }: { name?: string }) {
   await ready();
   const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
   if (!existing) throw new ReservationError(`No location with id ${id}`);
+  if (existing.archivedAt) throw new ReservationError(`${existing.name} is archived - restore it before editing.`);
 
   const patch: { name?: string } = {};
   if (name !== undefined) {
     const trimmed = name.trim();
     if (!trimmed) throw new ReservationError('Location name is required');
     if (trimmed !== existing.name) {
-      const [dupe] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.name, trimmed));
+      const [dupe] = await db.select().from(schema.reservationLocations)
+        .where(and(eq(schema.reservationLocations.name, trimmed), isNull(schema.reservationLocations.archivedAt)));
       if (dupe) throw new ReservationError(`A location named "${trimmed}" already exists`);
     }
     patch.name = trimmed;
@@ -156,24 +218,63 @@ export async function updateLocation(id: string, { name }: { name?: string }) {
   return row;
 }
 
-export async function deleteLocation(id: string) {
+/** All table ids under a location (archived areas and tables included). */
+async function tableIdsInLocation(locationId: string): Promise<string[]> {
+  const rows = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables)
+    .innerJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.reservationTables.areaId))
+    .where(eq(schema.reservationAreas.locationId, locationId));
+  return rows.map((r) => r.id);
+}
+
+export async function archiveLocation(id: string, now = new Date()) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
+  if (!existing) throw new ReservationError(`No location with id ${id}`);
+  if (existing.archivedAt) throw new ReservationError(`${existing.name} is already archived.`);
+  const [activeArea] = await db.select({ id: schema.reservationAreas.id }).from(schema.reservationAreas)
+    .where(and(eq(schema.reservationAreas.locationId, id), isNull(schema.reservationAreas.archivedAt))).limit(1);
+  if (activeArea) throw new ReservationError(`Archive ${existing.name}'s areas before archiving the location.`);
+  const blockers = await upcomingBlockers(await tableIdsInLocation(id), now);
+  if (blockers.length > 0) throw new ReservationError(blockedMessage('location', existing.name, blockers));
+  await db.update(schema.reservationLocations).set({ archivedAt: now.toISOString() }).where(eq(schema.reservationLocations.id, id));
+}
+
+export async function restoreLocation(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
+  if (!existing) throw new ReservationError(`No location with id ${id}`);
+  if (!existing.archivedAt) throw new ReservationError(`${existing.name} is not archived.`);
+  const [clash] = await db.select({ id: schema.reservationLocations.id }).from(schema.reservationLocations)
+    .where(and(eq(schema.reservationLocations.name, existing.name), isNull(schema.reservationLocations.archivedAt)));
+  if (clash) throw new ReservationError(`A location named "${existing.name}" already exists - rename that one first.`);
+  await db.update(schema.reservationLocations).set({ archivedAt: null }).where(eq(schema.reservationLocations.id, id));
+}
+
+/** Permanent delete, only for a location that never had an area. */
+export async function purgeLocation(id: string) {
   await ready();
   const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
   if (!existing) throw new ReservationError(`No location with id ${id}`);
   const [anyArea] = await db.select({ id: schema.reservationAreas.id }).from(schema.reservationAreas)
     .where(eq(schema.reservationAreas.locationId, id)).limit(1);
-  if (anyArea) throw new ReservationError(`Remove ${existing.name}'s areas before deleting the location.`);
+  if (anyArea) throw new ReservationError(`${existing.name} has areas on record (archived ones too) and can't be deleted permanently - archive it instead.`);
   await db.delete(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
 }
 
 // ── Areas (a room or zone inside a location, optionally on a named floor) ──
 
-export async function listAreas({ locationId }: { locationId?: string } = {}) {
+export async function listAreas({ locationId, archived = 'exclude' }: { locationId?: string; archived?: ArchivedFilter } = {}) {
   await ready();
-  let query = db.select().from(schema.reservationAreas).$dynamic();
-  if (locationId) query = query.where(eq(schema.reservationAreas.locationId, locationId));
+  const conditions = [archivedCondition(schema.reservationAreas.archivedAt, archived)];
+  if (locationId) conditions.push(eq(schema.reservationAreas.locationId, locationId));
   // Creation order is the display order (Cafe, Restaurant, Bar, Second Floor), name as the tie-break.
-  return query.orderBy(asc(schema.reservationAreas.createdDate), asc(schema.reservationAreas.name));
+  const rows = await db.select().from(schema.reservationAreas).where(and(...conditions))
+    .orderBy(asc(schema.reservationAreas.createdDate), asc(schema.reservationAreas.name));
+  const used = new Set([
+    ...(await db.select({ id: schema.reservationTables.areaId }).from(schema.reservationTables)).map((t) => t.id),
+    ...(await db.select({ id: schema.guestSignIns.areaId }).from(schema.guestSignIns).where(isNotNull(schema.guestSignIns.areaId))).map((s) => s.id as string),
+  ]);
+  return rows.map((r) => ({ ...r, hasHistory: used.has(r.id) }));
 }
 
 export async function createArea(
@@ -182,10 +283,12 @@ export async function createArea(
   await ready();
   const [location] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, locationId));
   if (!location) throw new ReservationError(`No location with id ${locationId}`);
+  if (location.archivedAt) throw new ReservationError(`${location.name} is archived - restore it before adding areas.`);
   const trimmed = name?.trim();
   if (!trimmed) throw new ReservationError('Area name is required');
-  const [existing] = await db.select().from(schema.reservationAreas)
-    .where(and(eq(schema.reservationAreas.locationId, locationId), eq(schema.reservationAreas.name, trimmed)));
+  const [existing] = await db.select().from(schema.reservationAreas).where(and(
+    eq(schema.reservationAreas.locationId, locationId), eq(schema.reservationAreas.name, trimmed), isNull(schema.reservationAreas.archivedAt),
+  ));
   if (existing) throw new ReservationError(`${location.name} already has an area named "${trimmed}"`);
   const [row] = await db.insert(schema.reservationAreas).values({
     id: randomUUID(),
@@ -195,7 +298,7 @@ export async function createArea(
     floor: floor?.trim() || null,
     type: type?.trim() || null,
   }).returning();
-  return row;
+  return { ...row, hasHistory: false };
 }
 
 export async function updateArea(
@@ -204,14 +307,16 @@ export async function updateArea(
   await ready();
   const [existing] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
   if (!existing) throw new ReservationError(`No area with id ${id}`);
+  if (existing.archivedAt) throw new ReservationError(`${existing.name} is archived - restore it before editing.`);
 
   const patch: { name?: string; floor?: string | null; type?: string | null } = {};
   if (name !== undefined) {
     const trimmed = name.trim();
     if (!trimmed) throw new ReservationError('Area name is required');
     if (trimmed !== existing.name) {
-      const [dupe] = await db.select().from(schema.reservationAreas)
-        .where(and(eq(schema.reservationAreas.locationId, existing.locationId), eq(schema.reservationAreas.name, trimmed)));
+      const [dupe] = await db.select().from(schema.reservationAreas).where(and(
+        eq(schema.reservationAreas.locationId, existing.locationId), eq(schema.reservationAreas.name, trimmed), isNull(schema.reservationAreas.archivedAt),
+      ));
       if (dupe) throw new ReservationError(`This location already has an area named "${trimmed}"`);
     }
     patch.name = trimmed;
@@ -224,13 +329,47 @@ export async function updateArea(
   return row;
 }
 
-export async function deleteArea(id: string) {
+export async function archiveArea(id: string, now = new Date()) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
+  if (!existing) throw new ReservationError(`No area with id ${id}`);
+  if (existing.archivedAt) throw new ReservationError(`${existing.name} is already archived.`);
+  const [activeTable] = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables)
+    .where(and(eq(schema.reservationTables.areaId, id), isNull(schema.reservationTables.archivedAt))).limit(1);
+  if (activeTable) throw new ReservationError(`Archive ${existing.name}'s tables before archiving the area.`);
+  const tables = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables)
+    .where(eq(schema.reservationTables.areaId, id));
+  const blockers = await upcomingBlockers(tables.map((t) => t.id), now);
+  if (blockers.length > 0) throw new ReservationError(blockedMessage('area', existing.name, blockers));
+  await db.update(schema.reservationAreas).set({ archivedAt: now.toISOString() }).where(eq(schema.reservationAreas.id, id));
+}
+
+export async function restoreArea(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
+  if (!existing) throw new ReservationError(`No area with id ${id}`);
+  if (!existing.archivedAt) throw new ReservationError(`${existing.name} is not archived.`);
+  const [location] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, existing.locationId));
+  if (location?.archivedAt) throw new ReservationError(`Restore ${location.name} first.`);
+  const [clash] = await db.select({ id: schema.reservationAreas.id }).from(schema.reservationAreas).where(and(
+    eq(schema.reservationAreas.locationId, existing.locationId), eq(schema.reservationAreas.name, existing.name), isNull(schema.reservationAreas.archivedAt),
+  ));
+  if (clash) throw new ReservationError(`This location already has an area named "${existing.name}" - rename that one first.`);
+  await db.update(schema.reservationAreas).set({ archivedAt: null }).where(eq(schema.reservationAreas.id, id));
+}
+
+/** Permanent delete, only for an area that never had a table or a sign-in. */
+export async function purgeArea(id: string) {
   await ready();
   const [existing] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
   if (!existing) throw new ReservationError(`No area with id ${id}`);
   const [anyTable] = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables)
     .where(eq(schema.reservationTables.areaId, id)).limit(1);
-  if (anyTable) throw new ReservationError(`Remove ${existing.name}'s tables before deleting the area.`);
+  const [anySignIn] = await db.select({ id: schema.guestSignIns.id }).from(schema.guestSignIns)
+    .where(eq(schema.guestSignIns.areaId, id)).limit(1);
+  if (anyTable || anySignIn) {
+    throw new ReservationError(`${existing.name} has tables or guest-register entries on record and can't be deleted permanently - archive it instead.`);
+  }
   await db.delete(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
 }
 
@@ -259,14 +398,19 @@ async function mergeTargetsFor(id: string): Promise<string[]> {
   return rows.map((r) => (r.tableAId === id ? r.tableBId : r.tableAId)).sort();
 }
 
-export async function listTables({ areaId }: { areaId?: string } = {}): Promise<TableView[]> {
+export async function listTables({ areaId, archived = 'exclude' }: { areaId?: string; archived?: ArchivedFilter } = {}): Promise<TableView[]> {
   await ready();
-  let query = db.select().from(schema.reservationTables).$dynamic();
-  if (areaId) query = query.where(eq(schema.reservationTables.areaId, areaId));
+  const conditions = [archivedCondition(schema.reservationTables.archivedAt, archived)];
+  if (areaId) conditions.push(eq(schema.reservationTables.areaId, areaId));
   // Natural order, so F2 comes before F10 and BAR 1 before BAR 12.
-  const rows = (await query).sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
+  const rows = (await db.select().from(schema.reservationTables).where(and(...conditions)))
+    .sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
   const links = await mergeLinksByTable();
-  return rows.map((r) => ({ ...r, mergeableWith: links.get(r.id) ?? [] }));
+  const used = new Set([
+    ...(await db.select({ id: schema.reservations.tableId }).from(schema.reservations)).map((r) => r.id),
+    ...(await db.select({ id: schema.guestSignIns.tableId }).from(schema.guestSignIns).where(isNotNull(schema.guestSignIns.tableId))).map((s) => s.id as string),
+  ]);
+  return rows.map((r) => ({ ...r, mergeableWith: links.get(r.id) ?? [], hasHistory: used.has(r.id) }));
 }
 
 export async function createTable(
@@ -277,13 +421,15 @@ export async function createTable(
   await ready();
   const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, areaId));
   if (!area) throw new ReservationError(`No area with id ${areaId}`);
+  if (area.archivedAt) throw new ReservationError(`${area.name} is archived - restore it before adding tables.`);
   const trimmed = name?.trim();
   if (!trimmed) throw new ReservationError('Table name is required');
   if (!Number.isInteger(capacity) || capacity <= 0) throw new ReservationError('Capacity must be a positive whole number');
   const extra = maxExtraCapacity ?? 0;
   if (!Number.isInteger(extra) || extra < 0) throw new ReservationError('Max extra capacity must be a whole number of 0 or more');
-  const [dupe] = await db.select().from(schema.reservationTables)
-    .where(and(eq(schema.reservationTables.areaId, areaId), eq(schema.reservationTables.name, trimmed)));
+  const [dupe] = await db.select().from(schema.reservationTables).where(and(
+    eq(schema.reservationTables.areaId, areaId), eq(schema.reservationTables.name, trimmed), isNull(schema.reservationTables.archivedAt),
+  ));
   if (dupe) throw new ReservationError(`${area.name} already has a table named "${trimmed}"`);
 
   const id = randomUUID();
@@ -307,7 +453,7 @@ export async function createTable(
   });
 
   const [row] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
-  return { ...row, mergeableWith: [...targetIds].sort() };
+  return { ...row, mergeableWith: [...targetIds].sort(), hasHistory: false };
 }
 
 export async function updateTable(
@@ -319,14 +465,16 @@ export async function updateTable(
   await ready();
   const [existing] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
   if (!existing) throw new ReservationError(`No table with id ${id}`);
+  if (existing.archivedAt) throw new ReservationError(`${existing.name} is archived - restore it before editing.`);
 
   const patch: { name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number; freeMerge?: boolean } = {};
   if (name !== undefined) {
     const trimmed = name.trim();
     if (!trimmed) throw new ReservationError('Table name is required');
     if (trimmed !== existing.name) {
-      const [dupe] = await db.select().from(schema.reservationTables)
-        .where(and(eq(schema.reservationTables.areaId, existing.areaId), eq(schema.reservationTables.name, trimmed)));
+      const [dupe] = await db.select().from(schema.reservationTables).where(and(
+        eq(schema.reservationTables.areaId, existing.areaId), eq(schema.reservationTables.name, trimmed), isNull(schema.reservationTables.archivedAt),
+      ));
       if (dupe) throw new ReservationError(`This area already has a table named "${trimmed}"`);
     }
     patch.name = trimmed;
@@ -365,16 +513,49 @@ export async function updateTable(
   });
 
   const [row] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
-  return { ...row, mergeableWith: await mergeTargetsFor(id) };
+  return { ...row, mergeableWith: await mergeTargetsFor(id), hasHistory: await tableHasHistory(id) };
 }
 
-export async function deleteTable(id: string) {
+async function tableHasHistory(id: string): Promise<boolean> {
+  const [booking] = await db.select({ id: schema.reservations.id }).from(schema.reservations)
+    .where(eq(schema.reservations.tableId, id)).limit(1);
+  const [signIn] = await db.select({ id: schema.guestSignIns.id }).from(schema.guestSignIns)
+    .where(eq(schema.guestSignIns.tableId, id)).limit(1);
+  return !!booking || !!signIn;
+}
+
+export async function archiveTable(id: string, now = new Date()) {
   await ready();
   const [existing] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
   if (!existing) throw new ReservationError(`No table with id ${id}`);
-  const [anyReservation] = await db.select({ id: schema.reservations.id }).from(schema.reservations)
-    .where(eq(schema.reservations.tableId, id)).limit(1);
-  if (anyReservation) throw new ReservationError(`${existing.name} has reservations on record and can't be deleted.`);
+  if (existing.archivedAt) throw new ReservationError(`${existing.name} is already archived.`);
+  const blockers = await upcomingBlockers([id], now);
+  if (blockers.length > 0) throw new ReservationError(blockedMessage('table', existing.name, blockers));
+  await db.update(schema.reservationTables).set({ archivedAt: now.toISOString() }).where(eq(schema.reservationTables.id, id));
+}
+
+export async function restoreTable(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
+  if (!existing) throw new ReservationError(`No table with id ${id}`);
+  if (!existing.archivedAt) throw new ReservationError(`${existing.name} is not archived.`);
+  const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, existing.areaId));
+  if (area?.archivedAt) throw new ReservationError(`Restore ${area.name} first.`);
+  const [clash] = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables).where(and(
+    eq(schema.reservationTables.areaId, existing.areaId), eq(schema.reservationTables.name, existing.name), isNull(schema.reservationTables.archivedAt),
+  ));
+  if (clash) throw new ReservationError(`${area?.name ?? 'This area'} already has a table named "${existing.name}" - rename that one first.`);
+  await db.update(schema.reservationTables).set({ archivedAt: null }).where(eq(schema.reservationTables.id, id));
+}
+
+/** Permanent delete, only for a table that never had a booking or sign-in. */
+export async function purgeTable(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, id));
+  if (!existing) throw new ReservationError(`No table with id ${id}`);
+  if (await tableHasHistory(id)) {
+    throw new ReservationError(`${existing.name} has reservations or guest-register entries on record and can't be deleted permanently - archive it instead.`);
+  }
   await db.delete(schema.reservationTables).where(eq(schema.reservationTables.id, id));
 }
 
@@ -511,6 +692,7 @@ export async function createReservation(
   await ready();
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
   if (!table) throw new ReservationError(`No table with id ${tableId}`);
+  if (table.archivedAt) throw new ReservationError(`${table.name} is archived and can't take new bookings`);
 
   if (!Number.isInteger(partySize) || partySize <= 0) throw new ReservationError('Party size must be a positive whole number');
   if (partySize > table.capacity) throw new ReservationError(`${table.name} seats up to ${table.capacity} - a party of ${partySize} won't fit`);
@@ -592,6 +774,33 @@ export async function updateReservationStatus(id: string, status: string) {
   return row;
 }
 
+/** Turn every pending/confirmed booking whose time + duration has passed into
+ *  a no-show. A seated booking is never touched (the party is there). Bookings
+ *  can't run past midnight, so "ended" is: an earlier date, or today with
+ *  start + duration <= the current IST minute. The status guard is part of the
+ *  UPDATE, so a booking staff seat between the read and the write is left
+ *  alone. Releases any table merge the booking held, like a manual no-show.
+ *  Returns the rows it changed (the caller pushes them to Calendar). */
+export async function markExpiredReservationsNoShow(now = new Date()) {
+  await ready();
+  const { date: today, minutes: nowMin } = istNow(now);
+  const candidates = await db.select().from(schema.reservations).where(and(
+    inArray(schema.reservations.status, ['pending', 'confirmed']),
+    lte(schema.reservations.date, today),
+  ));
+  const expired = candidates.filter((r) => r.date < today || toMinutes(r.time) + r.durationMinutes <= nowMin);
+  const changed: (typeof schema.reservations.$inferSelect)[] = [];
+  for (const r of expired) {
+    const [row] = await db.update(schema.reservations).set({ status: 'no_show' }).where(and(
+      eq(schema.reservations.id, r.id), inArray(schema.reservations.status, ['pending', 'confirmed']),
+    )).returning();
+    if (!row) continue;
+    await releaseMergeForTable(row.tableId);
+    changed.push(row);
+  }
+  return changed;
+}
+
 /** Stretch a booking's duration. Rejected (friendly message first, then the
  *  0021 EXCLUDE constraint as backstop) if the longer window runs into the
  *  next active booking on the table or past midnight. */
@@ -629,6 +838,7 @@ export async function rescheduleReservation(
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, existing.tableId));
+  if (table?.archivedAt) throw new ReservationError(`${table.name} is archived - this booking can't be moved`);
 
   const nextDate = date ?? existing.date;
   const nextTime = time ?? existing.time;

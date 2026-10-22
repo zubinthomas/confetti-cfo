@@ -218,6 +218,7 @@ async function checkTableAssignment(
 ) {
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
   if (!table) throw new GuestSignInError(`No table with id ${tableId}`);
+  if (table.archivedAt) throw new GuestSignInError(`${table.name} is archived and can't be assigned`);
 
   const seatAt = istNow(new Date(seatIso));
   const startMin = seatAt.minutes;
@@ -319,6 +320,7 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
   if (areaId) {
     const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, areaId));
     if (!area) throw new GuestSignInError(`No area with id ${areaId}`);
+    if (area.archivedAt) throw new GuestSignInError(`${area.name} is archived and can't be used`);
   }
 
   const reservationId = input.reservationId ?? null;
@@ -418,6 +420,7 @@ export async function updateSignIn(id: string, patch: Partial<CreateSignInInput>
     if (patch.areaId) {
       const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, patch.areaId));
       if (!area) throw new GuestSignInError(`No area with id ${patch.areaId}`);
+      if (area.archivedAt) throw new GuestSignInError(`${area.name} is archived and can't be used`);
     }
     set.areaId = patch.areaId || null;
   }

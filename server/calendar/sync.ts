@@ -122,7 +122,13 @@ export async function pullCalendarEvents(): Promise<{ pulled: number; updated: n
 
   const linked = await db.select().from(schema.reservations).where(isNotNull(schema.reservations.googleEventId));
   const byEventId = new Map(linked.filter((r) => r.googleEventId).map((r) => [r.googleEventId as string, r]));
-  const defaultTableId = process.env.GOOGLE_CALENDAR_DEFAULT_TABLE_ID || null;
+  let defaultTableId = process.env.GOOGLE_CALENDAR_DEFAULT_TABLE_ID || null;
+  if (defaultTableId) {
+    // An archived table takes no new bookings: treat it as if no default were set.
+    const [t] = await db.select({ archivedAt: schema.reservationTables.archivedAt }).from(schema.reservationTables)
+      .where(eq(schema.reservationTables.id, defaultTableId));
+    if (!t || t.archivedAt) defaultTableId = null;
+  }
 
   let pulled = 0, updated = 0, skipped = 0;
 

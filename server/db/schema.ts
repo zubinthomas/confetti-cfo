@@ -882,8 +882,11 @@ export const reservationLocations = pgTable('reservation_locations', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
   name: text('name').notNull(),
+  // Archived instead of deleted: hidden from lists and pickers, refused for new
+  // bookings, kept on history. Names are only unique among active rows.
+  archivedAt: text('archived_at'), // ISO-8601, null = active
 }, (t) => [
-  uniqueIndex('reservation_locations_name').on(t.name),
+  uniqueIndex('reservation_locations_name').on(t.name).where(sql`${t.archivedAt} is null`),
 ]);
 
 export const reservationAreas = pgTable('reservation_areas', {
@@ -895,8 +898,9 @@ export const reservationAreas = pgTable('reservation_areas', {
   // (e.g. "Second Floor").
   floor: text('floor'),
   type: text('type'),
+  archivedAt: text('archived_at'), // ISO-8601, null = active
 }, (t) => [
-  uniqueIndex('reservation_areas_location_name').on(t.locationId, t.name),
+  uniqueIndex('reservation_areas_location_name').on(t.locationId, t.name).where(sql`${t.archivedAt} is null`),
 ]);
 
 // Every table is a single bookable unit - capacity is its real seat count,
@@ -922,8 +926,9 @@ export const reservationTables = pgTable('reservation_tables', {
   // restriction for this table, but the other table still has to allow the
   // join (see tablesCanMerge in server/db/tableMerges.ts).
   freeMerge: boolean('free_merge').notNull().default(false),
+  archivedAt: text('archived_at'), // ISO-8601, null = active
 }, (t) => [
-  uniqueIndex('reservation_tables_area_name').on(t.areaId, t.name),
+  uniqueIndex('reservation_tables_area_name').on(t.areaId, t.name).where(sql`${t.archivedAt} is null`),
 ]);
 
 export const reservationStatusEnum = pgEnum('reservation_status', [

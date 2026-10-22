@@ -358,6 +358,13 @@
       "when": 1792648766487,
       "tag": "0050_restaurant_module",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792653754361,
+      "tag": "0051_reservation_archive",
+      "breakpoints": true
     }
   ]
 }

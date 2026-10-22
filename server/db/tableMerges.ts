@@ -183,6 +183,8 @@ export async function createMerge(
   const tables = await db.select().from(schema.reservationTables)
     .where(inArray(schema.reservationTables.id, uniqueIds));
   if (tables.length !== uniqueIds.length) throw new TableMergeError('One or more tables no longer exist');
+  const archivedTable = tables.find((t) => t.archivedAt);
+  if (archivedTable) throw new TableMergeError(`${archivedTable.name} is archived and can't be merged`);
   const areaIds = new Set(tables.map((t) => t.areaId));
   if (areaIds.size > 1) throw new TableMergeError('All tables in a merge must be in the same area');
 

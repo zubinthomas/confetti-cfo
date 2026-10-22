@@ -127,6 +127,20 @@ seeded. Run it once on dev, staging and production, then fix capacities in the
 UI. `npm run reservation-seed:verify` checks the seed against a throwaway
 database.
 
+Locations, areas and tables are archived, not deleted. Archive (the button on
+Locations & Tables) hides one from lists, the booking form and the guest
+register, but past bookings keep it and the day view still shows an archived
+table on days it has bookings. It is refused while the table has a pending or
+confirmed booking that hasn't ended yet (start + duration, so a booking in
+progress counts), a seated party, a signed-in guest or a live merge; an area
+or location also has to be empty of active children first. Show archived
+lists them with Restore, and Delete permanently for rows that never had any
+history. Names can be reused once the old row is archived.
+
+Pending and confirmed bookings whose time + duration has passed turn into
+no-shows by themselves (checked every minute; `RESERVATION_AUTO_NOSHOW_SECONDS`,
+0 turns it off). Seated bookings are never touched.
+
 Reservations -> Day view has a Day | All switch. All is a flat list of every
 booking (`GET /api/restaurant/all`, paged 25 at a time): Upcoming (default,
 soonest first), Past or All, with guest/phone/email search, status, area and

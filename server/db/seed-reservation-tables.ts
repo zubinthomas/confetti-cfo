@@ -57,17 +57,26 @@ export interface ReservationSeedReport {
   tablesKept: number;
   /** area name -> existing tables that are not in the list (left as they are) */
   otherTables: Record<string, string[]>;
+  /** Things staff archived (location, area or "Area / table"): never recreated by the seed. */
+  retired: string[];
 }
 
 export async function applyReservationTableSeed(): Promise<ReservationSeedReport> {
   await ready();
   const report: ReservationSeedReport = {
-    locationCreated: false, areasCreated: [], tablesCreated: {}, tablesKept: 0, otherTables: {},
+    locationCreated: false, areasCreated: [], tablesCreated: {}, tablesKept: 0, otherTables: {}, retired: [],
   };
   const now = new Date().toISOString();
 
-  let [location] = await db.select().from(schema.reservationLocations)
+  // An archived location/area/table is a deliberate retirement: it counts as
+  // "already there" so the seed never brings it back. Prefer an active match.
+  const locations = await db.select().from(schema.reservationLocations)
     .where(eq(schema.reservationLocations.name, DEFAULT_LOCATION));
+  let location = locations.find((l) => !l.archivedAt) ?? locations[0];
+  if (location?.archivedAt) {
+    report.retired.push(DEFAULT_LOCATION);
+    return report;
+  }
   if (!location) {
     [location] = await db.insert(schema.reservationLocations)
       .values({ id: randomUUID(), createdDate: now, name: DEFAULT_LOCATION }).returning();
@@ -75,9 +84,11 @@ export async function applyReservationTableSeed(): Promise<ReservationSeedReport
   }
 
   for (const [i, def] of DEFAULT_AREAS.entries()) {
-    let [area] = await db.select().from(schema.reservationAreas).where(and(
+    const areaRows = await db.select().from(schema.reservationAreas).where(and(
       eq(schema.reservationAreas.locationId, location.id), eq(schema.reservationAreas.name, def.name),
     ));
+    let area = areaRows.find((a) => !a.archivedAt) ?? areaRows[0];
+    if (area?.archivedAt) { report.retired.push(def.name); continue; }
     if (!area) {
       [area] = await db.insert(schema.reservationAreas)
         .values({
@@ -89,18 +100,23 @@ export async function applyReservationTableSeed(): Promise<ReservationSeedReport
     }
 
     const wanted = TABLES_BY_AREA[def.name] ?? [];
-    const existing = await db.select({ name: schema.reservationTables.name }).from(schema.reservationTables)
-      .where(eq(schema.reservationTables.areaId, area.id));
+    const existing = await db.select({ name: schema.reservationTables.name, archivedAt: schema.reservationTables.archivedAt })
+      .from(schema.reservationTables).where(eq(schema.reservationTables.areaId, area.id));
     const have = new Set(existing.map((t) => t.name));
+    const archived = new Set(existing.filter((t) => t.archivedAt).map((t) => t.name));
 
     for (const name of wanted) {
-      if (have.has(name)) { report.tablesKept += 1; continue; }
+      if (have.has(name)) {
+        report.tablesKept += 1;
+        if (archived.has(name) && !existing.some((t) => t.name === name && !t.archivedAt)) report.retired.push(`${def.name} / ${name}`);
+        continue;
+      }
       await db.insert(schema.reservationTables).values({
         id: randomUUID(), createdDate: now, areaId: area.id, name, capacity: CAPACITY_BY_AREA[def.name] ?? DEFAULT_CAPACITY,
       });
       (report.tablesCreated[def.name] ??= []).push(name);
     }
-    const others = existing.map((t) => t.name).filter((n) => !wanted.includes(n)).sort();
+    const others = existing.filter((t) => !t.archivedAt).map((t) => t.name).filter((n) => !wanted.includes(n)).sort();
     if (others.length) report.otherTables[def.name] = others;
   }
   return report;
@@ -114,7 +130,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`Created ${created} table(s), ${r.tablesKept} already there.`);
   for (const [area, names] of Object.entries(r.tablesCreated)) console.log(`  ${area}: ${names.join(', ')}`);
   for (const [area, names] of Object.entries(r.otherTables)) {
-    console.log(`Left alone in ${area} (not in the POS list): ${names.join(', ')}. Delete them in Locations & Tables if unused.`);
+    console.log(`Left alone in ${area} (not in the POS list): ${names.join(', ')}. Archive them in Locations & Tables if unused.`);
   }
+  if (r.retired.length) console.log(`Archived by staff, not recreated: ${r.retired.join(', ')}.`);
   process.exit(0);
 }

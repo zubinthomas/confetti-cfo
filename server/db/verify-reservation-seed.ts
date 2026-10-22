@@ -79,17 +79,26 @@ const fourth = await applyReservationTableSeed();
 assert.deepEqual(fourth.areasCreated, ['Bar']);
 assert.equal(fourth.tablesCreated.Bar.length, 6);
 
-// Hierarchy guards: a location with areas, and an area with tables, can't be deleted by the
+// Hierarchy guards: a location with areas, and an area with tables, can't be archived by the
 // API helpers, and names are unique per parent.
-const { deleteLocation, deleteArea } = await import('./reservations.ts');
+const { archiveLocation, archiveArea, archiveTable, listTables } = await import('./reservations.ts');
 const [loc] = await listLocations();
-await assert.rejects(() => deleteLocation(loc.id), ReservationError);
-await assert.rejects(() => deleteArea(cafe.id), ReservationError);
+await assert.rejects(() => archiveLocation(loc.id), ReservationError);
+await assert.rejects(() => archiveArea(cafe.id), ReservationError);
 await assert.rejects(() => createArea({ locationId: loc.id, name: 'Cafe' }), ReservationError);
 const other = await createLocation({ name: 'Second Venue' });
 const sameName = await createArea({ locationId: other.id, name: 'Cafe', floor: 'Ground Floor' }); // same name, different location: ok
 assert.equal(sameName.name, 'Cafe');
 await assert.rejects(() => createLocation({ name: 'Second Venue' }), ReservationError);
+
+// An archived table is a deliberate retirement: re-running the seed must not bring it back.
+const cafeTables = await listTables({ areaId: cafe.id });
+const retiredTable = cafeTables.find((t) => t.name === 'T2')!;
+await archiveTable(retiredTable.id);
+const fifth = await applyReservationTableSeed();
+assert.deepEqual(fifth.tablesCreated, {}, 'seed recreated an archived table');
+assert.deepEqual(fifth.retired, ['Cafe / T2']);
+assert.ok(!(await listTables({ areaId: cafe.id })).some((t) => t.name === 'T2'));
 
 console.log('reservation seed verify: all checks passed');
 fs.rmSync(dir, { recursive: true, force: true });

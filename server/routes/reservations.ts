@@ -5,9 +5,10 @@ import { Router } from 'express';
 import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
 import {
   ReservationError,
-  listLocations, createLocation, updateLocation, deleteLocation,
-  listAreas, createArea, updateArea, deleteArea,
-  listTables, createTable, updateTable, deleteTable,
+  listLocations, createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
+  listAreas, createArea, updateArea, archiveArea, restoreArea, purgeArea,
+  listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
+  type ArchivedFilter,
   listReservations, listReservationPage, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, rescheduleReservation, endReservationEarly,
 } from '../db/reservations.ts';
@@ -35,13 +36,15 @@ const router = Router();
 router.use(authMiddleware);
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const archivedParam = (v: unknown): ArchivedFilter => (v === 'include' || v === 'only' ? v : 'exclude');
+
 const status = (err: unknown) => (err instanceof ReservationError || err instanceof TableMergeError ? 400 : 500);
 
 // ── Locations ────────────────────────────────────────────────────────────
 
-router.get('/locations', requirePermission('Restaurant', 'read'), async (_req: AuthedRequest, res) => {
+router.get('/locations', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
   try {
-    res.json(await listLocations());
+    res.json(await listLocations({ archived: archivedParam(req.query.archived) }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -65,10 +68,25 @@ router.patch('/locations/:id', requirePermission('Restaurant', 'write'), async (
   }
 });
 
+// Archives by default; ?purge=true removes the row for good, but only if it never had any history.
 router.delete('/locations/:id', requirePermission('Restaurant', 'delete'), async (req: AuthedRequest, res) => {
   try {
-    await deleteLocation(req.params.id);
-    res.json({ message: 'Deleted' });
+    if (req.query.purge === 'true') {
+      await purgeLocation(req.params.id);
+      res.json({ message: 'Deleted' });
+    } else {
+      await archiveLocation(req.params.id);
+      res.json({ message: 'Archived' });
+    }
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.post('/locations/:id/restore', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    await restoreLocation(req.params.id);
+    res.json({ message: 'Restored' });
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -79,7 +97,7 @@ router.delete('/locations/:id', requirePermission('Restaurant', 'delete'), async
 router.get('/areas', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
   try {
     const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
-    res.json(await listAreas({ locationId }));
+    res.json(await listAreas({ locationId, archived: archivedParam(req.query.archived) }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -104,10 +122,25 @@ router.patch('/areas/:id', requirePermission('Restaurant', 'write'), async (req:
   }
 });
 
+// Archives by default; ?purge=true removes the row for good, but only if it never had any history.
 router.delete('/areas/:id', requirePermission('Restaurant', 'delete'), async (req: AuthedRequest, res) => {
   try {
-    await deleteArea(req.params.id);
-    res.json({ message: 'Deleted' });
+    if (req.query.purge === 'true') {
+      await purgeArea(req.params.id);
+      res.json({ message: 'Deleted' });
+    } else {
+      await archiveArea(req.params.id);
+      res.json({ message: 'Archived' });
+    }
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.post('/areas/:id/restore', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    await restoreArea(req.params.id);
+    res.json({ message: 'Restored' });
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -118,7 +151,7 @@ router.delete('/areas/:id', requirePermission('Restaurant', 'delete'), async (re
 router.get('/tables', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
   try {
     const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
-    res.json(await listTables({ areaId }));
+    res.json(await listTables({ areaId, archived: archivedParam(req.query.archived) }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -165,10 +198,25 @@ router.patch('/tables/:id', requirePermission('Restaurant', 'write'), async (req
   }
 });
 
+// Archives by default; ?purge=true removes the row for good, but only if it never had any history.
 router.delete('/tables/:id', requirePermission('Restaurant', 'delete'), async (req: AuthedRequest, res) => {
   try {
-    await deleteTable(req.params.id);
-    res.json({ message: 'Deleted' });
+    if (req.query.purge === 'true') {
+      await purgeTable(req.params.id);
+      res.json({ message: 'Deleted' });
+    } else {
+      await archiveTable(req.params.id);
+      res.json({ message: 'Archived' });
+    }
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.post('/tables/:id/restore', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    await restoreTable(req.params.id);
+    res.json({ message: 'Restored' });
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }

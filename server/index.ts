@@ -38,6 +38,7 @@ import opsDataRoutes from './routes/opsData.ts';
 import rosterRoutes from './routes/roster.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { startCalendarScheduler } from './calendar/scheduler.ts';
+import { startReservationNoShowScheduler } from './reservations/scheduler.ts';
 import { startImportBatchPruneScheduler } from './import/pruneScheduler.ts';
 import { startBackupScheduler } from './db/backupScheduler.ts';
 import backupsRoutes from './routes/backups.ts';
@@ -104,6 +105,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Express server running on http://localhost:${PORT}`);
   startSheetsScheduler();
   startCalendarScheduler();
+  startReservationNoShowScheduler();
   startImportBatchPruneScheduler();
   startBackupScheduler();
 });

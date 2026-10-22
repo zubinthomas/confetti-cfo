@@ -9,6 +9,10 @@ export interface ReservationLocation {
   id: string;
   createdDate: string;
   name: string;
+  /** ISO timestamp when archived, null while active. */
+  archivedAt: string | null;
+  /** Has (or had) areas: it can be archived but not deleted permanently. */
+  hasHistory: boolean;
 }
 
 /** A room or zone inside a location, optionally on a named floor. Holds tables. */
@@ -20,6 +24,9 @@ export interface ReservationArea {
   /** "Ground Floor", "First Floor"... null when the area is its own floor. */
   floor: string | null;
   type: string | null;
+  archivedAt: string | null;
+  /** Has (or had) tables or guest-register entries: archive only. */
+  hasHistory: boolean;
 }
 
 /** "Cafe, Ground Floor", or just the name when the area has no floor label. */
@@ -39,6 +46,9 @@ export interface ReservationTable {
   /** Table ids this one may be pushed together with, both directions, hydrated
    *  by the server from table_merge_links. */
   mergeableWith: string[];
+  archivedAt: string | null;
+  /** Ever booked or signed in: archive only. */
+  hasHistory: boolean;
 }
 
 /** Mirrors tablesCanMerge on the server (server/db/tableMerges.ts): two tables
@@ -78,23 +88,37 @@ export interface Reservation {
   tableMaxExtraCapacity: number;
 }
 
-export const listLocations = () => get<ReservationLocation[]>("/restaurant/locations");
+/** Catalog lists hide archived rows unless asked: "include" returns both, "only" just the archived. */
+export type ArchivedFilter = "include" | "only";
+const archivedQs = (archived?: ArchivedFilter, extra: string[] = []) => {
+  const parts = [...extra, ...(archived ? [`archived=${archived}`] : [])];
+  return parts.length ? `?${parts.join("&")}` : "";
+};
+
+export const listLocations = (archived?: ArchivedFilter) =>
+  get<ReservationLocation[]>(`/restaurant/locations${archivedQs(archived)}`);
 export const createLocation = (data: { name: string }) =>
   post<ReservationLocation>("/restaurant/locations", data);
 export const updateLocation = (id: string, data: { name?: string }) =>
   patch<ReservationLocation>(`/restaurant/locations/${id}`, data);
-export const deleteLocation = (id: string) => del(`/restaurant/locations/${id}`);
+/** DELETE archives. The server refuses while bookings are upcoming or active children remain. */
+export const archiveLocation = (id: string) => del(`/restaurant/locations/${id}`);
+export const restoreLocation = (id: string) => post<{ message: string }>(`/restaurant/locations/${id}/restore`, {});
+/** Permanent delete, only for a row that never had any history. */
+export const purgeLocation = (id: string) => del(`/restaurant/locations/${id}?purge=true`);
 
-export const listAreas = (locationId?: string) =>
-  get<ReservationArea[]>(`/restaurant/areas${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`);
+export const listAreas = (locationId?: string, archived?: ArchivedFilter) =>
+  get<ReservationArea[]>(`/restaurant/areas${archivedQs(archived, locationId ? [`locationId=${encodeURIComponent(locationId)}`] : [])}`);
 export const createArea = (data: { locationId: string; name: string; floor?: string | null; type?: string | null }) =>
   post<ReservationArea>("/restaurant/areas", data);
 export const updateArea = (id: string, data: { name?: string; floor?: string | null; type?: string | null }) =>
   patch<ReservationArea>(`/restaurant/areas/${id}`, data);
-export const deleteArea = (id: string) => del(`/restaurant/areas/${id}`);
+export const archiveArea = (id: string) => del(`/restaurant/areas/${id}`);
+export const restoreArea = (id: string) => post<{ message: string }>(`/restaurant/areas/${id}/restore`, {});
+export const purgeArea = (id: string) => del(`/restaurant/areas/${id}?purge=true`);
 
-export const listTables = (areaId?: string) =>
-  get<ReservationTable[]>(`/restaurant/tables${areaId ? `?areaId=${encodeURIComponent(areaId)}` : ""}`);
+export const listTables = (areaId?: string, archived?: ArchivedFilter) =>
+  get<ReservationTable[]>(`/restaurant/tables${archivedQs(archived, areaId ? [`areaId=${encodeURIComponent(areaId)}`] : [])}`);
 export const createTable = (data: {
   areaId: string; name: string; type?: string | null; capacity: number;
   maxExtraCapacity?: number; freeMerge?: boolean; mergeableWith?: string[];
@@ -103,7 +127,9 @@ export const updateTable = (id: string, data: {
   name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number;
   freeMerge?: boolean; mergeableWith?: string[];
 }) => patch<ReservationTable>(`/restaurant/tables/${id}`, data);
-export const deleteTable = (id: string) => del(`/restaurant/tables/${id}`);
+export const archiveTable = (id: string) => del(`/restaurant/tables/${id}`);
+export const restoreTable = (id: string) => post<{ message: string }>(`/restaurant/tables/${id}/restore`, {});
+export const purgeTable = (id: string) => del(`/restaurant/tables/${id}?purge=true`);
 
 export const listReservations = (params: { date?: string; tableId?: string; areaId?: string } = {}) => {
   const query = new URLSearchParams();
