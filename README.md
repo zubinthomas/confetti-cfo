@@ -127,6 +127,12 @@ seeded. Run it once on dev, staging and production, then fix capacities in the
 UI. `npm run reservation-seed:verify` checks the seed against a throwaway
 database.
 
+For staff who only work the restaurant, `npm run db:seed-restaurant-role` (same
+rules: in `server/`, server stopped, safe to re-run) adds a "Restaurant" role
+with Restaurant read, write and delete and nothing else. With one nav item the
+shell shows no navigation beyond the user menu, and they land on `/restaurant`.
+Assign it on the Users page.
+
 ## Layouts by permission, role and user
 
 What each person sees in the navigation, on page tabs and on the overview is

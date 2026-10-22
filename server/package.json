@@ -11,6 +11,7 @@
     "db:seed-cost-centres": "node db/seed-cost-centres.ts",
     "db:seed-leadership-layout": "node db/seed-leadership-layout.ts",
     "db:seed-reservation-tables": "node db/seed-reservation-tables.ts",
+    "db:seed-restaurant-role": "node db/seed-restaurant-role.ts",
     "reservation-seed:verify": "node db/verify-reservation-seed.ts",
     "db:rename-dining-room": "node db/rename-cafe-dining-room.ts",
     "costcentres:verify": "node db/verify-cost-centres.ts",
