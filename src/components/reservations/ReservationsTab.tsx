@@ -9,7 +9,7 @@ import {
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
-import { Plus, X, Loader2, Trash2, Pencil, Clock, Link2, Link2Off, Archive, ArchiveRestore } from "lucide-react";
+import { Plus, X, Loader2, Trash2, Clock, Link2, Link2Off } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
@@ -17,6 +17,8 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import GuestRegister from "@/components/reservations/GuestRegister";
 import AllReservations from "@/components/reservations/AllReservations";
 import AreaSelect from "@/components/reservations/AreaSelect";
+import CatalogManager from "@/components/reservations/CatalogManager";
+import { ArchivedBadge, type CatalogKind } from "@/components/reservations/CatalogParts";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
@@ -31,8 +33,6 @@ const toMin = (hhmm: string) => {
 const nowMinutes = () => istMinutes();
 const clockOf = istClock;
 const FLOOR_EXTEND_STEPS = [15, 30, 60];
-// Edit/delete icons: a 44px tap area on phones, tight from sm up.
-const ICON_BTN = "inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded max-sm:w-11 max-sm:h-11 sm:p-1.5";
 
 const EMPTY_BOOKING = { areaId: "", tableId: "", date: todayStr(), time: "19:00", durationMinutes: "90", partySize: "2", guestName: "", guestPhone: "", guestEmail: "", notes: "" };
 
@@ -352,41 +352,12 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
   );
 }
 
-type CatalogKind = "location" | "area" | "table";
 const CATALOG_CALLS: Record<"archive" | "restore" | "purge", Record<CatalogKind, (id: string) => Promise<unknown>>> = {
   archive: { location: archiveLocation, area: archiveArea, table: archiveTable },
   restore: { location: restoreLocation, area: restoreArea, table: restoreTable },
   purge: { location: purgeLocation, area: purgeArea, table: purgeTable },
 };
 
-/** Edit / Archive on an active row; Restore / Delete permanently (never-used rows only) on an archived one. */
-function CatalogRowActions({ label, item, canWrite, canDelete, onEdit, onArchive, onRestore, onPurge }: {
-  label: string; item: { archivedAt: string | null; hasHistory: boolean }; canWrite: boolean; canDelete: boolean;
-  onEdit: () => void; onArchive: () => void; onRestore: () => void; onPurge: () => void;
-}) {
-  if (!canWrite) return null;
-  return (
-    <div className="flex items-center gap-1 shrink-0">
-      {item.archivedAt ? (
-        <>
-          <button onClick={onRestore} aria-label={`Restore ${label}`} title="Restore" className={ICON_BTN}><ArchiveRestore className="w-3.5 h-3.5" /></button>
-          {canDelete && !item.hasHistory && (
-            <button onClick={onPurge} aria-label={`Delete ${label} permanently`} title="Delete permanently" className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
-          )}
-        </>
-      ) : (
-        <>
-          <button onClick={onEdit} aria-label={`Edit ${label}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
-          {canDelete && (
-            <button onClick={onArchive} aria-label={`Archive ${label}`} title="Archive" className={`${ICON_BTN} hover:text-destructive`}><Archive className="w-3.5 h-3.5" /></button>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-const ArchivedBadge = () => <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">Archived</span>;
 
 export default function ReservationsTab() {
   const { can } = useAuth();
@@ -796,119 +767,23 @@ export default function ReservationsTab() {
           canWrite={regWrite} canDelete={regDelete} canWriteBookings={bookWrite}
         />
       ) : (
-        <DashCard
-          title="Locations & Tables"
-          action={(
-            <div className="flex items-center gap-3 flex-wrap">
-              <label className="flex items-center gap-1.5 text-sm text-muted-foreground max-sm:min-h-11">
-                <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-                Show archived
-              </label>
-              {catWrite && (
-                <button
-                  onClick={() => setLocationModal({ location: null })}
-                  className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-3 py-1.5 max-sm:min-h-11 rounded-lg hover:opacity-90 transition"
-                >
-                  <Plus className="w-4 h-4" /> Add Location
-                </button>
-              )}
-            </div>
-          )}
-        >
-          {loadingCatalog ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-          ) : (showArchived ? allLocations : locations).length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No locations yet.</p>
-          ) : (
-            <div className="space-y-6">
-              {(showArchived ? allLocations : locations).map((loc) => {
-                const locAreas = (showArchived ? allAreas : areas).filter((a) => a.locationId === loc.id);
-                return (
-                  <div key={loc.id} className={`border border-border rounded-lg p-4 ${loc.archivedAt ? "opacity-60" : ""}`}>
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <span className="text-sm font-semibold text-foreground min-w-0 break-words flex items-center gap-2 flex-wrap">
-                        {loc.name} {loc.archivedAt && <ArchivedBadge />}
-                      </span>
-                      <CatalogRowActions
-                        label={loc.name} item={loc} canWrite={catWrite} canDelete={catDelete}
-                        onEdit={() => setLocationModal({ location: loc })}
-                        onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "location", id: loc.id, name: loc.name }); }}
-                        onRestore={() => restoreItem("location", loc.id)}
-                        onPurge={() => { setDeleteError(""); setCatalogAction({ mode: "purge", kind: "location", id: loc.id, name: loc.name }); }}
-                      />
-                    </div>
-
-                    {locAreas.length === 0 ? (
-                      <p className="text-xs text-muted-foreground mb-3">No areas yet.</p>
-                    ) : (
-                      <div className="space-y-4 mb-3">
-                        {locAreas.map((area) => {
-                          const areaTables = (showArchived ? allTables : tables).filter((t) => t.areaId === area.id);
-                          return (
-                            <div key={area.id} className={`rounded-lg bg-muted/30 border border-border/60 p-3 ${area.archivedAt ? "opacity-60" : ""}`}>
-                              <div className="flex items-center justify-between gap-3 mb-2">
-                                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                  <span className="text-sm font-medium text-foreground">{area.name}</span>
-                                  {area.floor && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{area.floor}</span>}
-                                  {area.type && <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">{area.type}</span>}
-                                  {area.archivedAt && <ArchivedBadge />}
-                                </div>
-                                <CatalogRowActions
-                                  label={area.name} item={area} canWrite={catWrite} canDelete={catDelete}
-                                  onEdit={() => setAreaModal({ area, locationId: loc.id, locationName: loc.name })}
-                                  onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "area", id: area.id, name: area.name }); }}
-                                  onRestore={() => restoreItem("area", area.id)}
-                                  onPurge={() => { setDeleteError(""); setCatalogAction({ mode: "purge", kind: "area", id: area.id, name: area.name }); }}
-                                />
-                              </div>
-                              {areaTables.length === 0 ? (
-                                <p className="text-xs text-muted-foreground mb-2">No tables yet.</p>
-                              ) : (
-                                <div className="space-y-1 mb-2">
-                                  {areaTables.map((t) => (
-                                    <div key={t.id} className={`flex items-center justify-between gap-3 text-sm border-b border-border/60 last:border-b-0 py-1 ${t.archivedAt ? "opacity-60" : ""}`}>
-                                      <span className="text-foreground min-w-0 break-words">
-                                        {t.name} <span className="text-muted-foreground">· seats {t.capacity}{t.type ? ` · ${t.type}` : ""}</span>{" "}
-                                        {t.archivedAt && <ArchivedBadge />}
-                                      </span>
-                                      <CatalogRowActions
-                                        label={`table ${t.name}`} item={t} canWrite={catWrite} canDelete={catDelete}
-                                        onEdit={() => setTableModal({ table: t, areaId: area.id, areaName: area.name })}
-                                        onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "table", id: t.id, name: t.name }); }}
-                                        onRestore={() => restoreItem("table", t.id)}
-                                        onPurge={() => { setDeleteError(""); setCatalogAction({ mode: "purge", kind: "table", id: t.id, name: t.name }); }}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {catWrite && !area.archivedAt && (
-                                <button
-                                  onClick={() => setTableModal({ table: null, areaId: area.id, areaName: area.name })}
-                                  className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
-                                >
-                                  <Plus className="w-3 h-3" /> Add Table
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {catWrite && !loc.archivedAt && (
-                      <button
-                        onClick={() => setAreaModal({ area: null, locationId: loc.id, locationName: loc.name })}
-                        className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
-                      >
-                        <Plus className="w-3 h-3" /> Add Area
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DashCard>
+        <CatalogManager
+          loading={loadingCatalog}
+          locations={showArchived ? allLocations : locations}
+          areas={showArchived ? allAreas : areas}
+          tables={showArchived ? allTables : tables}
+          showArchived={showArchived} onShowArchived={setShowArchived}
+          canWrite={catWrite} canDelete={catDelete}
+          onAddLocation={() => setLocationModal({ location: null })}
+          onAddArea={(loc) => setAreaModal({ area: null, locationId: loc.id, locationName: loc.name })}
+          onAddTable={(area) => setTableModal({ table: null, areaId: area.id, areaName: area.name })}
+          onEditLocation={(loc) => setLocationModal({ location: loc })}
+          onEditArea={(area, loc) => setAreaModal({ area, locationId: loc.id, locationName: loc.name })}
+          onEditTable={(t, area) => setTableModal({ table: t, areaId: area.id, areaName: area.name })}
+          onArchive={(kind, id, name) => { setDeleteError(""); setCatalogAction({ mode: "archive", kind, id, name }); }}
+          onRestore={restoreItem}
+          onPurge={(kind, id, name) => { setDeleteError(""); setCatalogAction({ mode: "purge", kind, id, name }); }}
+        />
       )}
 
       {showBooking && (

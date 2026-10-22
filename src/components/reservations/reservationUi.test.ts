@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, endTime, scopeRange } from "./reservationUi";
+import { addDays, allCollapsed, collapseAreas, endTime, expandAreas, scopeRange, seatsLabel, toggleId } from "./reservationUi";
 
 const TODAY = "2026-10-22";
 
@@ -37,5 +37,28 @@ describe("endTime", () => {
   it("adds minutes to a clock time", () => {
     expect(endTime("19:00", 90)).toBe("20:30");
     expect(endTime("09:15", 45)).toBe("10:00");
+  });
+});
+
+describe("seatsLabel", () => {
+  it("adds the stretch seats only when there are some", () => {
+    expect(seatsLabel(4, 0)).toBe("4");
+    expect(seatsLabel(4, 2)).toBe("4 (+2)");
+  });
+});
+
+describe("area collapse helpers", () => {
+  it("toggleId adds then removes", () => {
+    expect(toggleId([], "a")).toEqual(["a"]);
+    expect(toggleId(["a", "b"], "a")).toEqual(["b"]);
+  });
+  it("allCollapsed needs every listed area, ignores stale ids, and is false with no areas", () => {
+    expect(allCollapsed(["a", "b"], ["a", "b", "gone"])).toBe(true);
+    expect(allCollapsed(["a", "b"], ["a"])).toBe(false);
+    expect(allCollapsed([], ["a"])).toBe(false);
+  });
+  it("collapse and expand all leave areas that are out of view alone", () => {
+    expect(collapseAreas(["a", "b"], ["x", "a"]).sort()).toEqual(["a", "b", "x"]);
+    expect(expandAreas(["a", "b"], ["x", "a", "b"])).toEqual(["x"]);
   });
 });

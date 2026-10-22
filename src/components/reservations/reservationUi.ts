@@ -48,3 +48,25 @@ export function scopeRange(scope: ListScope, today: string, from: string, to: st
 /** "Thu, 22 Oct 2026" for a 'YYYY-MM-DD' date. */
 export const prettyDate = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** "4" or "4 (+2)": seats, with the extra seats a table can stretch to. */
+export const seatsLabel = (capacity: number, maxExtra: number) =>
+  maxExtra > 0 ? `${capacity} (+${maxExtra})` : String(capacity);
+
+/** Add the id to the list, or remove it if it is already there. */
+export const toggleId = (ids: string[], id: string): string[] =>
+  ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+
+/** True when there is at least one area and every one of them is collapsed.
+ *  Ids in `collapsed` that no longer exist are ignored. */
+export const allCollapsed = (areaIds: string[], collapsed: string[]): boolean =>
+  areaIds.length > 0 && areaIds.every((id) => collapsed.includes(id));
+
+/** Collapse every listed area, keeping remembered ids for areas not in view
+ *  (archived ones hidden right now). */
+export const collapseAreas = (areaIds: string[], collapsed: string[]): string[] =>
+  [...new Set([...collapsed, ...areaIds])];
+
+/** Expand every listed area, keeping remembered ids for areas not in view. */
+export const expandAreas = (areaIds: string[], collapsed: string[]): string[] =>
+  collapsed.filter((id) => !areaIds.includes(id));
