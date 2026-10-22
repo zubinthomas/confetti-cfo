@@ -108,9 +108,24 @@ on the Ground Floor, Restaurant and Bar on the First Floor, Second Floor,
 Curbside) and each area holds tables. Staff manage all three levels under
 Restaurant -> Locations & Tables. A fresh database gets the location and the
 five empty areas at startup. The module lives at `/restaurant` (API
-`/api/restaurant`) and is gated by the `Restaurant` permission; it was called
-Reservations until migration 0050, which renamed the permission and the saved
-layout ids in place.
+`/api/restaurant`); it was called Reservations until migration 0050, which
+renamed the permission and the saved layout ids in place.
+
+Access is split over three permission resources, each with read / write / delete:
+
+| Resource | Covers |
+|---|---|
+| `Restaurant` | Locations & Tables: add, edit, archive, restore, delete permanently |
+| `Reservation` | Bookings: Day and All views, create, status, extend, reschedule, delete, spotlight search |
+| `GuestRegister` | Sign-ins: live register, waiting list, seating, Signed out card, edit, delete |
+
+Any one of the three `:read` permissions opens the module, and each tab needs
+its own. The location/area/table pickers and the table-merge list load with any
+of the three; creating or releasing a merge needs `GuestRegister:write` or
+`Reservation:write`. Migration 0052 copied every existing `Restaurant` grant,
+deny and pending invite to the other two resources, so nobody's access changed
+on the day. To stop someone deleting guest activity, untick
+`GuestRegister:delete` on their role or user.
 
 The tables come from the POS bill-wise sales export. To load them into a
 database, in `server/` with the server stopped (PGlite is single-process):
@@ -154,7 +169,7 @@ From / To filters, and the same status buttons as the day view.
 
 For staff who only work the restaurant, `npm run db:seed-restaurant-role` (same
 rules: in `server/`, server stopped, safe to re-run) adds a "Restaurant" role
-with Restaurant read, write and delete and nothing else. With one nav item the
+with read, write and delete on Restaurant, Reservation and GuestRegister and nothing else. With one nav item the
 shell shows no navigation beyond the user menu, and they land on `/restaurant`.
 Assign it on the Users page.
 

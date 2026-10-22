@@ -13,7 +13,7 @@ import { db, ready, schema } from './client.ts';
 // scoped role out of the whole dashboard shell. It's open to any
 // authenticated user instead, so it isn't part of this catalog.
 export const RESOURCES = [
-  'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant',
+  'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
   'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout',
@@ -29,7 +29,10 @@ export type Perm = { resource: Resource; action: Action };
  *  assertGrantable below. */
 export class PermissionGrantError extends Error {}
 
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
+// The Restaurant module is three resources: Restaurant (opening the module and
+// the Locations & Tables catalog), Reservation (bookings) and GuestRegister
+// (sign-ins), so deleting guest activity can be granted apart from the rest.
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
 // OutstandingBills: sync-sourced from Tally's bill-wise reports, same as
 // FinancialRecord - no manual-entry/dispute UI is in scope (a future
 // "mark disputed" workflow would be its own separate item).

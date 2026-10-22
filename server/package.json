@@ -16,6 +16,7 @@
     "reservation-list:verify": "node db/verify-reservation-list.ts",
     "reservation-archive:verify": "node db/verify-reservation-archive.ts",
     "signin-list:verify": "node db/verify-signin-list.ts",
+    "reservation-permissions:verify": "node db/verify-reservation-permissions.ts",
     "db:rename-dining-room": "node db/rename-cafe-dining-room.ts",
     "costcentres:verify": "node db/verify-cost-centres.ts",
     "layouts:verify": "node db/verify-layouts.ts",

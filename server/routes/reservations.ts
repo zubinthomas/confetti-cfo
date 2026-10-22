@@ -2,7 +2,7 @@
 // server/db/reservations.ts. No public sub-routes, so authMiddleware is
 // applied router-wide, matching inventory.ts's/users.ts's convention.
 import { Router } from 'express';
-import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
+import { authMiddleware, requirePermission, requireAnyPermission, type AuthedRequest } from '../middleware/auth.ts';
 import {
   ReservationError,
   listLocations, createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
@@ -38,11 +38,23 @@ router.use(authMiddleware);
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const archivedParam = (v: unknown): ArchivedFilter => (v === 'include' || v === 'only' ? v : 'exclude');
 
+// The module is split three ways: Restaurant (catalog), Reservation (bookings),
+// GuestRegister (sign-ins). Pickers and the floor view serve all of them.
+const ANY_READ = [
+  { resource: 'Restaurant', action: 'read' },
+  { resource: 'Reservation', action: 'read' },
+  { resource: 'GuestRegister', action: 'read' },
+] as const;
+const FLOOR_WRITE = [
+  { resource: 'GuestRegister', action: 'write' },
+  { resource: 'Reservation', action: 'write' },
+] as const;
+
 const status = (err: unknown) => (err instanceof ReservationError || err instanceof TableMergeError ? 400 : 500);
 
 // ── Locations ────────────────────────────────────────────────────────────
 
-router.get('/locations', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
+router.get('/locations', requireAnyPermission(...ANY_READ), async (req: AuthedRequest, res) => {
   try {
     res.json(await listLocations({ archived: archivedParam(req.query.archived) }));
   } catch (err) {
@@ -94,7 +106,7 @@ router.post('/locations/:id/restore', requirePermission('Restaurant', 'write'), 
 
 // ── Areas ────────────────────────────────────────────────────────────────
 
-router.get('/areas', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
+router.get('/areas', requireAnyPermission(...ANY_READ), async (req: AuthedRequest, res) => {
   try {
     const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
     res.json(await listAreas({ locationId, archived: archivedParam(req.query.archived) }));
@@ -148,7 +160,7 @@ router.post('/areas/:id/restore', requirePermission('Restaurant', 'write'), asyn
 
 // ── Tables ───────────────────────────────────────────────────────────────
 
-router.get('/tables', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
+router.get('/tables', requireAnyPermission(...ANY_READ), async (req: AuthedRequest, res) => {
   try {
     const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
     res.json(await listTables({ areaId, archived: archivedParam(req.query.archived) }));
@@ -225,7 +237,7 @@ router.post('/tables/:id/restore', requirePermission('Restaurant', 'write'), asy
 // ── Table merges ─────────────────────────────────────────────────────────
 // (Defined before the '/:id' reservation routes so the paths never collide.)
 
-router.get('/table-merges', requirePermission('Restaurant', 'read'), async (_req: AuthedRequest, res) => {
+router.get('/table-merges', requireAnyPermission(...ANY_READ), async (_req: AuthedRequest, res) => {
   try {
     res.json(await listActiveMerges());
   } catch (err) {
@@ -233,7 +245,7 @@ router.get('/table-merges', requirePermission('Restaurant', 'read'), async (_req
   }
 });
 
-router.post('/table-merges', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.post('/table-merges', requireAnyPermission(...FLOOR_WRITE), async (req: AuthedRequest, res) => {
   try {
     const { tableIds, mergeKind, combinedCapacity, bufferMinutes } = req.body ?? {};
     if (!Array.isArray(tableIds) || !tableIds.every((t) => typeof t === 'string')) {
@@ -252,7 +264,7 @@ router.post('/table-merges', requirePermission('Restaurant', 'write'), async (re
   }
 });
 
-router.patch('/table-merges/:id/release', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/table-merges/:id/release', requireAnyPermission(...FLOOR_WRITE), async (req: AuthedRequest, res) => {
   try {
     const view = await releaseMerge(req.params.id);
     if (!view) return res.status(404).json({ message: 'No merge with that id' });
@@ -264,7 +276,7 @@ router.patch('/table-merges/:id/release', requirePermission('Restaurant', 'write
 
 // ── Reservations ─────────────────────────────────────────────────────────
 
-router.get('/', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
+router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
   try {
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
     const tableId = typeof req.query.tableId === 'string' ? req.query.tableId : undefined;
@@ -277,7 +289,7 @@ router.get('/', requirePermission('Restaurant', 'read'), async (req: AuthedReque
 
 // Every reservation across all days, filtered and paged (the "All" list). Declared before
 // the by-id routes; nothing else answers GET /all.
-router.get('/all', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
+router.get('/all', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
   try {
     const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined);
     const num = (v: unknown) => (typeof v === 'string' && v !== '' ? Number(v) : undefined);
@@ -292,7 +304,7 @@ router.get('/all', requirePermission('Restaurant', 'read'), async (req: AuthedRe
   }
 });
 
-router.post('/', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.post('/', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { tableId, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes } = req.body ?? {};
     if (typeof tableId !== 'string') return res.status(400).json({ message: 'tableId is required' });
@@ -307,7 +319,7 @@ router.post('/', requirePermission('Restaurant', 'write'), async (req: AuthedReq
   }
 });
 
-router.patch('/:id/status', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/status', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { status: newStatus } = req.body ?? {};
     if (typeof newStatus !== 'string') return res.status(400).json({ message: 'status is required' });
@@ -317,7 +329,7 @@ router.patch('/:id/status', requirePermission('Restaurant', 'write'), async (req
   }
 });
 
-router.patch('/:id/extend', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { durationMinutes } = req.body ?? {};
     if (typeof durationMinutes !== 'number') return res.status(400).json({ message: 'durationMinutes must be a number' });
@@ -327,7 +339,7 @@ router.patch('/:id/extend', requirePermission('Restaurant', 'write'), async (req
   }
 });
 
-router.patch('/:id/reschedule', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/reschedule', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { date, time, durationMinutes } = req.body ?? {};
     if (durationMinutes !== undefined && typeof durationMinutes !== 'number') {
@@ -339,7 +351,7 @@ router.patch('/:id/reschedule', requirePermission('Restaurant', 'write'), async 
   }
 });
 
-router.patch('/:id/end-early', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/end-early', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
     res.json(await syncAfterMutation(await endReservationEarly(req.params.id)));
   } catch (err) {
@@ -347,7 +359,7 @@ router.patch('/:id/end-early', requirePermission('Restaurant', 'write'), async (
   }
 });
 
-router.delete('/:id', requirePermission('Restaurant', 'delete'), async (req: AuthedRequest, res) => {
+router.delete('/:id', requirePermission('Reservation', 'delete'), async (req: AuthedRequest, res) => {
   try {
     const deleted = await deleteReservation(req.params.id);
     if (deleted) await deleteReservationEvent(deleted);

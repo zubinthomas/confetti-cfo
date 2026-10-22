@@ -63,6 +63,19 @@ export function requirePermission(resource: Resource, action: Action) {
   };
 }
 
+/** Passes when the user holds at least one of `options`. For routes two screens
+ *  share (e.g. the table catalog read by both the booking form and the guest
+ *  register). */
+export function requireAnyPermission(...options: { resource: Resource; action: Action }[]) {
+  return async (req: AuthedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    for (const { resource, action } of options) {
+      if (await hasPermission(req.user.id, resource, action)) return next();
+    }
+    return res.status(403).json({ message: `Forbidden: requires one of ${options.map((o) => `${o.resource}:${o.action}`).join(', ')}` });
+  };
+}
+
 const ENTITY_RESOURCES = new Set<Resource>(['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'BankAccount']);
 
 /** Same as requirePermission, but the resource is entities.ts's :entity route
