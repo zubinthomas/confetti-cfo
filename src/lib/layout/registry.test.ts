@@ -77,6 +77,6 @@ describe('page tabs', () => {
   });
 
   it('keep the users-page tabs in the order the page always used', () => {
-    expect(PAGE_TABS.users.map((t) => t.id)).toEqual(['users', 'invites', 'roles']);
+    expect(PAGE_TABS.users.map((t) => t.id)).toEqual(['users', 'invites', 'roles', 'layouts']);
   });
 });

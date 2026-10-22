@@ -2,9 +2,18 @@ import React from "react";
 import DashCard from "./DashCard";
 import { useAuth } from "@/lib/AuthContext";
 import { UserCog } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import MyLayoutEditor from "@/components/layout-editor/MyLayoutEditor";
+import type { EditorSection } from "@/components/layout-editor/LayoutEditor";
+
+const SECTIONS: EditorSection[] = ["nav", "tabs", "widgets"];
 
 export default function UserSettingsPage() {
   const { user } = useAuth();
+  // ?section=widgets opens the editor on the overview widgets (the overview's "Edit layout" link).
+  const [params] = useSearchParams();
+  const requested = params.get("section") as EditorSection | null;
+  const initialSection = requested && SECTIONS.includes(requested) ? requested : undefined;
 
   return (
     <div className="space-y-6">
@@ -18,6 +27,13 @@ export default function UserSettingsPage() {
             <p className="text-xs text-muted-foreground">{user.email}</p>
           </div>
         </div>
+      </DashCard>
+      <DashCard title="Your layout">
+        <p className="text-xs text-muted-foreground mb-4">
+          Arrange the navigation, page tabs and overview widgets for yourself. Anything you leave alone keeps following
+          your roles and permissions.
+        </p>
+        <MyLayoutEditor initialSection={initialSection} />
       </DashCard>
       <DashCard title="User settings">
         <p className="text-sm text-muted-foreground">

@@ -63,9 +63,17 @@ interface ResolveNavOptions<T extends NavItemBase> {
   layers?: (LayoutConfig | null | undefined)[];
 }
 
-export function resolveNav<T extends NavItemBase>(
+/** Everything the layers decided about navigation, hidden items included.
+ *  The editor works on this; resolveNav only returns what is visible. */
+export interface NavState<T extends NavItemBase> {
+  byId: Map<string, T>;
+  lists: Record<Placement, string[]>;
+  hidden: Set<string>;
+}
+
+export function resolveNavState<T extends NavItemBase>(
   { items, can, hasEmployee, layers = [] }: ResolveNavOptions<T>,
-): ResolvedNav<T> {
+): NavState<T> {
   // Access is the hard filter: an item the user can't open never enters the
   // working lists, so no layer can bring it back.
   const byId = new Map<string, T>();
@@ -102,6 +110,13 @@ export function resolveNav<T extends NavItemBase>(
       lists[placement] = applyOrder(lists[placement], nav.order?.[placement]);
     }
   }
+
+  return { byId, lists, hidden };
+}
+
+export function resolveNav<T extends NavItemBase>(options: ResolveNavOptions<T>): ResolvedNav<T> {
+  const { items } = options;
+  const { byId, lists, hidden } = resolveNavState(options);
 
   const shown = (placement: Placement) =>
     lists[placement].filter((id) => !hidden.has(id)).map((id) => byId.get(id)!);
@@ -140,14 +155,22 @@ function applyVisibility(hidden: Set<string>, config: { hidden?: string[]; shown
  *  in turn can reorder (same rule as applyOrder), hide or re-show tabs
  *  (additive, see applyVisibility) and pick a default tab. If hiding would
  *  leave the page with no tabs the hidden list is ignored. */
-export function resolveTabs<T extends TabBase>(
+export interface TabsState<T extends TabBase> {
+  byId: Map<string, T>;
+  order: string[];
+  hidden: Set<string>;
+  /** The highest layer's choice, if any layer made one. */
+  preferred: string | undefined;
+}
+
+export function resolveTabsState<T extends TabBase>(
   { pageId, tabs, can, layers = [] }: {
     pageId: string;
     tabs: T[];
     can: CanFn;
     layers?: (LayoutConfig | null | undefined)[];
   },
-): ResolvedTabs<T> {
+): TabsState<T> {
   const accessible = tabs.filter((tab) => gateAllows(tab.gate, can));
   const byId = new Map(accessible.map((tab) => [tab.id, tab]));
 
@@ -161,7 +184,13 @@ export function resolveTabs<T extends TabBase>(
     order = applyOrder(order, config.order);
     if (config.default !== undefined) preferred = config.default;
   }
+  return { byId, order, hidden, preferred };
+}
 
+export function resolveTabs<T extends TabBase>(
+  options: { pageId: string; tabs: T[]; can: CanFn; layers?: (LayoutConfig | null | undefined)[] },
+): ResolvedTabs<T> {
+  const { byId, order, hidden, preferred } = resolveTabsState(options);
   let shownIds = order.filter((id) => !hidden.has(id));
   if (shownIds.length === 0) shownIds = order;
   const shown = shownIds.map((id) => byId.get(id)!);
@@ -174,19 +203,24 @@ export interface ResolvedWidget<T extends WidgetBase> {
   width: WidgetWidth;
 }
 
-/** Widgets for one area. Access (the gate) is the hard filter. The registry's
- *  defaultHidden widgets start hidden; each layer can reorder, hide or re-show
- *  (additive) and set per-widget widths. Unlike tabs, hiding everything is
- *  allowed: an empty overview is a valid choice. Section headers are outside
- *  all of that: layers can't touch them, they are placed afterwards. */
-export function resolveWidgets<T extends WidgetBase>(
+/** What the layers decided about one widget area, hidden widgets included
+ *  (section headers are not part of it, they are placed by resolveWidgets). */
+export interface WidgetsState<T extends WidgetBase> {
+  byId: Map<string, T>;
+  headers: T[];
+  order: string[];
+  hidden: Set<string>;
+  widths: Map<string, WidgetWidth>;
+}
+
+export function resolveWidgetsState<T extends WidgetBase>(
   { areaId, widgets, can, layers = [] }: {
     areaId: string;
     widgets: T[];
     can: CanFn;
     layers?: (LayoutConfig | null | undefined)[];
   },
-): ResolvedWidget<T>[] {
+): WidgetsState<T> {
   const allowed = widgets.filter((w) => gateAllows(w.gate, can));
   const headers = allowed.filter((w) => w.sectionHeader);
   const accessible = allowed.filter((w) => !w.sectionHeader);
@@ -194,7 +228,7 @@ export function resolveWidgets<T extends WidgetBase>(
 
   let order = accessible.map((w) => w.id);
   const hidden = new Set(accessible.filter((w) => w.defaultHidden).map((w) => w.id));
-  const widths = new Map<string, WidgetWidth>();
+  const widths = new Map<string, WidgetWidth>(accessible.map((w) => [w.id, w.defaultWidth]));
   for (const layer of layers) {
     const config = layer?.widgets?.[areaId];
     if (!config) continue;
@@ -204,6 +238,18 @@ export function resolveWidgets<T extends WidgetBase>(
       if (byId.has(id) && WIDTHS.includes(width)) widths.set(id, width);
     }
   }
+  return { byId, headers, order, hidden, widths };
+}
+
+/** Widgets for one area. Access (the gate) is the hard filter. The registry's
+ *  defaultHidden widgets start hidden; each layer can reorder, hide or re-show
+ *  (additive) and set per-widget widths. Unlike tabs, hiding everything is
+ *  allowed: an empty overview is a valid choice. Section headers are outside
+ *  all of that: layers can't touch them, they are placed afterwards. */
+export function resolveWidgets<T extends WidgetBase>(
+  options: { areaId: string; widgets: T[]; can: CanFn; layers?: (LayoutConfig | null | undefined)[] },
+): ResolvedWidget<T>[] {
+  const { byId, headers, order, hidden, widths } = resolveWidgetsState(options);
 
   const resolved = order
     .filter((id) => !hidden.has(id))
@@ -211,7 +257,7 @@ export function resolveWidgets<T extends WidgetBase>(
 
   for (const header of headers) {
     const at = resolved.findIndex((r) => r.widget.section !== undefined && r.widget.section === header.section);
-    if (at >= 0) resolved.splice(at, 0, { widget: header as T, width: header.defaultWidth });
+    if (at >= 0) resolved.splice(at, 0, { widget: header, width: header.defaultWidth });
   }
   return resolved;
 }

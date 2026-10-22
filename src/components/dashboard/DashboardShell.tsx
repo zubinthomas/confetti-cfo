@@ -1,7 +1,7 @@
 import React, { Suspense, useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import PageSpinner from "./PageSpinner";
-import { MenuIcon, X, Plus } from "lucide-react";
+import { MenuIcon, X, Plus, LayoutTemplate } from "lucide-react";
 import UserMenu from "./UserMenu";
 import InstallBanner from "./InstallBanner";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
@@ -119,6 +119,14 @@ export default function DashboardShell() {
               <p className="text-[11px] text-muted-foreground">Sienna · CFO Dashboard</p>
             </div>
             <div className="flex items-center gap-4 ml-auto">
+              {pathname === "/" && (
+                <Link
+                  to="/settings/user?section=widgets"
+                  className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LayoutTemplate className="w-4 h-4 shrink-0" /> Edit layout
+                </Link>
+              )}
               <SpotlightSearchButton showHint />
               <div className="hidden md:flex items-center gap-4">
                 {nav.header.map(({ id, to, label, icon: Icon }) => (

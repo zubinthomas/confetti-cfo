@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import UsersTab from "./UsersTab";
 import InvitedUsersTab from "./InvitedUsersTab";
 import RolesTab from "./RolesTab";
+import LayoutsTab from "./LayoutsTab";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
 import { listRoles, type RoleWithPermissions } from "@/api/rolesApi";
@@ -15,6 +16,7 @@ export default function UsersPage() {
   const canSeeInvites = can("Invite", "read");
   const canInviteWrite = can("Invite", "write");
   const canSeeRoles = can("Role", "read");
+  const canSeeLayouts = can("Layout", "read");
   const canRoleWrite = can("Role", "write");
   const heldPerms = useMemo(() => new Set(user?.permissions ?? []), [user]);
 
@@ -90,6 +92,7 @@ export default function UsersPage() {
           {activeTab === "invites" && canSeeInvites && (
             <InvitedUsersTab roles={roles ?? []} heldPerms={heldPerms} formInvite={formInvite} setFormInvite={setFormInvite} />
           )}
+          {activeTab === "layouts" && canSeeLayouts && <LayoutsTab heldPerms={heldPerms} />}
           {activeTab === "roles" && canSeeRoles && (
             <RolesTab roles={roles} heldPerms={heldPerms} formRole={formRole} setFormRole={setFormRole} error={rolesError} refresh={refreshRoles} />
           )}

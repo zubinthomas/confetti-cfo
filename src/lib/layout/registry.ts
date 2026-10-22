@@ -8,7 +8,7 @@ import {
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
-  CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2,
+  CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2, LayoutTemplate,
 } from 'lucide-react';
 import type { Gate, NavItemBase, TabBase, WidgetBase } from './types';
 
@@ -28,7 +28,7 @@ export const GATES = {
   import: { mode: 'any', requires: [read('Import'), read('SheetSource')] },
   tally: { requires: [read('TallySource')] },
   settings: { requires: [read('Settings')] },
-  users: { mode: 'any', requires: [read('User'), read('Invite'), read('Role')] },
+  users: { mode: 'any', requires: [read('User'), read('Invite'), read('Role'), read('Layout')] },
   costCentres: { requires: [read('CostCentre')] },
 } satisfies Record<string, Gate>;
 
@@ -98,6 +98,16 @@ export interface TabItem extends TabBase {
 
 export type PageId = 'hr' | 'users' | 'reservations' | 'store' | 'fnb-view' | 'fnb-detail';
 
+/** Names for the layout editor's page list. */
+export const PAGE_LABELS: Record<PageId, string> = {
+  hr: 'HR',
+  users: 'Users and roles',
+  reservations: 'Reservations',
+  store: 'Store P&L',
+  'fnb-view': 'F&B P&L views',
+  'fnb-detail': 'F&B detail',
+};
+
 const needs = (resource: string): Gate => ({ requires: [read(resource)] });
 
 /** Tabs and view switchers per page, in default order. Gates are what each
@@ -117,6 +127,7 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'users', label: 'Users', icon: Users, gate: needs('User') },
     { id: 'invites', label: 'Invited Users', icon: UserPlus, gate: needs('Invite') },
     { id: 'roles', label: 'Roles', icon: Shield, gate: needs('Role') },
+    { id: 'layouts', label: 'Layouts', icon: LayoutTemplate, gate: needs('Layout') },
   ],
   reservations: [
     { id: 'signin', label: 'Guest Register', icon: DoorOpen },

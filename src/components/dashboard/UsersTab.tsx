@@ -9,6 +9,7 @@ import {
 } from "@/api/usersApi";
 import type { RoleWithPermissions } from "@/api/rolesApi";
 import type { PermissionAction } from "@/api/invitesApi";
+import { resetUserLayout } from "@/api/layoutsApi";
 import { DIVISIONS } from "@/lib/hrDivisions";
 import { Loader2, X } from "lucide-react";
 
@@ -194,6 +195,8 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
   const [editLoadingId, setEditLoadingId] = useState<number | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<UserListItem | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserListItem | null>(null);
+  const [notice, setNotice] = useState("");
 
   const refresh = () => { listUsers().then(setUsers).catch((err: Error) => setError(err.message)); };
   useEffect(() => { refresh(); }, []);
@@ -219,6 +222,23 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
     }
   };
 
+  // Admins can't author someone's layout, only clear it so they fall back to
+  // their role and permission layouts.
+  const onResetLayout = async () => {
+    if (!resetTarget) return;
+    setBusyId(resetTarget.id);
+    try {
+      await resetUserLayout(resetTarget.id);
+      setNotice(`${resetTarget.email}'s layout was reset to their role defaults.`);
+      setResetTarget(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset layout");
+      setResetTarget(null);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const onDeactivate = async () => {
     if (!deactivateTarget) return;
     setBusyId(deactivateTarget.id);
@@ -234,6 +254,7 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
   return (
     <>
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {notice && <p className="text-sm text-emerald-600" role="status">{notice}</p>}
 
       <DashCard title="Users">
         {!users ? (
@@ -291,6 +312,14 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
                                 {editLoadingId === u.id ? "Loading…" : "Edit"}
                               </button>
                             )}
+                            {canWrite && (
+                              <button
+                                onClick={() => { setNotice(""); setResetTarget(u); }} disabled={busyId === u.id}
+                                className="text-xs text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+                              >
+                                Reset layout
+                              </button>
+                            )}
                             {u.active
                               ? canDelete && (
                                 <button
@@ -329,6 +358,16 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
           onSaved={() => { setEditTarget(null); refresh(); }}
         />
       )}
+
+      <ConfirmDialog
+        open={resetTarget !== null}
+        onOpenChange={(open) => { if (!open) setResetTarget(null); }}
+        title="Reset this user's layout?"
+        description={resetTarget ? `"${resetTarget.email}" will lose their own navigation, tab and overview arrangement and go back to what their roles and permissions give them.` : ""}
+        confirmLabel="Reset layout"
+        loading={busyId === resetTarget?.id}
+        onConfirm={onResetLayout}
+      />
 
       <ConfirmDialog
         open={deactivateTarget !== null}
