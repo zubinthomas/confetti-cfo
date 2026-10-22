@@ -61,6 +61,21 @@ export function navDestinationCount<T extends NavItemBase>(nav: ResolvedNav<T>):
   return nav.sidebar.reduce((n, section) => n + section.items.length, 0) + nav.header.length;
 }
 
+/** The one page a person has when the nav is down to a single destination, or
+ *  null when there are none or several. The shell offers a way back to it from
+ *  account pages, since there is no menu to do that. */
+export function soleDestination<T extends NavItemBase>(nav: ResolvedNav<T>): T | null {
+  if (navDestinationCount(nav) !== 1) return null;
+  return nav.sidebar.flatMap((section) => section.items)[0] ?? nav.header[0] ?? null;
+}
+
+/** Whether the current path is that destination or somewhere under it. */
+export function isAtDestination(item: Pick<NavItemBase, 'to' | 'end'>, pathname: string): boolean {
+  if (pathname === item.to) return true;
+  if (item.end) return false;
+  return pathname.startsWith(item.to.endsWith('/') ? item.to : `${item.to}/`);
+}
+
 interface ResolveNavOptions<T extends NavItemBase> {
   items: T[];
   can: CanFn;

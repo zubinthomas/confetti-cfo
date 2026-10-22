@@ -1,12 +1,13 @@
 import React, { Suspense, useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import PageSpinner from "./PageSpinner";
-import { MenuIcon, X, Plus, LayoutTemplate } from "lucide-react";
+import { MenuIcon, X, Plus, LayoutTemplate, ArrowLeft } from "lucide-react";
 import UserMenu from "./UserMenu";
 import InstallBanner from "./InstallBanner";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
-import { useCompactNav, useNav } from "@/lib/layout/useNav";
+import { useCompactNav, useNav, useSoleDestination } from "@/lib/layout/useNav";
 import { navTitle } from "@/lib/layout/registry";
+import { isAtDestination } from "@/lib/layout/resolve";
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const nav = useNav();
@@ -68,6 +69,10 @@ export default function DashboardShell() {
   // just the page and the user menu.
   const compact = useCompactNav();
   const title = navTitle(pathname);
+  // With no menu, account pages (user settings, profile) would be a dead end.
+  // Away from their one page they get a plain link back to it, nothing more.
+  const home = useSoleDestination();
+  const backTo = home && !isAtDestination(home, pathname) ? home : null;
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -117,7 +122,16 @@ export default function DashboardShell() {
                 <MenuIcon className="w-5 h-5" />
               </button>
             )}
-            <div>
+            {backTo && (
+              <Link
+                to={backTo.to}
+                aria-label={`Back to ${backTo.label}`}
+                className="shrink-0 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors max-sm:min-w-10 max-sm:min-h-10 max-sm:justify-center -ml-1"
+              >
+                <ArrowLeft className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">{backTo.label}</span>
+              </Link>
+            )}
+            <div className="min-w-0">
               <h2 className="text-base font-semibold font-heading text-foreground leading-tight">
                 {title || "Confetti Exports"}
               </h2>

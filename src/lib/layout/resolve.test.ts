@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, navDestinationCount, resolveNav, resolveTabs, resolveWidgets } from './resolve';
+import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, isAtDestination, navDestinationCount, resolveNav, soleDestination, resolveTabs, resolveWidgets } from './resolve';
 import type { CanFn, LayoutConfig, NavItemBase, TabBase, WidgetBase } from './types';
 
 const item = (id: string, over: Partial<NavItemBase> = {}): NavItemBase => ({
@@ -318,5 +318,38 @@ describe('resolveWidgets', () => {
       const attempt = layer({ hidden: ['gh'], shown: ['gh'], order: ['l1', 'gh'], width: { gh: 'sixth' } });
       expect(go([attempt])).toEqual(['l1:third', 'gh:full', 'g1:third', 'g2:third']);
     });
+  });
+});
+
+describe('soleDestination', () => {
+  const items = [
+    item('a', { to: '/a', gate: { requires: [{ resource: 'A', action: 'read' }] } }),
+    item('b', { to: '/b', gate: { requires: [{ resource: 'B', action: 'read' }] } }),
+    item('hr', { to: '/hr', group: 'M', defaultPlacement: 'header', gate: { requires: [{ resource: 'HR', action: 'read' }] } }),
+    item('menu', { to: '/menu', group: 'S', defaultPlacement: 'userMenu' }),
+  ];
+  const sole = (can: CanFn) => soleDestination(resolveNav({ items, can, hasEmployee: false }))?.id ?? null;
+
+  it('is the single sidebar or header page', () => {
+    expect(sole(grants('A:read'))).toBe('a');
+    expect(sole(grants('HR:read'))).toBe('hr');
+  });
+  it('is null with none or several, and never the user menu', () => {
+    expect(sole(grants())).toBeNull();
+    expect(sole(grants('A:read', 'B:read'))).toBeNull();
+    expect(sole(grants('A:read', 'HR:read'))).toBeNull();
+  });
+});
+
+describe('isAtDestination', () => {
+  it('matches the page and anything under it, not a lookalike prefix', () => {
+    expect(isAtDestination({ to: '/restaurant' }, '/restaurant')).toBe(true);
+    expect(isAtDestination({ to: '/restaurant' }, '/restaurant/tables')).toBe(true);
+    expect(isAtDestination({ to: '/restaurant' }, '/restaurants')).toBe(false);
+    expect(isAtDestination({ to: '/restaurant' }, '/settings/user')).toBe(false);
+  });
+  it('matches only the exact path for an end route', () => {
+    expect(isAtDestination({ to: '/', end: true }, '/')).toBe(true);
+    expect(isAtDestination({ to: '/', end: true }, '/settings/user')).toBe(false);
   });
 });

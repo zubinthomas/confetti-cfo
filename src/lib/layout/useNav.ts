@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { NAV_ITEMS, type NavItem } from './registry';
-import { flattenLayers, navDestinationCount, resolveNav, type ResolvedNav } from './resolve';
+import { flattenLayers, navDestinationCount, resolveNav, soleDestination, type ResolvedNav } from './resolve';
 
 /** The navigation this user sees: registry filtered by can(), then the
  *  permission, role and user layers from /auth/me applied in that order. */
@@ -20,4 +20,9 @@ export function useNav(): ResolvedNav<NavItem> {
  *  menu (and the page itself). */
 export function useCompactNav(): boolean {
   return navDestinationCount(useNav()) <= 1;
+}
+
+/** The single page a compact-nav person has, or null when the nav isn't compact. */
+export function useSoleDestination(): NavItem | null {
+  return soleDestination(useNav());
 }
