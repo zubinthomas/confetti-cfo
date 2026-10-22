@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarDays } from "lucide-react";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
 import ReservationsTab from "@/components/reservations/ReservationsTab";
 
-export default function Reservations() {
+export default function Restaurant() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
@@ -15,7 +15,7 @@ export default function Reservations() {
           <span className="text-muted-foreground/40">|</span>
           <div>
             <h1 className="text-xl font-bold font-heading text-foreground tracking-tight flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-primary" /> Reservations
+              <CalendarDays className="w-5 h-5 text-primary" /> Restaurant
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">Bookings, guest arrivals and floor status for Sienna</p>
           </div>

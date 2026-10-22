@@ -65,7 +65,7 @@ const grant = async (userId: number, resource: string, action: string) => {
   const p = rows.find((r) => r.resource === resource && r.action === action)!;
   await db.insert(schema.userPermissions).values({ userId, permissionId: p.id, effect: 'allow' });
 };
-await grant(alice.id, 'Reservation', 'read');
+await grant(alice.id, 'Restaurant', 'read');
 await grant(alice.id, 'Inventory', 'read');
 
 const layout = (id: string) => ({ v: 1 as const, nav: { items: { [id]: { hidden: true } } } });
@@ -92,18 +92,18 @@ assert.deepEqual(layers.roles.map((r) => r.roleId), [low.id, high.id], 'rank 50 
 assert.deepEqual((await getLayoutLayers(bob.id)).roles, [], 'a user without the role gets none of its layouts');
 
 // ── Permission layouts: only held permissions, higher number first ───────────
-await setPermissionLayout(bob.id, 'Reservation', 'read', 5, layout('res'));
+await setPermissionLayout(bob.id, 'Restaurant', 'read', 5, layout('res'));
 await setPermissionLayout(bob.id, 'Inventory', 'read', 20, layout('inv'));
 await setPermissionLayout(bob.id, 'Operations', 'read', 1, layout('ops'));
 await throwsLayout(() => setPermissionLayout(bob.id, 'Nope', 'read', 1, layout('x')), 'unknown permission');
-await throwsLayout(() => setPermissionLayout(bob.id, 'Reservation', 'read', -1, layout('x')), 'negative priority');
-await throwsLayout(() => setPermissionLayout(bob.id, 'Reservation', 'read', 1.5, layout('x')), 'fractional priority');
-await throwsLayout(() => setPermissionLayout(bob.id, 'Reservation', 'read', '1', layout('x')), 'string priority');
+await throwsLayout(() => setPermissionLayout(bob.id, 'Restaurant', 'read', -1, layout('x')), 'negative priority');
+await throwsLayout(() => setPermissionLayout(bob.id, 'Restaurant', 'read', 1.5, layout('x')), 'fractional priority');
+await throwsLayout(() => setPermissionLayout(bob.id, 'Restaurant', 'read', '1', layout('x')), 'string priority');
 layers = await getLayoutLayers(alice.id);
-assert.deepEqual(layers.permission.map((p) => p.key), ['Inventory:read', 'Reservation:read'],
+assert.deepEqual(layers.permission.map((p) => p.key), ['Inventory:read', 'Restaurant:read'],
   'Operations:read is not held, and priority 20 applies before priority 5 so 5 wins');
 await setPermissionLayout(bob.id, 'Inventory', 'read', 3, layout('inv2'));
-assert.deepEqual((await getLayoutLayers(alice.id)).permission.map((p) => p.key), ['Reservation:read', 'Inventory:read'],
+assert.deepEqual((await getLayoutLayers(alice.id)).permission.map((p) => p.key), ['Restaurant:read', 'Inventory:read'],
   're-saving with a lower number makes it win');
 assert.equal((await db.select().from(schema.permissionLayouts)).length, 3, 'one row per permission');
 
@@ -115,12 +115,12 @@ await db.insert(schema.userPermissions).values({
 }).onConflictDoUpdate({
   target: [schema.userPermissions.userId, schema.userPermissions.permissionId], set: { effect: 'deny' },
 });
-assert.deepEqual((await getLayoutLayers(alice.id)).permission.map((p) => p.key), ['Reservation:read'], 'denied permission drops its layout');
+assert.deepEqual((await getLayoutLayers(alice.id)).permission.map((p) => p.key), ['Restaurant:read'], 'denied permission drops its layout');
 
 // ── Admin listing ────────────────────────────────────────────────────────────
 const listed = await listLayouts();
 assert.deepEqual(listed.roles.map((r) => r.roleName), ['High', 'Low'], 'roles listed by rank');
-assert.deepEqual(listed.permissions.map((p) => `${p.resource}:${p.action}`), ['Operations:read', 'Inventory:read', 'Reservation:read'],
+assert.deepEqual(listed.permissions.map((p) => `${p.resource}:${p.action}`), ['Operations:read', 'Inventory:read', 'Restaurant:read'],
   'permissions listed by priority, lowest number first');
 
 // ── Clearing and cascades ────────────────────────────────────────────────────

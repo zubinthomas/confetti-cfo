@@ -145,7 +145,7 @@ export const isEmptyLayout = (config: LayoutConfig) => Object.keys(config).every
 // ── Where a setting came from ───────────────────────────────────────────────
 
 export interface LabelledLayer {
-  /** Shown to the person: "You", "Leadership role", "Reservation:read". */
+  /** Shown to the person: "You", "Leadership role", "Restaurant:read". */
   label: string;
   config: LayoutConfig;
 }

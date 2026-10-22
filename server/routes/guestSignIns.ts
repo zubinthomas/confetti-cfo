@@ -25,7 +25,7 @@ function fail(res: import('express').Response, err: unknown) {
   return res.status(err instanceof GuestSignInError ? 400 : 500).json({ message: message(err) });
 }
 
-router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
+router.get('/', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
   try {
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
     const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
@@ -37,7 +37,7 @@ router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequ
   }
 });
 
-router.get('/estimate', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
+router.get('/estimate', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
   try {
     const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
     const partySize = Number(req.query.partySize);
@@ -50,7 +50,7 @@ router.get('/estimate', requirePermission('Reservation', 'read'), async (req: Au
   }
 });
 
-router.post('/', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.post('/', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     const body = req.body ?? {};
     if (typeof body.guestName !== 'string') return res.status(400).json({ message: 'guestName is required' });
@@ -60,7 +60,7 @@ router.post('/', requirePermission('Reservation', 'write'), async (req: AuthedRe
   }
 });
 
-router.patch('/:id', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     res.json(await updateSignIn(req.params.id, req.body ?? {}));
   } catch (err) {
@@ -68,7 +68,7 @@ router.patch('/:id', requirePermission('Reservation', 'write'), async (req: Auth
   }
 });
 
-router.patch('/:id/assign-table', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/assign-table', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { tableId, expectedUntil, acknowledgeMerge } = req.body ?? {};
     if (tableId !== null && typeof tableId !== 'string') {
@@ -80,7 +80,7 @@ router.patch('/:id/assign-table', requirePermission('Reservation', 'write'), asy
   }
 });
 
-router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/extend', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { minutes } = req.body ?? {};
     if (typeof minutes !== 'number') return res.status(400).json({ message: 'minutes must be a number' });
@@ -90,7 +90,7 @@ router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (re
   }
 });
 
-router.patch('/:id/notify', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/notify', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { notifiedVia } = req.body ?? {};
     res.json(await markNotified(req.params.id, { notifiedVia }));
@@ -99,7 +99,7 @@ router.patch('/:id/notify', requirePermission('Reservation', 'write'), async (re
   }
 });
 
-router.patch('/:id/reorder', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/reorder', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     const { direction } = req.body ?? {};
     if (direction !== 'up' && direction !== 'down') return res.status(400).json({ message: 'direction must be "up" or "down"' });
@@ -109,7 +109,7 @@ router.patch('/:id/reorder', requirePermission('Reservation', 'write'), async (r
   }
 });
 
-router.patch('/:id/sign-out', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+router.patch('/:id/sign-out', requirePermission('Restaurant', 'write'), async (req: AuthedRequest, res) => {
   try {
     res.json(await signOut(req.params.id));
   } catch (err) {
@@ -117,7 +117,7 @@ router.patch('/:id/sign-out', requirePermission('Reservation', 'write'), async (
   }
 });
 
-router.delete('/:id', requirePermission('Reservation', 'delete'), async (req: AuthedRequest, res) => {
+router.delete('/:id', requirePermission('Restaurant', 'delete'), async (req: AuthedRequest, res) => {
   try {
     await deleteSignIn(req.params.id);
     res.json({ message: 'Deleted' });

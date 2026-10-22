@@ -100,13 +100,17 @@ Notes:
   see `npm run role:list` / `npm run permission:list` for what exists. The
   very first user ever created is auto-assigned the built-in `Admin` role.
 
-## Reservation locations, areas and tables
+## Restaurant: locations, areas and tables
 
-Reservations are organised as location -> area -> table: a venue ("Sienna,
-Hindustan Park") holds areas (Cafe on the Ground Floor, Restaurant and Bar on
-the First Floor, Second Floor, Curbside) and each area holds tables. Staff manage all
-three levels under Reservations -> Locations & Tables. A fresh database gets the
-location and the five empty areas at startup.
+The Restaurant module (guest register, reservations, floor) is organised as
+location -> area -> table: a venue ("Sienna, Hindustan Park") holds areas (Cafe
+on the Ground Floor, Restaurant and Bar on the First Floor, Second Floor,
+Curbside) and each area holds tables. Staff manage all three levels under
+Restaurant -> Locations & Tables. A fresh database gets the location and the
+five empty areas at startup. The module lives at `/restaurant` (API
+`/api/restaurant`) and is gated by the `Restaurant` permission; it was called
+Reservations until migration 0050, which renamed the permission and the saved
+layout ids in place.
 
 The tables come from the POS bill-wise sales export. To load them into a
 database, in `server/` with the server stopped (PGlite is single-process):

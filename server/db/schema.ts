@@ -872,7 +872,7 @@ export const bankBalanceEntries = pgTable('bank_balance_entries', {
 // ── Reservations (Cafe/Restaurant table booking with real capacity/overlap
 // enforcement) ────────────────────────────────────────────────────────────
 // Three independently manageable levels (add/edit/remove via
-// server/db/reservations.ts, gated by the Reservation permission), not a fixed
+// server/db/reservations.ts, gated by the Restaurant permission), not a fixed
 // catalog: a location (a venue, e.g. "Sienna, Hindustan Park") holds areas
 // (a room or zone, optionally on a named floor: Cafe on the Ground Floor, Bar
 // on the First Floor) and an area holds tables. `type` on an area or table is
@@ -983,7 +983,7 @@ export const reservations = pgTable('reservations', {
 
 // ── Guest sign-in register (Sienna front-of-house) ────────────────────────
 // The digital replacement for Sienna's handwritten arrivals book, managed in
-// server/db/guestSignIns.ts and gated by the same `Reservation` permission
+// server/db/guestSignIns.ts and gated by the same `Restaurant` permission
 // as the booking book it sits beside. A sign-in is NOT a reservation: a
 // walk-in or function guest has no booked window, no capacity ceiling of its
 // own, and often no table yet. areaId / tableId / reservationId all reuse

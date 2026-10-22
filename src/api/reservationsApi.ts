@@ -1,4 +1,4 @@
-// Reservation management (server/routes/reservations.ts) - locations,
+// Restaurant module API (server/routes/reservations.ts, mounted at /api/restaurant) - locations,
 // areas, tables, and reservations. All four are dedicated endpoints, not the
 // generic entities API, since capacity/overlap checks and delete guards
 // need server-side logic the generic CRUD can't express.
@@ -78,32 +78,32 @@ export interface Reservation {
   tableMaxExtraCapacity: number;
 }
 
-export const listLocations = () => get<ReservationLocation[]>("/reservations/locations");
+export const listLocations = () => get<ReservationLocation[]>("/restaurant/locations");
 export const createLocation = (data: { name: string }) =>
-  post<ReservationLocation>("/reservations/locations", data);
+  post<ReservationLocation>("/restaurant/locations", data);
 export const updateLocation = (id: string, data: { name?: string }) =>
-  patch<ReservationLocation>(`/reservations/locations/${id}`, data);
-export const deleteLocation = (id: string) => del(`/reservations/locations/${id}`);
+  patch<ReservationLocation>(`/restaurant/locations/${id}`, data);
+export const deleteLocation = (id: string) => del(`/restaurant/locations/${id}`);
 
 export const listAreas = (locationId?: string) =>
-  get<ReservationArea[]>(`/reservations/areas${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`);
+  get<ReservationArea[]>(`/restaurant/areas${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`);
 export const createArea = (data: { locationId: string; name: string; floor?: string | null; type?: string | null }) =>
-  post<ReservationArea>("/reservations/areas", data);
+  post<ReservationArea>("/restaurant/areas", data);
 export const updateArea = (id: string, data: { name?: string; floor?: string | null; type?: string | null }) =>
-  patch<ReservationArea>(`/reservations/areas/${id}`, data);
-export const deleteArea = (id: string) => del(`/reservations/areas/${id}`);
+  patch<ReservationArea>(`/restaurant/areas/${id}`, data);
+export const deleteArea = (id: string) => del(`/restaurant/areas/${id}`);
 
 export const listTables = (areaId?: string) =>
-  get<ReservationTable[]>(`/reservations/tables${areaId ? `?areaId=${encodeURIComponent(areaId)}` : ""}`);
+  get<ReservationTable[]>(`/restaurant/tables${areaId ? `?areaId=${encodeURIComponent(areaId)}` : ""}`);
 export const createTable = (data: {
   areaId: string; name: string; type?: string | null; capacity: number;
   maxExtraCapacity?: number; freeMerge?: boolean; mergeableWith?: string[];
-}) => post<ReservationTable>("/reservations/tables", data);
+}) => post<ReservationTable>("/restaurant/tables", data);
 export const updateTable = (id: string, data: {
   name?: string; type?: string | null; capacity?: number; maxExtraCapacity?: number;
   freeMerge?: boolean; mergeableWith?: string[];
-}) => patch<ReservationTable>(`/reservations/tables/${id}`, data);
-export const deleteTable = (id: string) => del(`/reservations/tables/${id}`);
+}) => patch<ReservationTable>(`/restaurant/tables/${id}`, data);
+export const deleteTable = (id: string) => del(`/restaurant/tables/${id}`);
 
 export const listReservations = (params: { date?: string; tableId?: string; areaId?: string } = {}) => {
   const query = new URLSearchParams();
@@ -111,7 +111,7 @@ export const listReservations = (params: { date?: string; tableId?: string; area
   if (params.tableId) query.set("tableId", params.tableId);
   if (params.areaId) query.set("areaId", params.areaId);
   const qs = query.toString();
-  return get<Reservation[]>(`/reservations${qs ? `?${qs}` : ""}`);
+  return get<Reservation[]>(`/restaurant${qs ? `?${qs}` : ""}`);
 };
 
 export const createReservation = (data: {
@@ -124,21 +124,21 @@ export const createReservation = (data: {
   guestPhone?: string;
   guestEmail?: string;
   notes?: string;
-}) => post<Reservation>("/reservations", data);
+}) => post<Reservation>("/restaurant", data);
 
 export const updateReservationStatus = (id: string, status: ReservationStatus) =>
-  patch<Reservation>(`/reservations/${id}/status`, { status });
+  patch<Reservation>(`/restaurant/${id}/status`, { status });
 
 export const extendReservation = (id: string, durationMinutes: number) =>
-  patch<Reservation>(`/reservations/${id}/extend`, { durationMinutes });
+  patch<Reservation>(`/restaurant/${id}/extend`, { durationMinutes });
 
 export const rescheduleReservation = (id: string, data: { date?: string; time?: string; durationMinutes?: number }) =>
-  patch<Reservation>(`/reservations/${id}/reschedule`, data);
+  patch<Reservation>(`/restaurant/${id}/reschedule`, data);
 
 export const endReservationEarly = (id: string) =>
-  patch<Reservation>(`/reservations/${id}/end-early`, {});
+  patch<Reservation>(`/restaurant/${id}/end-early`, {});
 
-export const deleteReservation = (id: string) => del(`/reservations/${id}`);
+export const deleteReservation = (id: string) => del(`/restaurant/${id}`);
 
 // ── Table merges ─────────────────────────────────────────────────────────
 
@@ -156,14 +156,14 @@ export interface TableMerge {
   areaId: string | null;
 }
 
-export const listTableMerges = () => get<TableMerge[]>("/reservations/table-merges");
+export const listTableMerges = () => get<TableMerge[]>("/restaurant/table-merges");
 
 export const createTableMerge = (data: {
   tableIds: string[];
   mergeKind: MergeKind;
   combinedCapacity?: number;
   bufferMinutes?: number;
-}) => post<TableMerge>("/reservations/table-merges", data);
+}) => post<TableMerge>("/restaurant/table-merges", data);
 
 export const releaseTableMerge = (id: string) =>
-  patch<TableMerge>(`/reservations/table-merges/${id}/release`, {});
+  patch<TableMerge>(`/restaurant/table-merges/${id}/release`, {});

@@ -24,7 +24,7 @@ export const GATES = {
   hr: { mode: 'any', requires: [read('Employee'), read('LeaveRequest'), read('Recruitment')] },
   compliance: { requires: [read('Licence')] },
   inventory: { requires: [read('Inventory')] },
-  reservations: { requires: [read('Reservation')] },
+  restaurant: { requires: [read('Restaurant')] },
   import: { mode: 'any', requires: [read('Import'), read('SheetSource')] },
   tally: { requires: [read('TallySource')] },
   settings: { requires: [read('Settings')] },
@@ -72,7 +72,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'hr', label: 'HR Module', to: '/hr', icon: Users, group: 'Modules', defaultPlacement: 'header', gate: GATES.hr },
   { id: 'compliance', label: 'Compliance', to: '/compliance', icon: ShieldCheck, group: 'Modules', defaultPlacement: 'header', gate: GATES.compliance },
   { id: 'inventory', label: 'Inventory', to: '/inventory', icon: Boxes, group: 'Modules', defaultPlacement: 'header', gate: GATES.inventory },
-  { id: 'reservations', label: 'Reservations', to: '/reservations', icon: CalendarDays, group: 'Modules', defaultPlacement: 'header', gate: GATES.reservations },
+  { id: 'restaurant', label: 'Restaurant', to: '/restaurant', icon: CalendarDays, group: 'Modules', defaultPlacement: 'header', gate: GATES.restaurant },
 
   // User menu items.
   { id: 'user-settings', label: 'User settings', title: 'User Settings', to: '/settings/user', icon: UserCog, group: 'Settings', defaultPlacement: 'userMenu', searchable: false },
@@ -96,13 +96,13 @@ export interface TabItem extends TabBase {
   icon?: LucideIcon;
 }
 
-export type PageId = 'hr' | 'users' | 'reservations' | 'store' | 'fnb-view' | 'fnb-detail';
+export type PageId = 'hr' | 'users' | 'restaurant' | 'store' | 'fnb-view' | 'fnb-detail';
 
 /** Names for the layout editor's page list. */
 export const PAGE_LABELS: Record<PageId, string> = {
   hr: 'HR',
   users: 'Users and roles',
-  reservations: 'Reservations',
+  restaurant: 'Restaurant',
   store: 'Store P&L',
   'fnb-view': 'F&B P&L views',
   'fnb-detail': 'F&B detail',
@@ -129,7 +129,7 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'roles', label: 'Roles', icon: Shield, gate: needs('Role') },
     { id: 'layouts', label: 'Layouts', icon: LayoutTemplate, gate: needs('Layout') },
   ],
-  reservations: [
+  restaurant: [
     { id: 'signin', label: 'Guest Register', icon: DoorOpen },
     { id: 'day', label: 'Reservations', icon: CalendarDays },
     { id: 'manage', label: 'Locations & Tables', icon: Settings2 },

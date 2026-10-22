@@ -373,11 +373,11 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
 
 export default function ReservationsTab() {
   const { can } = useAuth();
-  const canWrite = can("Reservation", "write");
-  const canDelete = can("Reservation", "delete");
+  const canWrite = can("Restaurant", "write");
+  const canDelete = can("Restaurant", "delete");
 
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
-  const { tabs: viewTabs, active: view, setActive: setView } = useTabs("reservations");
+  const { tabs: viewTabs, active: view, setActive: setView } = useTabs("restaurant");
   const [locations, setLocations] = useState<ReservationLocation[]>([]);
   const [areas, setAreas] = useState<ReservationArea[]>([]);
   const [tables, setTables] = useState<ReservationTable[]>([]);

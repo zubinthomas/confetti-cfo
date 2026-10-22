@@ -27,7 +27,7 @@ const HR = lazy(() => import('@/pages/HR'));
 const Compliance = lazy(() => import('@/pages/Compliance'));
 const MyProfile = lazy(() => import('@/pages/MyProfile'));
 const InventoryPage = lazy(() => import('@/pages/Inventory'));
-const ReservationsPage = lazy(() => import('@/pages/Reservations'));
+const RestaurantPage = lazy(() => import('@/pages/Restaurant'));
 
 const Splash = ({ message }: { message?: string }) => (
   <div className="fixed inset-0 flex flex-col items-center justify-center gap-3">
@@ -112,8 +112,8 @@ const AuthenticatedApp = () => {
           <Route element={<RequirePermission {...GATES.inventory} />}>
             <Route path="/inventory" element={<Suspense fallback={<Splash />}><InventoryPage /></Suspense>} />
           </Route>
-          <Route element={<RequirePermission {...GATES.reservations} />}>
-            <Route path="/reservations" element={<Suspense fallback={<Splash />}><ReservationsPage /></Suspense>} />
+          <Route element={<RequirePermission {...GATES.restaurant} />}>
+            <Route path="/restaurant" element={<Suspense fallback={<Splash />}><RestaurantPage /></Suspense>} />
           </Route>
           {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
               Renders its own "not linked" message for anyone who navigates here

@@ -184,7 +184,7 @@ export default function SpotlightSearch({ open, onOpenChange }: { open: boolean;
             {results && results.reservations.length > 0 && (
               <CommandGroup heading="Reservations">
                 {results.reservations.map((hit) => (
-                  <CommandItem key={`res-${hit.id}`} value={`res-${hit.id}`} onSelect={() => go('/reservations')}>
+                  <CommandItem key={`res-${hit.id}`} value={`res-${hit.id}`} onSelect={() => go('/restaurant')}>
                     <div className="flex flex-col">
                       <span>{hit.title}</span>
                       {hit.subtitle && <span className="text-xs text-muted-foreground">{hit.subtitle}</span>}

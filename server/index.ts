@@ -88,7 +88,7 @@ app.use('/api/exceptions', exceptionsRoutes);
 app.use('/api/time-log', timeLogRoutes);
 app.use('/api/cost-centres', costCentreRoutes);
 app.use('/api/purchase-orders', purchaseOrdersRoutes);
-app.use('/api/reservations', reservationsRoutes);
+app.use('/api/restaurant', reservationsRoutes);
 app.use('/api/guest-sign-ins', guestSignInsRoutes);
 app.use('/api/recruitment', recruitmentHireRoutes);
 app.use('/api/employees', offboardingRoutes);

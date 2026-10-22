@@ -86,7 +86,7 @@ async function searchBillsScoped(userId: number, q: string) {
 }
 
 async function searchReservationsScoped(userId: number, q: string) {
-  if (!(await hasPermission(userId, 'Reservation', 'read'))) return [];
+  if (!(await hasPermission(userId, 'Restaurant', 'read'))) return [];
   return searchReservations(q, RESULT_CAP);
 }
 
