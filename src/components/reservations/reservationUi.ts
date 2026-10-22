@@ -101,3 +101,14 @@ export function floorSummary(floors: Pick<FloorInfo, "state">[]): string {
 }
 
 export const isIdList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+export type MergeKind = "free" | "linked" | "none";
+
+/** How a table may merge with its neighbours, for the catalog tile. A free-merge
+ *  table wins over a kept list of links (the list is only hidden while free merge is on). */
+export function mergeSummary(table: { freeMerge: boolean; mergeableWith: string[] }): { kind: MergeKind; label: string } {
+  if (table.freeMerge) return { kind: "free", label: "Merges: free" };
+  const n = table.mergeableWith.length;
+  if (n > 0) return { kind: "linked", label: `Merges: ${n} linked` };
+  return { kind: "none", label: "No merging" };
+}

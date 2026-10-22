@@ -3,8 +3,8 @@ import { ChevronDown, Loader2, Plus } from "lucide-react";
 import type { ReservationArea, ReservationLocation, ReservationTable } from "@/api/reservationsApi";
 import DashCard from "@/components/dashboard/DashCard";
 import { ArchivedBadge, CatalogRowActions, type CatalogKind } from "@/components/reservations/CatalogParts";
-import TableTile from "@/components/reservations/TableTile";
-import { allCollapsed, collapseAreas, expandAreas, seatsLabel, toggleId } from "@/components/reservations/reservationUi";
+import TableTile, { MERGE_BAR } from "@/components/reservations/TableTile";
+import { allCollapsed, collapseAreas, expandAreas, mergeSummary, seatsLabel, toggleId } from "@/components/reservations/reservationUi";
 import { usePersistedState } from "@/hooks/usePersistedState";
 
 type CatalogView = "grid" | "list";
@@ -15,6 +15,13 @@ const PILL = "text-sm px-3 py-1.5 max-sm:min-h-11 rounded-lg";
 const ADD_LINK = "text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11";
 // Two across on a phone (inner width is about 240px there), wider tiles from sm up.
 const GRID = "grid gap-2 grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]";
+
+/** "12 tables", plus " · 2 archived" when archived ones are in the list. */
+function tableCount(tables: { archivedAt: string | null }[]): string {
+  const archived = tables.filter((t) => t.archivedAt).length;
+  const active = tables.length - archived;
+  return `${active} ${active === 1 ? "table" : "tables"}${archived > 0 ? ` · ${archived} archived` : ""}`;
+}
 
 interface Props {
   loading: boolean;
@@ -95,6 +102,13 @@ export default function CatalogManager(p: Props) {
         <p className="text-sm text-muted-foreground text-center py-8">No locations yet.</p>
       ) : (
         <div className="space-y-6">
+          {view === "grid" && (
+            <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground" aria-label="Legend">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: MERGE_BAR.free }} /> Free merge</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: MERGE_BAR.linked }} /> Linked tables</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full border border-border" /> No merging</span>
+            </div>
+          )}
           {p.locations.map((loc) => {
             const locAreas = p.areas.filter((a) => a.locationId === loc.id);
             return (
@@ -123,7 +137,7 @@ export default function CatalogManager(p: Props) {
                         onEdit: () => p.onEditTable(t, area), ...actions("table", t.id, t.name),
                       });
                       return (
-                        <div key={area.id} className={`rounded-lg bg-muted/30 border border-border/60 p-3 ${area.archivedAt ? "opacity-60" : ""}`}>
+                        <div key={area.id} className={`pt-3 border-t border-border/60 first:border-t-0 first:pt-0 ${area.archivedAt ? "opacity-60" : ""}`}>
                           <div className="flex items-center justify-between gap-3">
                             <button
                               onClick={() => setCollapsed((ids) => toggleId(ids, area.id))}
@@ -134,7 +148,7 @@ export default function CatalogManager(p: Props) {
                               <span className="text-sm font-medium text-foreground">{area.name}</span>
                               {area.floor && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{area.floor}</span>}
                               {area.type && <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">{area.type}</span>}
-                              <span className="text-xs text-muted-foreground">{areaTables.length} {areaTables.length === 1 ? "table" : "tables"}</span>
+                              <span className="text-xs text-muted-foreground">{tableCount(areaTables)}</span>
                               {area.archivedAt && <ArchivedBadge />}
                             </button>
                             <CatalogRowActions
@@ -149,7 +163,14 @@ export default function CatalogManager(p: Props) {
                               {view === "grid" ? (
                                 (areaTables.length > 0 || canAddTable) && (
                                   <div className={GRID}>
-                                    {areaTables.map((t) => <TableTile key={t.id} table={t} {...tableActions(t)} />)}
+                                    {areaTables.map((t) => (
+                                      <TableTile
+                                        key={t.id} table={t} canWrite={p.canWrite} canDelete={p.canDelete}
+                                        onOpen={() => p.onEditTable(t, area)}
+                                        onRestore={() => p.onRestore("table", t.id)}
+                                        onPurge={() => p.onPurge("table", t.id, t.name)}
+                                      />
+                                    ))}
                                     {canAddTable && (
                                       <button
                                         onClick={() => p.onAddTable(area)}
@@ -167,7 +188,7 @@ export default function CatalogManager(p: Props) {
                                       {areaTables.map((t) => (
                                         <div key={t.id} className={`flex items-center justify-between gap-3 text-sm border-b border-border/60 last:border-b-0 py-1 ${t.archivedAt ? "opacity-60" : ""}`}>
                                           <span className="text-foreground min-w-0 break-words">
-                                            {t.name} <span className="text-muted-foreground">· seats {seatsLabel(t.capacity, t.maxExtraCapacity)}{t.type ? ` · ${t.type}` : ""}</span>{" "}
+                                            {t.name} <span className="text-muted-foreground">· seats {seatsLabel(t.capacity, t.maxExtraCapacity)}{t.type ? ` · ${t.type}` : ""}{mergeSummary(t).kind !== "none" ? ` · ${mergeSummary(t).label}` : ""}</span>{" "}
                                             {t.archivedAt && <ArchivedBadge />}
                                           </span>
                                           <CatalogRowActions label={`table ${t.name}`} item={t} {...tableActions(t)} />

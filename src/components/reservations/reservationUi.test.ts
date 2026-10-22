@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, allCollapsed, collapseAreas, endTime, expandAreas, floorSummary, isIdList, scopeRange, seatsLabel, tileStatus, toggleId } from "./reservationUi";
+import { addDays, allCollapsed, collapseAreas, endTime, expandAreas, floorSummary, isIdList, mergeSummary, scopeRange, seatsLabel, tileStatus, toggleId } from "./reservationUi";
 
 const TODAY = "2026-10-22";
 
@@ -87,5 +87,15 @@ describe("isIdList", () => {
     expect(isIdList([])).toBe(true);
     expect(isIdList([1])).toBe(false);
     expect(isIdList("a")).toBe(false);
+  });
+});
+
+describe("mergeSummary", () => {
+  it("free merge wins over a kept list of links", () => {
+    expect(mergeSummary({ freeMerge: true, mergeableWith: ["a"] })).toEqual({ kind: "free", label: "Merges: free" });
+  });
+  it("counts linked tables, and says none when there are no links", () => {
+    expect(mergeSummary({ freeMerge: false, mergeableWith: ["a", "b"] })).toEqual({ kind: "linked", label: "Merges: 2 linked" });
+    expect(mergeSummary({ freeMerge: false, mergeableWith: [] })).toEqual({ kind: "none", label: "No merging" });
   });
 });

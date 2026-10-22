@@ -208,9 +208,12 @@ function AreaModal({ area, locationId, locationName, onClose, onSaved }: {
   );
 }
 
-function TableModal({ table, tables, areaId, areaName, onClose, onSaved }: {
+function TableModal({ table, tables, areaId, areaName, canDelete, onArchive, onClose, onSaved }: {
   table: ReservationTable | null; tables: ReservationTable[];
-  areaId: string; areaName: string; onClose: () => void; onSaved: () => void;
+  areaId: string; areaName: string;
+  /** Restaurant:delete. With it, editing an existing table offers Archive. */
+  canDelete: boolean; onArchive: () => void;
+  onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
     name: table?.name ?? "", type: table?.type ?? "",
@@ -300,11 +303,16 @@ function TableModal({ table, tables, areaId, areaName, onClose, onSaved }: {
           )}
         </div>
         {error && <p className="px-6 text-xs text-destructive -mt-2 mb-2">{error}</p>}
-        <div className="px-6 pb-6 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
-          <button onClick={save} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save
-          </button>
+        <div className="px-6 pb-6 flex items-center gap-3">
+          {table && canDelete && (
+            <button onClick={onArchive} className="text-sm px-4 py-2 rounded-lg text-destructive hover:bg-destructive/10 mr-auto">Archive</button>
+          )}
+          <span className="flex gap-3 ml-auto">
+            <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+            <button onClick={save} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save
+            </button>
+          </span>
         </div>
       </div>
     </div>
@@ -726,6 +734,12 @@ export default function ReservationsTab() {
       {tableModal && (
         <TableModal
           table={tableModal.table} tables={tables} areaId={tableModal.areaId} areaName={tableModal.areaName}
+          canDelete={catDelete}
+          onArchive={() => {
+            const t = tableModal.table;
+            setTableModal(null);
+            if (t) { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "table", id: t.id, name: t.name }); }
+          }}
           onClose={() => setTableModal(null)}
           onSaved={() => { setTableModal(null); loadCatalog(); }}
         />
