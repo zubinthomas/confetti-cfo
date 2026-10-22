@@ -17,8 +17,8 @@ export interface GuestSignIn {
   partySize: number;
   purpose: string | null;
   host: string | null;
-  locationId: string | null;
-  locationName: string | null;
+  areaId: string | null;
+  areaName: string | null;
   tableId: string | null;
   tableName: string | null;
   tableCapacity: number | null;
@@ -47,7 +47,7 @@ export interface CreateSignInPayload {
   partySize?: number;
   purpose?: string;
   host?: string;
-  locationId?: string | null;
+  areaId?: string | null;
   reservationId?: string | null;
   signedInAt?: string;
   notes?: string;
@@ -65,20 +65,20 @@ export interface AssignTableClashDetail {
 }
 
 export const listSignIns = (
-  params: { date?: string; locationId?: string; onPremisesOnly?: boolean; unseatedOnly?: boolean } = {},
+  params: { date?: string; areaId?: string; onPremisesOnly?: boolean; unseatedOnly?: boolean } = {},
 ) => {
   const query = new URLSearchParams();
   if (params.date) query.set("date", params.date);
-  if (params.locationId) query.set("locationId", params.locationId);
+  if (params.areaId) query.set("areaId", params.areaId);
   if (params.onPremisesOnly) query.set("onPremisesOnly", "true");
   if (params.unseatedOnly) query.set("unseatedOnly", "true");
   const qs = query.toString();
   return get<GuestSignIn[]>(`/guest-sign-ins${qs ? `?${qs}` : ""}`);
 };
 
-export const estimateWait = (params: { locationId?: string; partySize: number }) => {
+export const estimateWait = (params: { areaId?: string; partySize: number }) => {
   const query = new URLSearchParams();
-  if (params.locationId) query.set("locationId", params.locationId);
+  if (params.areaId) query.set("areaId", params.areaId);
   query.set("partySize", String(params.partySize));
   return get<{ minutes: number | null }>(`/guest-sign-ins/estimate?${query.toString()}`);
 };
@@ -88,7 +88,7 @@ export const createSignIn = (data: CreateSignInPayload) =>
 
 export const updateSignIn = (
   id: string,
-  data: Partial<Pick<CreateSignInPayload, "guestName" | "visitType" | "guestPhone" | "guestEmail" | "partySize" | "purpose" | "host" | "notes" | "locationId">>,
+  data: Partial<Pick<CreateSignInPayload, "guestName" | "visitType" | "guestPhone" | "guestEmail" | "partySize" | "purpose" | "host" | "notes" | "areaId">>,
 ) => patch<GuestSignIn>(`/guest-sign-ins/${id}`, data);
 
 export const assignTable = (

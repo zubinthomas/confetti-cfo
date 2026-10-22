@@ -871,18 +871,32 @@ export const bankBalanceEntries = pgTable('bank_balance_entries', {
 
 // ── Reservations (Cafe/Restaurant table booking with real capacity/overlap
 // enforcement) ────────────────────────────────────────────────────────────
-// Locations and tables are both independently manageable (add/edit/remove
-// via server/db/reservations.ts, gated by the Reservation permission) - not
-// a fixed catalog. `type` on each is a free-text category label only, same
-// role as `division`/`category` elsewhere in this schema - no behavior is
-// keyed off it.
+// Three independently manageable levels (add/edit/remove via
+// server/db/reservations.ts, gated by the Reservation permission), not a fixed
+// catalog: a location (a venue, e.g. "Sienna, Hindustan Park") holds areas
+// (a room or zone, optionally on a named floor: Cafe on the Ground Floor, Bar
+// on the First Floor) and an area holds tables. `type` on an area or table is
+// a free-text category label only, same role as `division`/`category`
+// elsewhere in this schema - no behavior is keyed off it.
 export const reservationLocations = pgTable('reservation_locations', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
   name: text('name').notNull(),
-  type: text('type'),
 }, (t) => [
   uniqueIndex('reservation_locations_name').on(t.name),
+]);
+
+export const reservationAreas = pgTable('reservation_areas', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  locationId: text('location_id').notNull().references(() => reservationLocations.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  // "Ground Floor", "First Floor"... Null for an area that is its own floor
+  // (e.g. "Second Floor").
+  floor: text('floor'),
+  type: text('type'),
+}, (t) => [
+  uniqueIndex('reservation_areas_location_name').on(t.locationId, t.name),
 ]);
 
 // Every table is a single bookable unit - capacity is its real seat count,
@@ -898,7 +912,7 @@ export const reservationLocations = pgTable('reservation_locations', {
 export const reservationTables = pgTable('reservation_tables', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),
-  locationId: text('location_id').notNull().references(() => reservationLocations.id, { onDelete: 'restrict' }),
+  areaId: text('area_id').notNull().references(() => reservationAreas.id, { onDelete: 'restrict' }),
   name: text('name').notNull(),
   type: text('type'),
   capacity: integer('capacity').notNull(),
@@ -909,7 +923,7 @@ export const reservationTables = pgTable('reservation_tables', {
   // join (see tablesCanMerge in server/db/tableMerges.ts).
   freeMerge: boolean('free_merge').notNull().default(false),
 }, (t) => [
-  uniqueIndex('reservation_tables_location_name').on(t.locationId, t.name),
+  uniqueIndex('reservation_tables_area_name').on(t.areaId, t.name),
 ]);
 
 export const reservationStatusEnum = pgEnum('reservation_status', [
@@ -972,7 +986,7 @@ export const reservations = pgTable('reservations', {
 // server/db/guestSignIns.ts and gated by the same `Reservation` permission
 // as the booking book it sits beside. A sign-in is NOT a reservation: a
 // walk-in or function guest has no booked window, no capacity ceiling of its
-// own, and often no table yet. locationId / tableId / reservationId all reuse
+// own, and often no table yet. areaId / tableId / reservationId all reuse
 // the reservations catalogue and all null out (never cascade-delete) if the
 // referenced row goes away - a register entry is a historical record.
 //
@@ -994,7 +1008,7 @@ export const guestSignIns = pgTable('guest_sign_ins', {
   partySize: integer('party_size').notNull().default(1),
   purpose: text('purpose'),
   host: text('host'),
-  locationId: text('location_id').references(() => reservationLocations.id, { onDelete: 'set null' }),
+  areaId: text('area_id').references(() => reservationAreas.id, { onDelete: 'set null' }),
   tableId: text('table_id').references(() => reservationTables.id, { onDelete: 'set null' }),
   reservationId: text('reservation_id').references(() => reservations.id, { onDelete: 'set null' }),
   signedInAt: text('signed_in_at').notNull(),  // ISO-8601

@@ -1,4 +1,4 @@
-// Reservation management: locations and tables are both independently
+// Reservation management: locations, areas and tables are independently
 // manageable catalogs (not a fixed list, see server/db/schema.ts), and
 // reservations book a specific table for a time window. A table holds at
 // most one active reservation per overlapping window - that single rule
@@ -9,6 +9,7 @@ import { and, asc, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { escapeLikeTerm } from '../db.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
+import { DEFAULT_AREAS, DEFAULT_LOCATION } from './reservationCatalog.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow } from './tableMerges.ts';
 
 // Re-exported for server/db/guestSignIns.ts, which imports the time helpers
@@ -24,7 +25,7 @@ export class ReservationError extends Error {}
 export interface TableView {
   id: string;
   createdDate: string;
-  locationId: string;
+  areaId: string;
   name: string;
   type: string | null;
   capacity: number;
@@ -33,18 +34,18 @@ export interface TableView {
   mergeableWith: string[];
 }
 
-/** Validate a proposed merge-target list for a table in `locationId`: dedupe,
+/** Validate a proposed merge-target list for a table in `areaId`: dedupe,
  *  drop self, then require every id to exist and sit in the same area. Returns
  *  the cleaned id list. */
 async function resolveMergeTargets(
-  tableId: string, locationId: string, mergeableWith: string[],
+  tableId: string, areaId: string, mergeableWith: string[],
 ): Promise<string[]> {
   const ids = [...new Set(mergeableWith)].filter((x) => x !== tableId);
   if (ids.length === 0) return [];
   const partners = await db.select().from(schema.reservationTables)
     .where(inArray(schema.reservationTables.id, ids));
   if (partners.length !== ids.length) throw new ReservationError('One or more merge targets no longer exist');
-  if (partners.some((p) => p.locationId !== locationId)) {
+  if (partners.some((p) => p.areaId !== areaId)) {
     throw new ReservationError('Merge targets must be in the same area as this table');
   }
   return ids;
@@ -90,30 +91,34 @@ export async function listActiveReservationOverlaps(
     .sort((a, b) => toMinutes(a.time) - toMinutes(b.time));
 }
 
-/** Deterministic and code-only (the two location names, not real table
- *  data), so - like seedPermissionsCatalog - this is safe to call
+/** Deterministic and code-only (the default venue and its area names, not
+ *  real table data), so - like seedPermissionsCatalog - this is safe to call
  *  unconditionally from client.ts's ready(). Only seeds once: if any
  *  location already exists (including if the business has since renamed
- *  or deleted "Cafe"/"Restaurant"), it does nothing - this must never
- *  resurrect a location someone intentionally removed. */
+ *  or deleted the defaults), it does nothing - this must never resurrect a
+ *  location someone intentionally removed. Databases that predate the
+ *  location level get their location from migration 0049 instead. */
 export async function seedDefaultReservationLocations() {
   const existing = await db.select({ id: schema.reservationLocations.id }).from(schema.reservationLocations).limit(1);
   if (existing.length > 0) return;
   const now = new Date().toISOString();
-  await db.insert(schema.reservationLocations).values([
-    { id: randomUUID(), createdDate: now, name: 'Cafe', type: null },
-    { id: randomUUID(), createdDate: now, name: 'Restaurant', type: null },
-  ]);
+  const locationId = randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.insert(schema.reservationLocations).values({ id: locationId, createdDate: now, name: DEFAULT_LOCATION });
+    await tx.insert(schema.reservationAreas).values(
+      DEFAULT_AREAS.map((a) => ({ id: randomUUID(), createdDate: now, locationId, name: a.name, floor: a.floor })),
+    );
+  });
 }
 
-// ── Locations ────────────────────────────────────────────────────────────
+// ── Locations (venues) ───────────────────────────────────────────────────
 
 export async function listLocations() {
   await ready();
   return db.select().from(schema.reservationLocations).orderBy(asc(schema.reservationLocations.name));
 }
 
-export async function createLocation({ name, type }: { name: string; type?: string | null }) {
+export async function createLocation({ name }: { name: string }) {
   await ready();
   const trimmed = name?.trim();
   if (!trimmed) throw new ReservationError('Location name is required');
@@ -123,17 +128,16 @@ export async function createLocation({ name, type }: { name: string; type?: stri
     id: randomUUID(),
     createdDate: new Date().toISOString(),
     name: trimmed,
-    type: type?.trim() || null,
   }).returning();
   return row;
 }
 
-export async function updateLocation(id: string, { name, type }: { name?: string; type?: string | null }) {
+export async function updateLocation(id: string, { name }: { name?: string }) {
   await ready();
   const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
   if (!existing) throw new ReservationError(`No location with id ${id}`);
 
-  const patch: { name?: string; type?: string | null } = {};
+  const patch: { name?: string } = {};
   if (name !== undefined) {
     const trimmed = name.trim();
     if (!trimmed) throw new ReservationError('Location name is required');
@@ -143,7 +147,7 @@ export async function updateLocation(id: string, { name, type }: { name?: string
     }
     patch.name = trimmed;
   }
-  if (type !== undefined) patch.type = type?.trim() || null;
+  if (Object.keys(patch).length === 0) return existing;
 
   const [row] = await db.update(schema.reservationLocations).set(patch).where(eq(schema.reservationLocations.id, id)).returning();
   return row;
@@ -153,10 +157,77 @@ export async function deleteLocation(id: string) {
   await ready();
   const [existing] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
   if (!existing) throw new ReservationError(`No location with id ${id}`);
-  const [anyTable] = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables)
-    .where(eq(schema.reservationTables.locationId, id)).limit(1);
-  if (anyTable) throw new ReservationError(`Remove ${existing.name}'s tables before deleting the location.`);
+  const [anyArea] = await db.select({ id: schema.reservationAreas.id }).from(schema.reservationAreas)
+    .where(eq(schema.reservationAreas.locationId, id)).limit(1);
+  if (anyArea) throw new ReservationError(`Remove ${existing.name}'s areas before deleting the location.`);
   await db.delete(schema.reservationLocations).where(eq(schema.reservationLocations.id, id));
+}
+
+// ── Areas (a room or zone inside a location, optionally on a named floor) ──
+
+export async function listAreas({ locationId }: { locationId?: string } = {}) {
+  await ready();
+  let query = db.select().from(schema.reservationAreas).$dynamic();
+  if (locationId) query = query.where(eq(schema.reservationAreas.locationId, locationId));
+  return query.orderBy(asc(schema.reservationAreas.floor), asc(schema.reservationAreas.name));
+}
+
+export async function createArea(
+  { locationId, name, floor, type }: { locationId: string; name: string; floor?: string | null; type?: string | null },
+) {
+  await ready();
+  const [location] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, locationId));
+  if (!location) throw new ReservationError(`No location with id ${locationId}`);
+  const trimmed = name?.trim();
+  if (!trimmed) throw new ReservationError('Area name is required');
+  const [existing] = await db.select().from(schema.reservationAreas)
+    .where(and(eq(schema.reservationAreas.locationId, locationId), eq(schema.reservationAreas.name, trimmed)));
+  if (existing) throw new ReservationError(`${location.name} already has an area named "${trimmed}"`);
+  const [row] = await db.insert(schema.reservationAreas).values({
+    id: randomUUID(),
+    createdDate: new Date().toISOString(),
+    locationId,
+    name: trimmed,
+    floor: floor?.trim() || null,
+    type: type?.trim() || null,
+  }).returning();
+  return row;
+}
+
+export async function updateArea(
+  id: string, { name, floor, type }: { name?: string; floor?: string | null; type?: string | null },
+) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
+  if (!existing) throw new ReservationError(`No area with id ${id}`);
+
+  const patch: { name?: string; floor?: string | null; type?: string | null } = {};
+  if (name !== undefined) {
+    const trimmed = name.trim();
+    if (!trimmed) throw new ReservationError('Area name is required');
+    if (trimmed !== existing.name) {
+      const [dupe] = await db.select().from(schema.reservationAreas)
+        .where(and(eq(schema.reservationAreas.locationId, existing.locationId), eq(schema.reservationAreas.name, trimmed)));
+      if (dupe) throw new ReservationError(`This location already has an area named "${trimmed}"`);
+    }
+    patch.name = trimmed;
+  }
+  if (floor !== undefined) patch.floor = floor?.trim() || null;
+  if (type !== undefined) patch.type = type?.trim() || null;
+  if (Object.keys(patch).length === 0) return existing;
+
+  const [row] = await db.update(schema.reservationAreas).set(patch).where(eq(schema.reservationAreas.id, id)).returning();
+  return row;
+}
+
+export async function deleteArea(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
+  if (!existing) throw new ReservationError(`No area with id ${id}`);
+  const [anyTable] = await db.select({ id: schema.reservationTables.id }).from(schema.reservationTables)
+    .where(eq(schema.reservationTables.areaId, id)).limit(1);
+  if (anyTable) throw new ReservationError(`Remove ${existing.name}'s tables before deleting the area.`);
+  await db.delete(schema.reservationAreas).where(eq(schema.reservationAreas.id, id));
 }
 
 // ── Tables ───────────────────────────────────────────────────────────────
@@ -184,40 +255,40 @@ async function mergeTargetsFor(id: string): Promise<string[]> {
   return rows.map((r) => (r.tableAId === id ? r.tableBId : r.tableAId)).sort();
 }
 
-export async function listTables({ locationId }: { locationId?: string } = {}): Promise<TableView[]> {
+export async function listTables({ areaId }: { areaId?: string } = {}): Promise<TableView[]> {
   await ready();
   let query = db.select().from(schema.reservationTables).$dynamic();
-  if (locationId) query = query.where(eq(schema.reservationTables.locationId, locationId));
+  if (areaId) query = query.where(eq(schema.reservationTables.areaId, areaId));
   const rows = await query.orderBy(asc(schema.reservationTables.name));
   const links = await mergeLinksByTable();
   return rows.map((r) => ({ ...r, mergeableWith: links.get(r.id) ?? [] }));
 }
 
 export async function createTable(
-  { locationId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }:
-  { locationId: string; name: string; type?: string | null; capacity: number;
+  { areaId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }:
+  { areaId: string; name: string; type?: string | null; capacity: number;
     maxExtraCapacity?: number; freeMerge?: boolean; mergeableWith?: string[] },
 ): Promise<TableView> {
   await ready();
-  const [location] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, locationId));
-  if (!location) throw new ReservationError(`No location with id ${locationId}`);
+  const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, areaId));
+  if (!area) throw new ReservationError(`No area with id ${areaId}`);
   const trimmed = name?.trim();
   if (!trimmed) throw new ReservationError('Table name is required');
   if (!Number.isInteger(capacity) || capacity <= 0) throw new ReservationError('Capacity must be a positive whole number');
   const extra = maxExtraCapacity ?? 0;
   if (!Number.isInteger(extra) || extra < 0) throw new ReservationError('Max extra capacity must be a whole number of 0 or more');
   const [dupe] = await db.select().from(schema.reservationTables)
-    .where(and(eq(schema.reservationTables.locationId, locationId), eq(schema.reservationTables.name, trimmed)));
-  if (dupe) throw new ReservationError(`${location.name} already has a table named "${trimmed}"`);
+    .where(and(eq(schema.reservationTables.areaId, areaId), eq(schema.reservationTables.name, trimmed)));
+  if (dupe) throw new ReservationError(`${area.name} already has a table named "${trimmed}"`);
 
   const id = randomUUID();
-  const targetIds = await resolveMergeTargets(id, locationId, mergeableWith ?? []);
+  const targetIds = await resolveMergeTargets(id, areaId, mergeableWith ?? []);
 
   await db.transaction(async (tx) => {
     await tx.insert(schema.reservationTables).values({
       id,
       createdDate: new Date().toISOString(),
-      locationId,
+      areaId,
       name: trimmed,
       type: type?.trim() || null,
       capacity,
@@ -250,8 +321,8 @@ export async function updateTable(
     if (!trimmed) throw new ReservationError('Table name is required');
     if (trimmed !== existing.name) {
       const [dupe] = await db.select().from(schema.reservationTables)
-        .where(and(eq(schema.reservationTables.locationId, existing.locationId), eq(schema.reservationTables.name, trimmed)));
-      if (dupe) throw new ReservationError(`This location already has a table named "${trimmed}"`);
+        .where(and(eq(schema.reservationTables.areaId, existing.areaId), eq(schema.reservationTables.name, trimmed)));
+      if (dupe) throw new ReservationError(`This area already has a table named "${trimmed}"`);
     }
     patch.name = trimmed;
   }
@@ -270,7 +341,7 @@ export async function updateTable(
 
   const targetIds = mergeableWith === undefined
     ? null
-    : await resolveMergeTargets(id, existing.locationId, mergeableWith);
+    : await resolveMergeTargets(id, existing.areaId, mergeableWith);
 
   await db.transaction(async (tx) => {
     if (Object.keys(patch).length > 0) {
@@ -304,7 +375,7 @@ export async function deleteTable(id: string) {
 
 // ── Reservations ─────────────────────────────────────────────────────────
 
-export async function listReservations({ date, tableId, locationId }: { date?: string; tableId?: string; locationId?: string } = {}) {
+export async function listReservations({ date, tableId, areaId }: { date?: string; tableId?: string; areaId?: string } = {}) {
   await ready();
   let query = db
     .select({
@@ -313,7 +384,9 @@ export async function listReservations({ date, tableId, locationId }: { date?: s
       tableId: schema.reservations.tableId,
       tableName: schema.reservationTables.name,
       tableCapacity: schema.reservationTables.capacity,
-      locationId: schema.reservationTables.locationId,
+      areaId: schema.reservationTables.areaId,
+      areaName: schema.reservationAreas.name,
+      floor: schema.reservationAreas.floor,
       locationName: schema.reservationLocations.name,
       date: schema.reservations.date,
       time: schema.reservations.time,
@@ -330,13 +403,14 @@ export async function listReservations({ date, tableId, locationId }: { date?: s
     })
     .from(schema.reservations)
     .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.reservations.tableId))
-    .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationTables.locationId))
+    .innerJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.reservationTables.areaId))
+    .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationAreas.locationId))
     .$dynamic();
 
   const conditions = [];
   if (date) conditions.push(eq(schema.reservations.date, date));
   if (tableId) conditions.push(eq(schema.reservations.tableId, tableId));
-  if (locationId) conditions.push(eq(schema.reservationTables.locationId, locationId));
+  if (areaId) conditions.push(eq(schema.reservationTables.areaId, areaId));
   if (conditions.length > 0) query = query.where(and(...conditions));
 
   return query.orderBy(asc(schema.reservations.date), asc(schema.reservations.time));

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import AreaSelect from "@/components/reservations/AreaSelect";
 import { Plus, X, Loader2, Trash2, Pencil, LogOut, Armchair, Clock, Phone, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
@@ -13,7 +14,7 @@ import {
 } from "@/api/guestSignInsApi";
 import {
   listReservations, listTableMerges, createTableMerge, canMergeTables,
-  type Reservation, type ReservationLocation, type ReservationTable, type TableMerge, type MergeKind,
+  type Reservation, type ReservationLocation, type ReservationArea, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
@@ -66,21 +67,22 @@ const EMPTY = {
   visitType: "walk_in" as GuestVisitType,
   reservationId: "",
   guestName: "", guestPhone: "", guestEmail: "",
-  partySize: "2", locationId: "", purpose: "", host: "", notes: "",
+  partySize: "2", areaId: "", purpose: "", host: "", notes: "",
   timeIn: nowTimeValue(),
   quotedWaitMinutes: "",
 };
 
 export function SignInModal({
-  locations, existing, onClose, onSaved,
+  locations, areas, existing, onClose, onSaved,
 }: {
   locations: ReservationLocation[];
+  areas: ReservationArea[];
   existing: GuestSignIn | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { draft, save: saveDraft, clear: clearDraft } = useDraftPersistence<typeof EMPTY>("guest-signin");
-  const blankSignIn = () => ({ ...EMPTY, locationId: locations[0]?.id ?? "" });
+  const blankSignIn = () => ({ ...EMPTY, areaId: areas[0]?.id ?? "" });
   const [form, setForm] = useState(() => existing ? {
     ...EMPTY,
     visitType: existing.visitType,
@@ -88,7 +90,7 @@ export function SignInModal({
     guestPhone: existing.guestPhone ?? "",
     guestEmail: existing.guestEmail ?? "",
     partySize: String(existing.partySize),
-    locationId: existing.locationId ?? "",
+    areaId: existing.areaId ?? "",
     purpose: existing.purpose ?? "",
     host: existing.host ?? "",
     notes: existing.notes ?? "",
@@ -138,11 +140,11 @@ export function SignInModal({
     const partySize = Number(form.partySize);
     if (!partySize || partySize <= 0) { setSuggestedWait(undefined); return; }
     let cancelled = false;
-    estimateWait({ locationId: form.locationId || undefined, partySize })
+    estimateWait({ areaId: form.areaId || undefined, partySize })
       .then((r) => { if (!cancelled) setSuggestedWait(r.minutes); })
       .catch(() => { if (!cancelled) setSuggestedWait(undefined); });
     return () => { cancelled = true; };
-  }, [existing, form.locationId, form.partySize]);
+  }, [existing, form.areaId, form.partySize]);
 
   const linkBooking = (id: string) => {
     const b = todaysBookings.find((r) => r.id === id);
@@ -153,7 +155,7 @@ export function SignInModal({
         guestName: b.guestName,
         guestPhone: b.guestPhone ?? f.guestPhone,
         partySize: String(b.partySize),
-        locationId: b.locationId,
+        areaId: b.areaId,
       } : {}),
     }));
   };
@@ -172,7 +174,7 @@ export function SignInModal({
           guestPhone: form.guestPhone.trim() || undefined,
           guestEmail: form.guestEmail.trim() || undefined,
           partySize,
-          locationId: form.locationId || null,
+          areaId: form.areaId || null,
           purpose: form.purpose.trim() || undefined,
           host: form.host.trim() || undefined,
           notes: form.notes.trim() || undefined,
@@ -185,7 +187,7 @@ export function SignInModal({
           guestPhone: form.guestPhone.trim() || undefined,
           guestEmail: form.guestEmail.trim() || undefined,
           partySize,
-          locationId: form.locationId || undefined,
+          areaId: form.areaId || undefined,
           purpose: form.purpose.trim() || undefined,
           host: form.host.trim() || undefined,
           notes: form.notes.trim() || undefined,
@@ -243,13 +245,11 @@ export function SignInModal({
           <FormField label="Guest Email" name="guestEmail" value={form.guestEmail} onChange={update} />
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Area</label>
-            <select
-              value={form.locationId} onChange={(e) => update("locationId", e.target.value)}
-              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
-            >
-              <option value="">—</option>
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            <AreaSelect
+              value={form.areaId} onChange={(id) => update("areaId", id)}
+              locations={locations} areas={areas} allowNone noneLabel="—"
+              className="w-full text-base sm:text-sm border border-border rounded-lg px-3 py-2 max-sm:min-h-11 bg-background text-foreground"
+            />
           </div>
           {!existing && (
             <FormField label="Time in" name="timeIn" type="time" value={form.timeIn} onChange={update} />
@@ -295,7 +295,7 @@ export function AssignTableModal({
   onSaved: () => void;
 }) {
   const mergedTableIds = useMemo(() => new Set(merges.flatMap((m) => m.tableIds)), [merges]);
-  const areaTables = (signIn.locationId ? tables.filter((t) => t.locationId === signIn.locationId) : tables)
+  const areaTables = (signIn.areaId ? tables.filter((t) => t.areaId === signIn.areaId) : tables)
     .filter((t) => !mergedTableIds.has(t.id) || t.id === signIn.tableId);
   const [tableId, setTableId] = useState(signIn.tableId ?? areaTables[0]?.id ?? "");
   const [until, setUntil] = useState(() => signIn.expectedUntil ? clockOf(signIn.expectedUntil) : "");
@@ -400,7 +400,7 @@ export function AssignTableModal({
           <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
         <div className="p-6 space-y-4">
-          <p className="text-xs text-muted-foreground">Party of {signIn.partySize}{signIn.locationName ? ` · ${signIn.locationName}` : ""}</p>
+          <p className="text-xs text-muted-foreground">Party of {signIn.partySize}{signIn.areaName ? ` · ${signIn.areaName}` : ""}</p>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Table</label>
             <select
@@ -550,7 +550,7 @@ function WaitingRow({
           )}
         </div>
         <div className="text-xs text-muted-foreground">
-          {s.locationName ?? "Any area"} · waiting {elapsed(s.signedInAt)}
+          {s.areaName ?? "Any area"} · waiting {elapsed(s.signedInAt)}
           {s.quotedWaitMinutes != null && ` · quoted ~${s.quotedWaitMinutes}m`}
           {s.notifiedAt && ` · notified ${elapsed(s.notifiedAt)} ago`}
         </div>
@@ -609,7 +609,7 @@ function SignInRow({
           </span>
         </div>
         <div className="text-xs text-muted-foreground">
-          {s.locationName ?? "—"} · {s.tableName ? <span className="text-foreground">{s.tableName}</span> : "unseated"}
+          {s.areaName ?? "—"} · {s.tableName ? <span className="text-foreground">{s.tableName}</span> : "unseated"}
           {" · in "}{clockOf(s.signedInAt)}
           {out && ` – ${clockOf(out)} out`}
           {!out && s.expectedUntil && s.tableId && ` · until ~${clockOf(s.expectedUntil)}`}
@@ -667,9 +667,10 @@ function SignInRow({
 // ── Main ─────────────────────────────────────────────────────────────────
 
 export default function GuestRegister({
-  locations, tables, canWrite, canDelete,
+  locations, areas, tables, canWrite, canDelete,
 }: {
   locations: ReservationLocation[];
+  areas: ReservationArea[];
   tables: ReservationTable[];
   canWrite: boolean;
   canDelete: boolean;
@@ -790,7 +791,7 @@ export default function GuestRegister({
         action={canWrite && (
           <button
             onClick={() => setShowSignIn(true)}
-            disabled={locations.length === 0}
+            disabled={areas.length === 0}
             className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 transition disabled:opacity-50"
           >
             <Plus className="w-4 h-4" /> Sign In Guest
@@ -876,6 +877,7 @@ export default function GuestRegister({
       {(showSignIn || editTarget) && (
         <SignInModal
           locations={locations}
+          areas={areas}
           existing={editTarget}
           onClose={() => { setShowSignIn(false); setEditTarget(null); }}
           onSaved={() => { setShowSignIn(false); setEditTarget(null); load(); }}
@@ -907,10 +909,10 @@ export default function GuestRegister({
           setBusy(false);
           if (done) {
             setSignOutTarget(null);
-            if (target.tableId && target.tableName && target.locationId) {
+            if (target.tableId && target.tableName && target.areaId) {
               checkWaitlistMatch({
                 name: target.tableName,
-                locationId: target.locationId,
+                areaId: target.areaId,
                 capacity: target.tableCapacity ?? 0,
                 maxExtraCapacity: target.tableMaxExtraCapacity ?? 0,
               });

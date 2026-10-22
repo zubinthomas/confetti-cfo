@@ -1,4 +1,4 @@
-// Reservation management routes: locations, tables, and reservations - see
+// Reservation management routes: locations, areas, tables, and reservations - see
 // server/db/reservations.ts. No public sub-routes, so authMiddleware is
 // applied router-wide, matching inventory.ts's/users.ts's convention.
 import { Router } from 'express';
@@ -6,6 +6,7 @@ import { authMiddleware, requirePermission, type AuthedRequest } from '../middle
 import {
   ReservationError,
   listLocations, createLocation, updateLocation, deleteLocation,
+  listAreas, createArea, updateArea, deleteArea,
   listTables, createTable, updateTable, deleteTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, rescheduleReservation, endReservationEarly,
@@ -48,8 +49,8 @@ router.get('/locations', requirePermission('Reservation', 'read'), async (_req: 
 
 router.post('/locations', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { name, type } = req.body ?? {};
-    res.status(201).json(await createLocation({ name, type }));
+    const { name } = req.body ?? {};
+    res.status(201).json(await createLocation({ name }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -57,8 +58,8 @@ router.post('/locations', requirePermission('Reservation', 'write'), async (req:
 
 router.patch('/locations/:id', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { name, type } = req.body ?? {};
-    res.json(await updateLocation(req.params.id, { name, type }));
+    const { name } = req.body ?? {};
+    res.json(await updateLocation(req.params.id, { name }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -73,12 +74,51 @@ router.delete('/locations/:id', requirePermission('Reservation', 'delete'), asyn
   }
 });
 
+// ── Areas ────────────────────────────────────────────────────────────────
+
+router.get('/areas', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
+  try {
+    const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
+    res.json(await listAreas({ locationId }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.post('/areas', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { locationId, name, floor, type } = req.body ?? {};
+    if (typeof locationId !== 'string') return res.status(400).json({ message: 'locationId is required' });
+    res.status(201).json(await createArea({ locationId, name, floor, type }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/areas/:id', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { name, floor, type } = req.body ?? {};
+    res.json(await updateArea(req.params.id, { name, floor, type }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.delete('/areas/:id', requirePermission('Reservation', 'delete'), async (req: AuthedRequest, res) => {
+  try {
+    await deleteArea(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
 // ── Tables ───────────────────────────────────────────────────────────────
 
 router.get('/tables', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
   try {
-    const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
-    res.json(await listTables({ locationId }));
+    const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
+    res.json(await listTables({ areaId }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -86,8 +126,8 @@ router.get('/tables', requirePermission('Reservation', 'read'), async (req: Auth
 
 router.post('/tables', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { locationId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith } = req.body ?? {};
-    if (typeof locationId !== 'string') return res.status(400).json({ message: 'locationId is required' });
+    const { areaId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith } = req.body ?? {};
+    if (typeof areaId !== 'string') return res.status(400).json({ message: 'areaId is required' });
     if (typeof capacity !== 'number') return res.status(400).json({ message: 'capacity must be a number' });
     if (maxExtraCapacity !== undefined && typeof maxExtraCapacity !== 'number') {
       return res.status(400).json({ message: 'maxExtraCapacity must be a number' });
@@ -99,7 +139,7 @@ router.post('/tables', requirePermission('Reservation', 'write'), async (req: Au
       && (!Array.isArray(mergeableWith) || !mergeableWith.every((x: unknown) => typeof x === 'string'))) {
       return res.status(400).json({ message: 'mergeableWith must be an array of table ids' });
     }
-    res.status(201).json(await createTable({ locationId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }));
+    res.status(201).json(await createTable({ areaId, name, type, capacity, maxExtraCapacity, freeMerge, mergeableWith }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
@@ -180,8 +220,8 @@ router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequ
   try {
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
     const tableId = typeof req.query.tableId === 'string' ? req.query.tableId : undefined;
-    const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
-    res.json(await listReservations({ date, tableId, locationId }));
+    const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
+    res.json(await listReservations({ date, tableId, areaId }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }

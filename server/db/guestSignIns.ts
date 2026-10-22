@@ -1,7 +1,7 @@
 // Guest sign-in register for Sienna's front of house - the digital version of
 // the handwritten arrivals book. A sign-in is NOT a reservation: a walk-in or
 // function guest has no booked window, no capacity ceiling of its own, and
-// often no table yet. It reuses the reservations location/table catalogue and
+// often no table yet. It reuses the reservations area/table catalogue and
 // can link to a booking row, but lives in its own table (see schema.ts) so
 // none of the reservation overlap/capacity machinery applies to it.
 //
@@ -58,7 +58,7 @@ export interface CreateSignInInput {
   partySize?: number;
   purpose?: string;
   host?: string;
-  locationId?: string | null;
+  areaId?: string | null;
   tableId?: string | null;
   reservationId?: string | null;
   signedInAt?: string;
@@ -82,8 +82,8 @@ function signInQuery() {
       partySize: schema.guestSignIns.partySize,
       purpose: schema.guestSignIns.purpose,
       host: schema.guestSignIns.host,
-      locationId: schema.guestSignIns.locationId,
-      locationName: schema.reservationLocations.name,
+      areaId: schema.guestSignIns.areaId,
+      areaName: schema.reservationAreas.name,
       tableId: schema.guestSignIns.tableId,
       tableName: schema.reservationTables.name,
       tableCapacity: schema.reservationTables.capacity,
@@ -104,15 +104,15 @@ function signInQuery() {
       createdByUserId: schema.guestSignIns.createdByUserId,
     })
     .from(schema.guestSignIns)
-    .leftJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.guestSignIns.locationId))
+    .leftJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.guestSignIns.areaId))
     .leftJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.guestSignIns.tableId))
     .leftJoin(schema.reservations, eq(schema.reservations.id, schema.guestSignIns.reservationId))
     .$dynamic();
 }
 
 export async function listSignIns(
-  { date, locationId, onPremisesOnly, unseatedOnly }:
-  { date?: string; locationId?: string; onPremisesOnly?: boolean; unseatedOnly?: boolean } = {},
+  { date, areaId, onPremisesOnly, unseatedOnly }:
+  { date?: string; areaId?: string; onPremisesOnly?: boolean; unseatedOnly?: boolean } = {},
 ) {
   await ready();
   let query = signInQuery();
@@ -124,7 +124,7 @@ export async function listSignIns(
     conditions.push(gte(schema.guestSignIns.signedInAt, from));
     conditions.push(lt(schema.guestSignIns.signedInAt, until));
   }
-  if (locationId) conditions.push(eq(schema.guestSignIns.locationId, locationId));
+  if (areaId) conditions.push(eq(schema.guestSignIns.areaId, areaId));
   if (onPremisesOnly) conditions.push(isNull(schema.guestSignIns.signedOutAt));
   // The physical queue at the door: on premises, no table assigned yet.
   if (unseatedOnly) conditions.push(isNull(schema.guestSignIns.tableId));
@@ -140,32 +140,32 @@ async function getSignIn(id: string) {
 }
 
 /** Next sortOrder for a new queue entry, scoped to parties still unseated and
- *  on premises at the same location (including unassigned, locationId null) -
+ *  on premises at the same area (including unassigned, areaId null) -
  *  so a new walk-in joins at the back of its own area's line. */
-async function nextSortOrder(locationId: string | null): Promise<number> {
+async function nextSortOrder(areaId: string | null): Promise<number> {
   const rows = await db
-    .select({ sortOrder: schema.guestSignIns.sortOrder, locationId: schema.guestSignIns.locationId })
+    .select({ sortOrder: schema.guestSignIns.sortOrder, areaId: schema.guestSignIns.areaId })
     .from(schema.guestSignIns)
     .where(and(isNull(schema.guestSignIns.tableId), isNull(schema.guestSignIns.signedOutAt)));
-  const scoped = rows.filter((r) => r.locationId === locationId);
+  const scoped = rows.filter((r) => r.areaId === areaId);
   return scoped.length > 0 ? Math.max(...scoped.map((r) => r.sortOrder)) + 1 : 1;
 }
 
 // ── Wait estimate (read-only) ───────────────────────────────────────────
 
 /** Minutes until the soonest capacity-eligible table is free, or `0` if one
- *  already is, or `null` if no table at this location could ever seat a party
+ *  already is, or `null` if no table in this area could ever seat a party
  *  this size. Scoped per-table, not merge-aware - this is a soft estimate,
  *  not the hard gate checkTableAssignment runs at actual seating time. */
 export async function estimateWaitMinutes(
-  { locationId, partySize }: { locationId?: string; partySize: number },
+  { areaId, partySize }: { areaId?: string; partySize: number },
 ) {
   await ready();
   if (!Number.isInteger(partySize) || partySize <= 0) {
     throw new GuestSignInError('Party size must be a positive whole number');
   }
 
-  const tables = (await listTables({ locationId })).filter((t) => t.capacity + t.maxExtraCapacity >= partySize);
+  const tables = (await listTables({ areaId })).filter((t) => t.capacity + t.maxExtraCapacity >= partySize);
   if (tables.length === 0) return null;
   const tableIds = tables.map((t) => t.id);
 
@@ -315,10 +315,10 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
     throw new GuestSignInError('Party size must be a positive whole number');
   }
 
-  let locationId = input.locationId ?? null;
-  if (locationId) {
-    const [loc] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, locationId));
-    if (!loc) throw new GuestSignInError(`No location with id ${locationId}`);
+  let areaId = input.areaId ?? null;
+  if (areaId) {
+    const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, areaId));
+    if (!area) throw new GuestSignInError(`No area with id ${areaId}`);
   }
 
   const reservationId = input.reservationId ?? null;
@@ -351,13 +351,13 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
     });
     seatedAt = signedInAt;
     expectedUntil = expectedUntil ?? addMinutesIso(signedInAt, DEFAULT_TURN_MINUTES);
-    if (!locationId) locationId = table.locationId;
+    if (!areaId) areaId = table.areaId;
   } else {
     tableId = null;
     expectedUntil = null;
     // Joining the physical queue at the door - takes a spot at the back of
     // its area's line.
-    sortOrder = await nextSortOrder(locationId);
+    sortOrder = await nextSortOrder(areaId);
   }
 
   const id = randomUUID();
@@ -371,7 +371,7 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
     partySize,
     purpose: input.purpose?.trim() || null,
     host: input.host?.trim() || null,
-    locationId,
+    areaId,
     tableId,
     reservationId,
     signedInAt,
@@ -414,12 +414,12 @@ export async function updateSignIn(id: string, patch: Partial<CreateSignInInput>
   if (patch.purpose !== undefined) set.purpose = patch.purpose?.trim() || null;
   if (patch.host !== undefined) set.host = patch.host?.trim() || null;
   if (patch.notes !== undefined) set.notes = patch.notes?.trim() || null;
-  if (patch.locationId !== undefined) {
-    if (patch.locationId) {
-      const [loc] = await db.select().from(schema.reservationLocations).where(eq(schema.reservationLocations.id, patch.locationId));
-      if (!loc) throw new GuestSignInError(`No location with id ${patch.locationId}`);
+  if (patch.areaId !== undefined) {
+    if (patch.areaId) {
+      const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, patch.areaId));
+      if (!area) throw new GuestSignInError(`No area with id ${patch.areaId}`);
     }
-    set.locationId = patch.locationId || null;
+    set.areaId = patch.areaId || null;
   }
 
   if (Object.keys(set).length === 0) return getSignIn(id);
@@ -484,7 +484,7 @@ export async function markNotified(id: string, { notifiedVia }: { notifiedVia?: 
   return getSignIn(id);
 }
 
-/** Bump a waiting party up or down against its line neighbor (same location,
+/** Bump a waiting party up or down against its line neighbor (same area,
  *  unseated + on-premises only), swapping sortOrder atomically. No-op at
  *  either end of the line. */
 export async function reorder(id: string, direction: 'up' | 'down') {
@@ -498,7 +498,7 @@ export async function reorder(id: string, direction: 'up' | 'down') {
 
   const group = (await db.select().from(schema.guestSignIns)
     .where(and(isNull(schema.guestSignIns.tableId), isNull(schema.guestSignIns.signedOutAt))))
-    .filter((e) => e.locationId === existing.locationId)
+    .filter((e) => e.areaId === existing.areaId)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.signedInAt.localeCompare(b.signedInAt));
 
   const idx = group.findIndex((e) => e.id === id);

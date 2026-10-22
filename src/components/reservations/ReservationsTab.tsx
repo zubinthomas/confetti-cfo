@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   listLocations, createLocation, updateLocation, deleteLocation,
+  listAreas, createArea, updateArea, deleteArea, areaLabel,
   listTables, createTable, updateTable, deleteTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, endReservationEarly, listTableMerges, releaseTableMerge,
-  type ReservationLocation, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
+  type ReservationLocation, type ReservationArea, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
@@ -14,6 +15,7 @@ import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import GuestRegister from "@/components/reservations/GuestRegister";
+import AreaSelect from "@/components/reservations/AreaSelect";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
@@ -48,24 +50,26 @@ const toMin = (hhmm: string) => {
 const nowMinutes = () => istMinutes();
 const clockOf = istClock;
 const FLOOR_EXTEND_STEPS = [15, 30, 60];
+// Edit/delete icons: a 44px tap area on phones, tight from sm up.
+const ICON_BTN = "inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded max-sm:w-11 max-sm:h-11 sm:p-1.5";
 
-const EMPTY_BOOKING = { locationId: "", tableId: "", date: todayStr(), time: "19:00", durationMinutes: "90", partySize: "2", guestName: "", guestPhone: "", guestEmail: "", notes: "" };
+const EMPTY_BOOKING = { areaId: "", tableId: "", date: todayStr(), time: "19:00", durationMinutes: "90", partySize: "2", guestName: "", guestPhone: "", guestEmail: "", notes: "" };
 
-function BookingModal({ locations, tables, defaultDate, onClose, onSaved }: {
-  locations: ReservationLocation[]; tables: ReservationTable[]; defaultDate: string;
+function BookingModal({ locations, areas, tables, defaultDate, onClose, onSaved }: {
+  locations: ReservationLocation[]; areas: ReservationArea[]; tables: ReservationTable[]; defaultDate: string;
   onClose: () => void; onSaved: () => void;
 }) {
-  const [form, setForm] = useState({ ...EMPTY_BOOKING, date: defaultDate, locationId: locations[0]?.id ?? "" });
+  const [form, setForm] = useState({ ...EMPTY_BOOKING, date: defaultDate, areaId: areas.find((a) => tables.some((t) => t.areaId === a.id))?.id ?? areas[0]?.id ?? "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const tablesForLocation = tables.filter((t) => t.locationId === form.locationId);
+  const tablesForArea = tables.filter((t) => t.areaId === form.areaId);
   useEffect(() => {
-    if (!tablesForLocation.some((t) => t.id === form.tableId)) {
-      setForm((f) => ({ ...f, tableId: tablesForLocation[0]?.id ?? "" }));
+    if (!tablesForArea.some((t) => t.id === form.tableId)) {
+      setForm((f) => ({ ...f, tableId: tablesForArea[0]?.id ?? "" }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.locationId]);
+  }, [form.areaId]);
 
   const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
 
@@ -100,13 +104,12 @@ function BookingModal({ locations, tables, defaultDate, onClose, onSaved }: {
         </div>
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">Location *</label>
-            <select
-              value={form.locationId} onChange={(e) => update("locationId", e.target.value)}
-              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
-            >
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            <label className="text-xs text-muted-foreground block mb-1">Area *</label>
+            <AreaSelect
+              value={form.areaId} onChange={(id) => update("areaId", id)}
+              locations={locations} areas={areas}
+              className="w-full text-base sm:text-sm border border-border rounded-lg px-3 py-2 max-sm:min-h-11 bg-background text-foreground"
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Table *</label>
@@ -114,8 +117,8 @@ function BookingModal({ locations, tables, defaultDate, onClose, onSaved }: {
               value={form.tableId} onChange={(e) => update("tableId", e.target.value)}
               className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
             >
-              {tablesForLocation.length === 0 && <option value="">No tables in this location</option>}
-              {tablesForLocation.map((t) => <option key={t.id} value={t.id}>{t.name} (seats {t.capacity})</option>)}
+              {tablesForArea.length === 0 && <option value="">No tables in this area</option>}
+              {tablesForArea.map((t) => <option key={t.id} value={t.id}>{t.name} (seats {t.capacity})</option>)}
             </select>
           </div>
           <FormField label="Date *" name="date" type="date" value={form.date} onChange={update} />
@@ -139,8 +142,31 @@ function BookingModal({ locations, tables, defaultDate, onClose, onSaved }: {
   );
 }
 
+function ModalShell({ title, onClose, onSave, saving, error, children }: {
+  title: string; onClose: () => void; onSave: () => void; saving: boolean; error: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-card rounded-2xl border border-border w-full max-w-sm">
+        <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          <button onClick={onClose} aria-label="Close" className="max-sm:p-2 max-sm:-mr-2"><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="p-6 space-y-4">{children}</div>
+        {error && <p className="px-6 text-xs text-destructive -mt-2 mb-2">{error}</p>}
+        <div className="px-6 pb-6 flex justify-end gap-3">
+          <button onClick={onClose} className="text-sm px-4 py-2 max-sm:min-h-11 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+          <button onClick={onSave} disabled={saving} className="text-sm px-4 py-2 max-sm:min-h-11 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LocationModal({ location, onClose, onSaved }: { location: ReservationLocation | null; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ name: location?.name ?? "", type: location?.type ?? "" });
+  const [form, setForm] = useState({ name: location?.name ?? "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
@@ -149,7 +175,7 @@ function LocationModal({ location, onClose, onSaved }: { location: ReservationLo
     setError("");
     setSaving(true);
     try {
-      const payload = { name: form.name.trim(), type: form.type.trim() || null };
+      const payload = { name: form.name.trim() };
       if (location) await updateLocation(location.id, payload);
       else await createLocation(payload);
       onSaved();
@@ -161,31 +187,47 @@ function LocationModal({ location, onClose, onSaved }: { location: ReservationLo
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-card rounded-2xl border border-border w-full max-w-sm">
-        <div className="border-b border-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">{location ? "Edit Location" : "Add Location"}</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
-        </div>
-        <div className="p-6 space-y-4">
-          <FormField label="Name *" name="name" value={form.name} onChange={update} />
-          <FormField label="Type" name="type" value={form.type} onChange={update} placeholder="e.g. Dine-in" />
-        </div>
-        {error && <p className="px-6 text-xs text-destructive -mt-2 mb-2">{error}</p>}
-        <div className="px-6 pb-6 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
-          <button onClick={save} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save
-          </button>
-        </div>
-      </div>
-    </div>
+    <ModalShell title={location ? "Edit Location" : "Add Location"} onClose={onClose} onSave={save} saving={saving} error={error}>
+      <FormField label="Name *" name="name" value={form.name} onChange={update} placeholder="e.g. Sienna, Hindustan Park" />
+    </ModalShell>
   );
 }
 
-function TableModal({ table, tables, locationId, locationName, onClose, onSaved }: {
+function AreaModal({ area, locationId, locationName, onClose, onSaved }: {
+  area: ReservationArea | null; locationId: string; locationName: string; onClose: () => void; onSaved: () => void;
+}) {
+  const [form, setForm] = useState({ name: area?.name ?? "", floor: area?.floor ?? "", type: area?.type ?? "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
+
+  const save = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const payload = { name: form.name.trim(), floor: form.floor.trim() || null, type: form.type.trim() || null };
+      if (area) await updateArea(area.id, payload);
+      else await createArea({ locationId, ...payload });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save area");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={area ? "Edit Area" : `Add Area · ${locationName}`} onClose={onClose} onSave={save} saving={saving} error={error}>
+      <FormField label="Name *" name="name" value={form.name} onChange={update} placeholder="e.g. Cafe, Restaurant, Bar" />
+      <FormField label="Floor" name="floor" value={form.floor} onChange={update} placeholder="e.g. Ground Floor (leave empty if the area is its own floor)" />
+      <FormField label="Type" name="type" value={form.type} onChange={update} placeholder="e.g. Dine-in" />
+    </ModalShell>
+  );
+}
+
+function TableModal({ table, tables, areaId, areaName, onClose, onSaved }: {
   table: ReservationTable | null; tables: ReservationTable[];
-  locationId: string; locationName: string; onClose: () => void; onSaved: () => void;
+  areaId: string; areaName: string; onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState({
     name: table?.name ?? "", type: table?.type ?? "",
@@ -204,7 +246,7 @@ function TableModal({ table, tables, locationId, locationName, onClose, onSaved 
       : [...f.mergeableWith, id],
   }));
 
-  const siblings = tables.filter((t) => t.locationId === locationId && t.id !== table?.id);
+  const siblings = tables.filter((t) => t.areaId === areaId && t.id !== table?.id);
 
   const save = async () => {
     setError("");
@@ -222,7 +264,7 @@ function TableModal({ table, tables, locationId, locationName, onClose, onSaved 
         mergeableWith: form.mergeableWith,
       };
       if (table) await updateTable(table.id, payload);
-      else await createTable({ locationId, ...payload });
+      else await createTable({ areaId, ...payload });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save table");
@@ -235,7 +277,7 @@ function TableModal({ table, tables, locationId, locationName, onClose, onSaved 
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-card rounded-2xl border border-border w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="border-b border-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">{table ? "Edit Table" : `Add Table · ${locationName}`}</h2>
+          <h2 className="text-base font-semibold text-foreground">{table ? "Edit Table" : `Add Table · ${areaName}`}</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
         <div className="p-6 space-y-4">
@@ -250,14 +292,14 @@ function TableModal({ table, tables, locationId, locationName, onClose, onSaved 
               Free merge
             </label>
             <p className="text-xs text-muted-foreground mt-1">
-              No fixed list. This table can join any other free-merge table in {locationName}. The other table still has to allow it.
+              No fixed list. This table can join any other free-merge table in {areaName}. The other table still has to allow it.
             </p>
           </div>
           {!form.freeMerge && (
             <div>
               <span className="text-xs text-muted-foreground block mb-1">Can be merged with</span>
               {siblings.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No other tables in {locationName} yet.</p>
+                <p className="text-xs text-muted-foreground">No other tables in {areaName} yet.</p>
               ) : (
                 <div className="max-h-40 overflow-y-auto space-y-1 border border-border rounded-lg p-2">
                   {siblings.map((t) => (
@@ -337,6 +379,7 @@ export default function ReservationsTab() {
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
   const { tabs: viewTabs, active: view, setActive: setView } = useTabs("reservations");
   const [locations, setLocations] = useState<ReservationLocation[]>([]);
+  const [areas, setAreas] = useState<ReservationArea[]>([]);
   const [tables, setTables] = useState<ReservationTable[]>([]);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [daySignIns, setDaySignIns] = useState<GuestSignIn[]>([]);
@@ -347,8 +390,10 @@ export default function ReservationsTab() {
 
   const [showBooking, setShowBooking] = useState(false);
   const [locationModal, setLocationModal] = useState<{ location: ReservationLocation | null } | null>(null);
-  const [tableModal, setTableModal] = useState<{ table: ReservationTable | null; locationId: string; locationName: string } | null>(null);
+  const [areaModal, setAreaModal] = useState<{ area: ReservationArea | null; locationId: string; locationName: string } | null>(null);
+  const [tableModal, setTableModal] = useState<{ table: ReservationTable | null; areaId: string; areaName: string } | null>(null);
   const [deleteLocationTarget, setDeleteLocationTarget] = useState<ReservationLocation | null>(null);
+  const [deleteAreaTarget, setDeleteAreaTarget] = useState<ReservationArea | null>(null);
   const [deleteTableTarget, setDeleteTableTarget] = useState<ReservationTable | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -356,11 +401,12 @@ export default function ReservationsTab() {
   const loadCatalog = async () => {
     setLoadingCatalog(true);
     try {
-      const [locs, tbls] = await Promise.all([listLocations(), listTables()]);
+      const [locs, ars, tbls] = await Promise.all([listLocations(), listAreas(), listTables()]);
       setLocations(locs);
+      setAreas(ars);
       setTables(tbls);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load locations and tables");
+      setError(err instanceof Error ? err.message : "Failed to load locations, areas and tables");
     } finally {
       setLoadingCatalog(false);
     }
@@ -525,6 +571,21 @@ export default function ReservationsTab() {
     }
   };
 
+  const confirmDeleteArea = async () => {
+    if (!deleteAreaTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteArea(deleteAreaTarget.id);
+      setDeleteAreaTarget(null);
+      loadCatalog();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete area");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const confirmDeleteTable = async () => {
     if (!deleteTableTarget) return;
     setDeleting(true);
@@ -564,8 +625,8 @@ export default function ReservationsTab() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <KpiCard label="Reservations Today" value={activeCount} definition="Active reservations for today." />
             <KpiCard label="Covers Booked" value={coversBooked} definition="Total guest count across today's reservations." />
-            <KpiCard label="Locations" value={locations.length} definition="Dining locations configured for reservations." />
-            <KpiCard label="Tables" value={tables.length} definition="Tables configured across all locations." />
+            <KpiCard label="Areas" value={areas.length} definition="Dining areas (cafe, restaurant, bar...) configured for reservations." />
+            <KpiCard label="Tables" value={tables.length} definition="Tables configured across all areas." />
           </div>
 
           <DashCard
@@ -579,7 +640,7 @@ export default function ReservationsTab() {
                 {canWrite && (
                   <button
                     onClick={() => setShowBooking(true)}
-                    disabled={locations.length === 0 || tables.length === 0}
+                    disabled={areas.length === 0 || tables.length === 0}
                     className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 transition disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" /> New Reservation
@@ -590,16 +651,19 @@ export default function ReservationsTab() {
           >
             {loadingCatalog || reservations === null ? (
               <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-            ) : locations.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No locations yet - add one under "Locations &amp; Tables".</p>
+            ) : areas.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No areas yet - add one under "Locations &amp; Tables".</p>
             ) : (
               <div className="space-y-5">
-                {locations.map((loc) => {
-                  const locTables = tables.filter((t) => t.locationId === loc.id);
+                {areas.map((area) => {
+                  const locTables = tables.filter((t) => t.areaId === area.id);
                   if (locTables.length === 0) return null;
+                  const locationName = locations.length > 1 ? locations.find((l) => l.id === area.locationId)?.name : null;
                   return (
-                    <div key={loc.id}>
-                      <p className="text-sm font-semibold text-foreground mb-2">{loc.name}</p>
+                    <div key={area.id}>
+                      <p className="text-sm font-semibold text-foreground mb-2">
+                        {locationName && <span className="text-muted-foreground font-normal">{locationName} · </span>}{areaLabel(area)}
+                      </p>
                       <div className="space-y-3">
                         {locTables.filter((t) => {
                           const m = mergeByTableId.get(t.id);
@@ -668,7 +732,7 @@ export default function ReservationsTab() {
                     </div>
                   );
                 })}
-                {locations.every((loc) => tables.filter((t) => t.locationId === loc.id).length === 0) && (
+                {areas.every((a) => tables.filter((t) => t.areaId === a.id).length === 0) && (
                   <p className="text-sm text-muted-foreground text-center py-8">No tables yet - add some under "Locations &amp; Tables".</p>
                 )}
               </div>
@@ -676,7 +740,7 @@ export default function ReservationsTab() {
           </DashCard>
         </>
       ) : view === "signin" ? (
-        <GuestRegister locations={locations} tables={tables} canWrite={canWrite} canDelete={canDelete} />
+        <GuestRegister locations={locations} areas={areas} tables={tables} canWrite={canWrite} canDelete={canDelete} />
       ) : (
         <DashCard
           title="Locations & Tables"
@@ -694,50 +758,84 @@ export default function ReservationsTab() {
           ) : locations.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No locations yet.</p>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-6">
               {locations.map((loc) => {
-                const locTables = tables.filter((t) => t.locationId === loc.id);
+                const locAreas = areas.filter((a) => a.locationId === loc.id);
                 return (
                   <div key={loc.id} className="border border-border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-foreground">{loc.name}</span>
-                        {loc.type && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{loc.type}</span>}
-                      </div>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <span className="text-sm font-semibold text-foreground min-w-0 break-words">{loc.name}</span>
                       {canWrite && (
-                        <div className="flex items-center gap-3">
-                          <button onClick={() => setLocationModal({ location: loc })} className="text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => setLocationModal({ location: loc })} aria-label={`Edit ${loc.name}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
                           {canDelete && (
-                            <button onClick={() => { setDeleteError(""); setDeleteLocationTarget(loc); }} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => { setDeleteError(""); setDeleteLocationTarget(loc); }} aria-label={`Delete ${loc.name}`} className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
                           )}
                         </div>
                       )}
                     </div>
-                    {locTables.length === 0 ? (
-                      <p className="text-xs text-muted-foreground mb-3">No tables yet.</p>
+
+                    {locAreas.length === 0 ? (
+                      <p className="text-xs text-muted-foreground mb-3">No areas yet.</p>
                     ) : (
-                      <div className="space-y-1.5 mb-3">
-                        {locTables.map((t) => (
-                          <div key={t.id} className="flex items-center justify-between text-sm border-b border-border last:border-b-0 pb-1.5 last:pb-0">
-                            <span className="text-foreground">{t.name} <span className="text-muted-foreground">· seats {t.capacity}{t.type ? ` · ${t.type}` : ""}</span></span>
-                            {canWrite && (
-                              <div className="flex items-center gap-3">
-                                <button onClick={() => setTableModal({ table: t, locationId: loc.id, locationName: loc.name })} className="text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-                                {canDelete && (
-                                  <button onClick={() => { setDeleteError(""); setDeleteTableTarget(t); }} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <div className="space-y-4 mb-3">
+                        {locAreas.map((area) => {
+                          const areaTables = tables.filter((t) => t.areaId === area.id);
+                          return (
+                            <div key={area.id} className="rounded-lg bg-muted/30 border border-border/60 p-3">
+                              <div className="flex items-center justify-between gap-3 mb-2">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                  <span className="text-sm font-medium text-foreground">{area.name}</span>
+                                  {area.floor && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{area.floor}</span>}
+                                  {area.type && <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">{area.type}</span>}
+                                </div>
+                                {canWrite && (
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => setAreaModal({ area, locationId: loc.id, locationName: loc.name })} aria-label={`Edit ${area.name}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
+                                    {canDelete && (
+                                      <button onClick={() => { setDeleteError(""); setDeleteAreaTarget(area); }} aria-label={`Delete ${area.name}`} className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        ))}
+                              {areaTables.length === 0 ? (
+                                <p className="text-xs text-muted-foreground mb-2">No tables yet.</p>
+                              ) : (
+                                <div className="space-y-1 mb-2">
+                                  {areaTables.map((t) => (
+                                    <div key={t.id} className="flex items-center justify-between gap-3 text-sm border-b border-border/60 last:border-b-0 py-1">
+                                      <span className="text-foreground min-w-0 break-words">{t.name} <span className="text-muted-foreground">· seats {t.capacity}{t.type ? ` · ${t.type}` : ""}</span></span>
+                                      {canWrite && (
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <button onClick={() => setTableModal({ table: t, areaId: area.id, areaName: area.name })} aria-label={`Edit table ${t.name}`} className={ICON_BTN}><Pencil className="w-3.5 h-3.5" /></button>
+                                          {canDelete && (
+                                            <button onClick={() => { setDeleteError(""); setDeleteTableTarget(t); }} aria-label={`Delete table ${t.name}`} className={`${ICON_BTN} hover:text-destructive`}><Trash2 className="w-3.5 h-3.5" /></button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {canWrite && (
+                                <button
+                                  onClick={() => setTableModal({ table: null, areaId: area.id, areaName: area.name })}
+                                  className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
+                                >
+                                  <Plus className="w-3 h-3" /> Add Table
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     {canWrite && (
                       <button
-                        onClick={() => setTableModal({ table: null, locationId: loc.id, locationName: loc.name })}
-                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                        onClick={() => setAreaModal({ area: null, locationId: loc.id, locationName: loc.name })}
+                        className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
                       >
-                        <Plus className="w-3 h-3" /> Add Table
+                        <Plus className="w-3 h-3" /> Add Area
                       </button>
                     )}
                   </div>
@@ -750,7 +848,7 @@ export default function ReservationsTab() {
 
       {showBooking && (
         <BookingModal
-          locations={locations} tables={tables} defaultDate={selectedDate}
+          locations={locations} areas={areas} tables={tables} defaultDate={selectedDate}
           onClose={() => setShowBooking(false)}
           onSaved={() => { setShowBooking(false); loadReservations(selectedDate); }}
         />
@@ -762,9 +860,16 @@ export default function ReservationsTab() {
           onSaved={() => { setLocationModal(null); loadCatalog(); }}
         />
       )}
+      {areaModal && (
+        <AreaModal
+          area={areaModal.area} locationId={areaModal.locationId} locationName={areaModal.locationName}
+          onClose={() => setAreaModal(null)}
+          onSaved={() => { setAreaModal(null); loadCatalog(); }}
+        />
+      )}
       {tableModal && (
         <TableModal
-          table={tableModal.table} tables={tables} locationId={tableModal.locationId} locationName={tableModal.locationName}
+          table={tableModal.table} tables={tables} areaId={tableModal.areaId} areaName={tableModal.areaName}
           onClose={() => setTableModal(null)}
           onSaved={() => { setTableModal(null); loadCatalog(); }}
         />
@@ -778,6 +883,16 @@ export default function ReservationsTab() {
         destructive
         loading={deleting}
         onConfirm={confirmDeleteLocation}
+      />
+      <ConfirmDialog
+        open={deleteAreaTarget !== null}
+        onOpenChange={(open) => { if (!open) { setDeleteAreaTarget(null); setDeleteError(""); } }}
+        title="Delete this area?"
+        description={deleteError || (deleteAreaTarget ? `"${deleteAreaTarget.name}" will be permanently removed. This can't be undone.` : "")}
+        confirmLabel="Delete"
+        destructive
+        loading={deleting}
+        onConfirm={confirmDeleteArea}
       />
       <ConfirmDialog
         open={deleteTableTarget !== null}

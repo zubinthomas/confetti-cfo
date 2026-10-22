@@ -28,10 +28,10 @@ function fail(res: import('express').Response, err: unknown) {
 router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
   try {
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
-    const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
+    const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
     const onPremisesOnly = req.query.onPremisesOnly === 'true';
     const unseatedOnly = req.query.unseatedOnly === 'true';
-    res.json(await listSignIns({ date, locationId, onPremisesOnly, unseatedOnly }));
+    res.json(await listSignIns({ date, areaId, onPremisesOnly, unseatedOnly }));
   } catch (err) {
     fail(res, err);
   }
@@ -39,12 +39,12 @@ router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequ
 
 router.get('/estimate', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
   try {
-    const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined;
+    const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
     const partySize = Number(req.query.partySize);
     if (!Number.isInteger(partySize) || partySize <= 0) {
       return res.status(400).json({ message: 'partySize must be a positive whole number' });
     }
-    res.json({ minutes: await estimateWaitMinutes({ locationId, partySize }) });
+    res.json({ minutes: await estimateWaitMinutes({ areaId, partySize }) });
   } catch (err) {
     fail(res, err);
   }

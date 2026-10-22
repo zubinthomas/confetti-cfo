@@ -18,10 +18,10 @@ export function elapsedLabel(since: string): string {
 }
 
 export async function checkWaitlistMatch(
-  table: Pick<ReservationTable, "name" | "locationId" | "capacity" | "maxExtraCapacity">,
+  table: Pick<ReservationTable, "name" | "areaId" | "capacity" | "maxExtraCapacity">,
 ) {
   try {
-    const entries = await listSignIns({ onPremisesOnly: true, unseatedOnly: true, locationId: table.locationId ?? undefined });
+    const entries = await listSignIns({ onPremisesOnly: true, unseatedOnly: true, areaId: table.areaId ?? undefined });
     const capacity = table.capacity + table.maxExtraCapacity;
     const match = entries.find((e) => e.partySize <= capacity);
     if (!match) return;

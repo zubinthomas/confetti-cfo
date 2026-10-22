@@ -39,7 +39,7 @@ export interface MergeView {
   releasedAt: string | null;
   tableIds: string[];
   tableNames: string[];
-  locationId: string | null;
+  areaId: string | null;
 }
 
 // ── Read ─────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ async function hydrate(merges: (typeof schema.tableMerges.$inferSelect)[]): Prom
     mergeId: schema.tableMergeMembers.mergeId,
     tableId: schema.tableMergeMembers.tableId,
     tableName: schema.reservationTables.name,
-    locationId: schema.reservationTables.locationId,
+    areaId: schema.reservationTables.areaId,
   })
     .from(schema.tableMergeMembers)
     .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.tableMergeMembers.tableId))
@@ -67,7 +67,7 @@ async function hydrate(merges: (typeof schema.tableMerges.$inferSelect)[]): Prom
       releasedAt: m.releasedAt,
       tableIds: mine.map((x) => x.tableId),
       tableNames: mine.map((x) => x.tableName),
-      locationId: mine[0]?.locationId ?? null,
+      areaId: mine[0]?.areaId ?? null,
     };
   });
 }
@@ -144,14 +144,14 @@ export function tablePairKey(id1: string, id2: string): string {
   return [id1, id2].sort().join('|');
 }
 
-type MergeableTable = { id: string; locationId: string; freeMerge: boolean; name?: string };
+type MergeableTable = { id: string; areaId: string; freeMerge: boolean; name?: string };
 
-/** Two tables may be merged iff they share a location AND either an explicit
+/** Two tables may be merged iff they share an area AND either an explicit
  *  link pairs them or BOTH are marked free-merge. `freeMerge` only lifts a
  *  table's own restriction; the other side still has to allow the join. */
 export function tablesCanMerge(a: MergeableTable, b: MergeableTable, linkSet: Set<string>): boolean {
   if (a.id === b.id) return false;
-  if (a.locationId !== b.locationId) return false;
+  if (a.areaId !== b.areaId) return false;
   if (linkSet.has(tablePairKey(a.id, b.id))) return true;
   return a.freeMerge && b.freeMerge;
 }
@@ -183,8 +183,8 @@ export async function createMerge(
   const tables = await db.select().from(schema.reservationTables)
     .where(inArray(schema.reservationTables.id, uniqueIds));
   if (tables.length !== uniqueIds.length) throw new TableMergeError('One or more tables no longer exist');
-  const locationIds = new Set(tables.map((t) => t.locationId));
-  if (locationIds.size > 1) throw new TableMergeError('All tables in a merge must be in the same area');
+  const areaIds = new Set(tables.map((t) => t.areaId));
+  if (areaIds.size > 1) throw new TableMergeError('All tables in a merge must be in the same area');
 
   // Every pair in the group must be set up to merge (a chain 3-7, 7-9 is not
   // enough to 3-way merge 3+7+9 - link 3-9 too, or free-merge a table).
