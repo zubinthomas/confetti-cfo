@@ -8,13 +8,15 @@
 //   - "N. C KOT" (First Floor). Looks like a bookkeeping bucket, not a table.
 // Mapping of POS codes to areas (the export only says Ground Floor, First
 // Floor, Curbside or Take Away):
-//   1-7, C1 (Curbside), T1/T2 (Take Away)  -> Cafe
+//   1-7, T1/T2 (Take Away)                 -> Cafe
 //   F1-F10                                 -> Restaurant
 //   BAR 1-3, B1, B3, B5                    -> Bar
+//   C1-C4 (Curbside, one seat each)        -> Curbside
 //   (nothing)                              -> Second Floor
 // Table names are the POS codes verbatim so POS rows map straight to a table.
-// The export has no seat counts: every table starts at DEFAULT_CAPACITY and is
-// corrected in Locations & Tables.
+// The export has no seat counts: tables start at DEFAULT_CAPACITY (Curbside
+// bays at 1, as told by the venue) and are corrected in Locations & Tables.
+// C2-C4 are not in the 19 Oct export (only C1 sold that day).
 //
 // Run per database: `npm run db:seed-reservation-tables` with the server
 // stopped (PGlite is single-process - see client.ts). Safe to re-run:
@@ -36,11 +38,15 @@ const range = (prefix: string, from: number, to: number) =>
 
 /** Area name -> POS table codes. Keys must be area names from DEFAULT_AREAS. */
 export const TABLES_BY_AREA: Record<string, string[]> = {
-  Cafe: [...range('', 1, 7), 'C1', 'T1', 'T2'],
+  Cafe: [...range('', 1, 7), 'T1', 'T2'],
   Restaurant: range('F', 1, 10),
   Bar: ['BAR 1', 'BAR 2', 'BAR 3', 'B1', 'B3', 'B5'],
   'Second Floor': [],
+  Curbside: range('C', 1, 4),
 };
+
+/** Seats per table where it isn't DEFAULT_CAPACITY. */
+const CAPACITY_BY_AREA: Record<string, number> = { Curbside: 1 };
 
 export interface ReservationSeedReport {
   locationCreated: boolean;
@@ -90,7 +96,7 @@ export async function applyReservationTableSeed(): Promise<ReservationSeedReport
     for (const name of wanted) {
       if (have.has(name)) { report.tablesKept += 1; continue; }
       await db.insert(schema.reservationTables).values({
-        id: randomUUID(), createdDate: now, areaId: area.id, name, capacity: DEFAULT_CAPACITY,
+        id: randomUUID(), createdDate: now, areaId: area.id, name, capacity: CAPACITY_BY_AREA[def.name] ?? DEFAULT_CAPACITY,
       });
       (report.tablesCreated[def.name] ??= []).push(name);
     }

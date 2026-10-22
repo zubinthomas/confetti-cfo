@@ -29,21 +29,24 @@ assert.equal(floorOf.get('Cafe'), 'Ground Floor');
 assert.equal(floorOf.get('Restaurant'), 'First Floor');
 assert.equal(floorOf.get('Bar'), 'First Floor');
 assert.equal(floorOf.get('Second Floor'), null);
+assert.equal(floorOf.get('Curbside'), null);
 
 const tableRows = async () => db.select({
   name: schema.reservationTables.name, area: schema.reservationAreas.name, capacity: schema.reservationTables.capacity,
 }).from(schema.reservationTables)
   .innerJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.reservationTables.areaId));
 
-// First run: 26 tables, 10 / 10 / 6 / 0, nothing but the startup rows created otherwise.
+// First run: 29 tables, 9 / 10 / 6 / 0 / 4 (Curbside bays seat 1), nothing but the startup rows created otherwise.
 const first = await applyReservationTableSeed();
 assert.equal(first.locationCreated, false);
 assert.deepEqual(first.areasCreated, []);
 let rows = await tableRows();
 const count = (area: string) => rows.filter((r) => r.area === area).length;
-assert.equal(rows.length, 26);
-assert.deepEqual([count('Cafe'), count('Restaurant'), count('Bar'), count('Second Floor')], [10, 10, 6, 0]);
-assert.ok(rows.every((r) => r.capacity === DEFAULT_CAPACITY));
+assert.equal(rows.length, 29);
+assert.deepEqual([count('Cafe'), count('Restaurant'), count('Bar'), count('Second Floor'), count('Curbside')], [9, 10, 6, 0, 4]);
+assert.ok(rows.filter((r) => r.area !== 'Curbside').every((r) => r.capacity === DEFAULT_CAPACITY));
+assert.ok(rows.filter((r) => r.area === 'Curbside').every((r) => r.capacity === 1));
+assert.ok(!rows.some((r) => r.name === 'C1' && r.area === 'Cafe'), 'C1 belongs to Curbside, not Cafe');
 for (const [area, names] of Object.entries(TABLES_BY_AREA)) {
   assert.deepEqual(rows.filter((r) => r.area === area).map((r) => r.name).sort(), [...names].sort(), area);
 }
@@ -54,8 +57,8 @@ assert.ok(!rows.some((r) => /swiggy|zomato|delivery/i.test(r.name)));
 // Second run: nothing new.
 const second = await applyReservationTableSeed();
 assert.deepEqual(second.tablesCreated, {});
-assert.equal(second.tablesKept, 26);
-assert.equal((await tableRows()).length, 26);
+assert.equal(second.tablesKept, 29);
+assert.equal((await tableRows()).length, 29);
 
 // An edited capacity survives, and a table outside the list is left alone and reported.
 const [t1] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.name, 'BAR 1'));
@@ -67,7 +70,7 @@ assert.deepEqual(third.tablesCreated, {});
 assert.deepEqual(third.otherTables, { Cafe: ['Default'] });
 rows = await tableRows();
 assert.equal(rows.find((r) => r.name === 'BAR 1')!.capacity, 2);
-assert.equal(rows.length, 27);
+assert.equal(rows.length, 30);
 
 // Missing pieces come back: delete Bar's tables and the Bar area, re-seed.
 await db.delete(schema.reservationTables).where(eq(schema.reservationTables.areaId, areas.find((a) => a.name === 'Bar')!.id));
