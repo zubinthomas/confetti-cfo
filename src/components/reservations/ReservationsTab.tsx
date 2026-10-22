@@ -15,33 +15,14 @@ import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import GuestRegister from "@/components/reservations/GuestRegister";
+import AllReservations from "@/components/reservations/AllReservations";
 import AreaSelect from "@/components/reservations/AreaSelect";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
+import { STATUS_LABELS, STATUS_COLORS, ACTIVE_STATUSES, NEXT_ACTIONS, endTime } from "@/components/reservations/reservationUi";
 
 const todayStr = () => istDateStr();
-
-const STATUS_LABELS: Record<ReservationStatus, string> = {
-  pending: "Pending", confirmed: "Confirmed", seated: "Seated",
-  completed: "Completed", cancelled: "Cancelled", no_show: "No-show",
-};
-const STATUS_COLORS: Record<ReservationStatus, string> = {
-  pending: "#f59e0b", confirmed: "#3b82f6", seated: "#8b5cf6",
-  completed: "#10b981", cancelled: "#ef4444", no_show: "#6b7280",
-};
-const ACTIVE_STATUSES: ReservationStatus[] = ["pending", "confirmed", "seated"];
-const NEXT_ACTIONS: Partial<Record<ReservationStatus, { label: string; status: ReservationStatus }[]>> = {
-  pending: [{ label: "Confirm", status: "confirmed" }, { label: "Cancel", status: "cancelled" }],
-  confirmed: [{ label: "Seat", status: "seated" }, { label: "No-show", status: "no_show" }, { label: "Cancel", status: "cancelled" }],
-  seated: [{ label: "Complete", status: "completed" }],
-};
-
-function endTime(time: string, durationMinutes: number) {
-  const [h, m] = time.split(":").map(Number);
-  const total = h * 60 + m + durationMinutes;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
 
 const toMin = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -385,6 +366,9 @@ export default function ReservationsTab() {
   const [daySignIns, setDaySignIns] = useState<GuestSignIn[]>([]);
   const [merges, setMerges] = useState<TableMerge[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
+  // Day = per-table floor view for one date; All = flat, filterable list of every booking.
+  const [dayMode, setDayMode] = useState<"day" | "all">("day");
+  const [listRefresh, setListRefresh] = useState(0);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [error, setError] = useState("");
 
@@ -630,13 +614,25 @@ export default function ReservationsTab() {
           </div>
 
           <DashCard
-            title="Day view"
+            title={dayMode === "day" ? "Day view" : "All reservations"}
             action={(
-              <div className="flex items-center gap-3">
-                <input
-                  type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
-                  className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
-                />
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1" role="group" aria-label="Reservation view">
+                  {([["day", "Day"], ["all", "All"]] as const).map(([id, label]) => (
+                    <button
+                      key={id} onClick={() => setDayMode(id)} aria-pressed={dayMode === id}
+                      className={`text-sm px-3 py-1.5 max-sm:min-h-11 rounded-lg ${dayMode === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {dayMode === "day" && (
+                  <input
+                    type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
+                    className="text-sm border border-border rounded-lg px-2 py-1.5 max-sm:min-h-11 bg-background text-foreground"
+                  />
+                )}
                 {canWrite && (
                   <button
                     onClick={() => setShowBooking(true)}
@@ -649,7 +645,12 @@ export default function ReservationsTab() {
               </div>
             )}
           >
-            {loadingCatalog || reservations === null ? (
+            {dayMode === "all" ? (
+              <AllReservations
+                locations={locations} areas={areas} canWrite={canWrite} canDelete={canDelete}
+                refreshKey={listRefresh} onError={setError}
+              />
+            ) : loadingCatalog || reservations === null ? (
               <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : areas.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No areas yet - add one under "Locations &amp; Tables".</p>
@@ -850,7 +851,7 @@ export default function ReservationsTab() {
         <BookingModal
           locations={locations} areas={areas} tables={tables} defaultDate={selectedDate}
           onClose={() => setShowBooking(false)}
-          onSaved={() => { setShowBooking(false); loadReservations(selectedDate); }}
+          onSaved={() => { setShowBooking(false); loadReservations(selectedDate); setListRefresh((n) => n + 1); }}
         />
       )}
       {locationModal && (

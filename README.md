@@ -127,6 +127,11 @@ seeded. Run it once on dev, staging and production, then fix capacities in the
 UI. `npm run reservation-seed:verify` checks the seed against a throwaway
 database.
 
+Reservations -> Day view has a Day | All switch. All is a flat list of every
+booking (`GET /api/restaurant/all`, paged 25 at a time): Upcoming (default,
+soonest first), Past or All, with guest/phone/email search, status, area and
+From / To filters, and the same status buttons as the day view.
+
 For staff who only work the restaurant, `npm run db:seed-restaurant-role` (same
 rules: in `server/`, server stopped, safe to re-run) adds a "Restaurant" role
 with Restaurant read, write and delete and nothing else. With one nav item the

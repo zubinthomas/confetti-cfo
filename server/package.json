@@ -13,6 +13,7 @@
     "db:seed-reservation-tables": "node db/seed-reservation-tables.ts",
     "db:seed-restaurant-role": "node db/seed-restaurant-role.ts",
     "reservation-seed:verify": "node db/verify-reservation-seed.ts",
+    "reservation-list:verify": "node db/verify-reservation-list.ts",
     "db:rename-dining-room": "node db/rename-cafe-dining-room.ts",
     "costcentres:verify": "node db/verify-cost-centres.ts",
     "layouts:verify": "node db/verify-layouts.ts",

@@ -5,7 +5,7 @@
 // (plus a party-size-vs-capacity check) is what gives every table real
 // capacity enforcement, the chef's table included, with no special-casing.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { escapeLikeTerm } from '../db.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
@@ -380,37 +380,43 @@ export async function deleteTable(id: string) {
 
 // ── Reservations ─────────────────────────────────────────────────────────
 
+// The joined row every reservation list returns (booking + table + area +
+// location names), shared so the day view and the paged list cannot drift.
+const reservationColumns = {
+  id: schema.reservations.id,
+  createdDate: schema.reservations.createdDate,
+  tableId: schema.reservations.tableId,
+  tableName: schema.reservationTables.name,
+  tableCapacity: schema.reservationTables.capacity,
+  areaId: schema.reservationTables.areaId,
+  areaName: schema.reservationAreas.name,
+  floor: schema.reservationAreas.floor,
+  locationName: schema.reservationLocations.name,
+  date: schema.reservations.date,
+  time: schema.reservations.time,
+  durationMinutes: schema.reservations.durationMinutes,
+  partySize: schema.reservations.partySize,
+  guestName: schema.reservations.guestName,
+  guestPhone: schema.reservations.guestPhone,
+  guestEmail: schema.reservations.guestEmail,
+  status: schema.reservations.status,
+  notes: schema.reservations.notes,
+  seatedAt: schema.reservations.seatedAt,
+  departedAt: schema.reservations.departedAt,
+  tableMaxExtraCapacity: schema.reservationTables.maxExtraCapacity,
+};
+
+const selectReservations = () => db
+  .select(reservationColumns)
+  .from(schema.reservations)
+  .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.reservations.tableId))
+  .innerJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.reservationTables.areaId))
+  .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationAreas.locationId))
+  .$dynamic();
+
 export async function listReservations({ date, tableId, areaId }: { date?: string; tableId?: string; areaId?: string } = {}) {
   await ready();
-  let query = db
-    .select({
-      id: schema.reservations.id,
-      createdDate: schema.reservations.createdDate,
-      tableId: schema.reservations.tableId,
-      tableName: schema.reservationTables.name,
-      tableCapacity: schema.reservationTables.capacity,
-      areaId: schema.reservationTables.areaId,
-      areaName: schema.reservationAreas.name,
-      floor: schema.reservationAreas.floor,
-      locationName: schema.reservationLocations.name,
-      date: schema.reservations.date,
-      time: schema.reservations.time,
-      durationMinutes: schema.reservations.durationMinutes,
-      partySize: schema.reservations.partySize,
-      guestName: schema.reservations.guestName,
-      guestPhone: schema.reservations.guestPhone,
-      guestEmail: schema.reservations.guestEmail,
-      status: schema.reservations.status,
-      notes: schema.reservations.notes,
-      seatedAt: schema.reservations.seatedAt,
-      departedAt: schema.reservations.departedAt,
-      tableMaxExtraCapacity: schema.reservationTables.maxExtraCapacity,
-    })
-    .from(schema.reservations)
-    .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.reservations.tableId))
-    .innerJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.reservationTables.areaId))
-    .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationAreas.locationId))
-    .$dynamic();
+  let query = selectReservations();
 
   const conditions = [];
   if (date) conditions.push(eq(schema.reservations.date, date));
@@ -419,6 +425,62 @@ export async function listReservations({ date, tableId, areaId }: { date?: strin
   if (conditions.length > 0) query = query.where(and(...conditions));
 
   return query.orderBy(asc(schema.reservations.date), asc(schema.reservations.time));
+}
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+export interface ReservationPageFilter {
+  from?: string;
+  to?: string;
+  status?: string;
+  areaId?: string;
+  /** Matches guest name, phone or email, case-insensitively. */
+  q?: string;
+  order?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of reservations across all days, for the "All" list. Filters are
+ *  optional and combine with AND; `from`/`to` are inclusive. Ties on
+ *  date+time fall back to id so a page boundary never repeats or drops a row. */
+export async function listReservationPage(f: ReservationPageFilter = {}) {
+  await ready();
+  const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (f.from && !isDate(f.from)) throw new ReservationError('From date must be in YYYY-MM-DD format');
+  if (f.to && !isDate(f.to)) throw new ReservationError('To date must be in YYYY-MM-DD format');
+  if (f.status && !(RESERVATION_STATUSES as readonly string[]).includes(f.status)) throw new ReservationError(`Unknown status "${f.status}"`);
+  if (f.order && f.order !== 'asc' && f.order !== 'desc') throw new ReservationError('Order must be asc or desc');
+  const limit = Math.min(Math.max(Math.trunc(f.limit ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+  const offset = Math.max(Math.trunc(f.offset ?? 0) || 0, 0);
+
+  const conditions = [];
+  if (f.from) conditions.push(gte(schema.reservations.date, f.from));
+  if (f.to) conditions.push(lte(schema.reservations.date, f.to));
+  if (f.status) conditions.push(eq(schema.reservations.status, f.status as ReservationStatus));
+  if (f.areaId) conditions.push(eq(schema.reservationTables.areaId, f.areaId));
+  const q = f.q?.trim();
+  if (q) {
+    const term = `%${escapeLikeTerm(q)}%`;
+    conditions.push(or(ilike(schema.reservations.guestName, term), ilike(schema.reservations.guestPhone, term), ilike(schema.reservations.guestEmail, term)));
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const dir = f.order === 'desc' ? desc : asc;
+  const rows = await selectReservations()
+    .where(where)
+    .orderBy(dir(schema.reservations.date), dir(schema.reservations.time), asc(schema.reservations.id))
+    .limit(limit)
+    .offset(offset);
+
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(schema.reservations)
+    .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.reservations.tableId))
+    .where(where);
+
+  return { rows, total: Number(total) };
 }
 
 /** Spotlight search over reservations, by guest name/phone/email - most

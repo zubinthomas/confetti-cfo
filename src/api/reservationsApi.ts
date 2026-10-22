@@ -167,3 +167,18 @@ export const createTableMerge = (data: {
 
 export const releaseTableMerge = (id: string) =>
   patch<TableMerge>(`/restaurant/table-merges/${id}/release`, {});
+
+export interface ReservationPage { rows: Reservation[]; total: number }
+
+/** One page of reservations across all days (the "All" list). `from`/`to` are inclusive. */
+export const listReservationPage = (params: {
+  from?: string; to?: string; status?: ReservationStatus | ""; areaId?: string; q?: string;
+  order?: "asc" | "desc"; limit?: number; offset?: number;
+} = {}) => {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const qs = query.toString();
+  return get<ReservationPage>(`/restaurant/all${qs ? `?${qs}` : ""}`);
+};

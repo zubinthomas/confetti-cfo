@@ -8,7 +8,7 @@ import {
   listLocations, createLocation, updateLocation, deleteLocation,
   listAreas, createArea, updateArea, deleteArea,
   listTables, createTable, updateTable, deleteTable,
-  listReservations, createReservation, updateReservationStatus, deleteReservation,
+  listReservations, listReservationPage, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, rescheduleReservation, endReservationEarly,
 } from '../db/reservations.ts';
 import { TableMergeError, listActiveMerges, createMerge, releaseMerge } from '../db/tableMerges.ts';
@@ -222,6 +222,23 @@ router.get('/', requirePermission('Restaurant', 'read'), async (req: AuthedReque
     const tableId = typeof req.query.tableId === 'string' ? req.query.tableId : undefined;
     const areaId = typeof req.query.areaId === 'string' ? req.query.areaId : undefined;
     res.json(await listReservations({ date, tableId, areaId }));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+// Every reservation across all days, filtered and paged (the "All" list). Declared before
+// the by-id routes; nothing else answers GET /all.
+router.get('/all', requirePermission('Restaurant', 'read'), async (req: AuthedRequest, res) => {
+  try {
+    const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined);
+    const num = (v: unknown) => (typeof v === 'string' && v !== '' ? Number(v) : undefined);
+    res.json(await listReservationPage({
+      from: str(req.query.from), to: str(req.query.to), status: str(req.query.status),
+      areaId: str(req.query.areaId), q: str(req.query.q),
+      order: str(req.query.order),
+      limit: num(req.query.limit), offset: num(req.query.offset),
+    }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
