@@ -390,8 +390,21 @@ const ArchivedBadge = () => <span className="text-xs px-2 py-0.5 rounded-full bo
 
 export default function ReservationsTab() {
   const { can } = useAuth();
-  const canWrite = can("Restaurant", "write");
-  const canDelete = can("Restaurant", "delete");
+  // The module is three permission resources: the Locations & Tables catalog
+  // (Restaurant), bookings (Reservation) and sign-ins (GuestRegister).
+  const catWrite = can("Restaurant", "write");
+  const catDelete = can("Restaurant", "delete");
+  const bookRead = can("Reservation", "read");
+  const bookWrite = can("Reservation", "write");
+  const bookDelete = can("Reservation", "delete");
+  const regWrite = can("GuestRegister", "write");
+  const regDelete = can("GuestRegister", "delete");
+  // Splitting a merge is open to either floor permission (same as the API).
+  const mergeWrite = bookWrite || regWrite;
+  // Free table / Extend touch the seated booking and the signed-in guests, so
+  // the user needs the write permission for every part the table actually has.
+  const floorWritable = (floor: { seatedBooking?: unknown; guests: unknown[] }) =>
+    (!floor.seatedBooking || bookWrite) && (floor.guests.length === 0 || regWrite);
 
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
   const { tabs: viewTabs, active: view, setActive: setView } = useTabs("restaurant");
@@ -439,6 +452,7 @@ export default function ReservationsTab() {
   };
 
   const loadReservations = async (date: string) => {
+    if (!bookRead) return;
     try {
       const [rs, signIns, ms] = await Promise.all([
         listReservations({ date }),
@@ -667,7 +681,7 @@ export default function ReservationsTab() {
                     className="text-sm border border-border rounded-lg px-2 py-1.5 max-sm:min-h-11 bg-background text-foreground"
                   />
                 )}
-                {canWrite && (
+                {bookWrite && (
                   <button
                     onClick={() => setShowBooking(true)}
                     disabled={areas.length === 0 || tables.length === 0}
@@ -681,7 +695,7 @@ export default function ReservationsTab() {
           >
             {dayMode === "all" ? (
               <AllReservations
-                locations={locations} areas={areas} canWrite={canWrite} canDelete={canDelete}
+                locations={locations} areas={areas} canWrite={bookWrite} canDelete={bookDelete}
                 refreshKey={listRefresh} onError={setError}
               />
             ) : loadingCatalog || reservations === null ? (
@@ -719,7 +733,7 @@ export default function ReservationsTab() {
                                 </span>
                                 <span className="text-xs text-muted-foreground flex items-center gap-2">
                                   seats {merge ? `${merge.combinedCapacity} (merged)` : `${t.capacity}${t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""}`}
-                                  {merge && canWrite && (
+                                  {merge && mergeWrite && (
                                     <button onClick={() => splitMerge(merge)} className="text-primary hover:underline flex items-center gap-1">
                                       <Link2Off className="w-3.5 h-3.5" /> Split
                                     </button>
@@ -728,7 +742,7 @@ export default function ReservationsTab() {
                               </div>
                               <TableFloorLine
                                 floor={floor}
-                                canWrite={canWrite}
+                                canWrite={floorWritable(floor)}
                                 onExtend={(m) => extendFloor(floor, m)}
                                 onFree={() => freeTable(floor, t)}
                               />
@@ -746,12 +760,12 @@ export default function ReservationsTab() {
                                         <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[r.status]}20`, color: STATUS_COLORS[r.status] }}>
                                           {STATUS_LABELS[r.status]}
                                         </span>
-                                        {canWrite && (NEXT_ACTIONS[r.status] ?? []).map((a) => (
+                                        {bookWrite && (NEXT_ACTIONS[r.status] ?? []).map((a) => (
                                           <button key={a.status} onClick={() => setReservationStatus(r.id, a.status)} className="text-xs text-primary hover:underline">
                                             {a.label}
                                           </button>
                                         ))}
-                                        {canDelete && (
+                                        {bookDelete && (
                                           <button onClick={() => removeReservation(r.id)} className="text-muted-foreground hover:text-destructive">
                                             <Trash2 className="w-3.5 h-3.5" />
                                           </button>
@@ -779,7 +793,7 @@ export default function ReservationsTab() {
         <GuestRegister
           locations={locations} areas={areas} tables={tables}
           history={{ locations: allLocations, areas: allAreas, tables: allTables }}
-          canWrite={canWrite} canDelete={canDelete}
+          canWrite={regWrite} canDelete={regDelete} canWriteBookings={bookWrite}
         />
       ) : (
         <DashCard
@@ -790,7 +804,7 @@ export default function ReservationsTab() {
                 <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
                 Show archived
               </label>
-              {canWrite && (
+              {catWrite && (
                 <button
                   onClick={() => setLocationModal({ location: null })}
                   className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-3 py-1.5 max-sm:min-h-11 rounded-lg hover:opacity-90 transition"
@@ -816,7 +830,7 @@ export default function ReservationsTab() {
                         {loc.name} {loc.archivedAt && <ArchivedBadge />}
                       </span>
                       <CatalogRowActions
-                        label={loc.name} item={loc} canWrite={canWrite} canDelete={canDelete}
+                        label={loc.name} item={loc} canWrite={catWrite} canDelete={catDelete}
                         onEdit={() => setLocationModal({ location: loc })}
                         onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "location", id: loc.id, name: loc.name }); }}
                         onRestore={() => restoreItem("location", loc.id)}
@@ -840,7 +854,7 @@ export default function ReservationsTab() {
                                   {area.archivedAt && <ArchivedBadge />}
                                 </div>
                                 <CatalogRowActions
-                                  label={area.name} item={area} canWrite={canWrite} canDelete={canDelete}
+                                  label={area.name} item={area} canWrite={catWrite} canDelete={catDelete}
                                   onEdit={() => setAreaModal({ area, locationId: loc.id, locationName: loc.name })}
                                   onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "area", id: area.id, name: area.name }); }}
                                   onRestore={() => restoreItem("area", area.id)}
@@ -858,7 +872,7 @@ export default function ReservationsTab() {
                                         {t.archivedAt && <ArchivedBadge />}
                                       </span>
                                       <CatalogRowActions
-                                        label={`table ${t.name}`} item={t} canWrite={canWrite} canDelete={canDelete}
+                                        label={`table ${t.name}`} item={t} canWrite={catWrite} canDelete={catDelete}
                                         onEdit={() => setTableModal({ table: t, areaId: area.id, areaName: area.name })}
                                         onArchive={() => { setDeleteError(""); setCatalogAction({ mode: "archive", kind: "table", id: t.id, name: t.name }); }}
                                         onRestore={() => restoreItem("table", t.id)}
@@ -868,7 +882,7 @@ export default function ReservationsTab() {
                                   ))}
                                 </div>
                               )}
-                              {canWrite && !area.archivedAt && (
+                              {catWrite && !area.archivedAt && (
                                 <button
                                   onClick={() => setTableModal({ table: null, areaId: area.id, areaName: area.name })}
                                   className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"
@@ -881,7 +895,7 @@ export default function ReservationsTab() {
                         })}
                       </div>
                     )}
-                    {canWrite && !loc.archivedAt && (
+                    {catWrite && !loc.archivedAt && (
                       <button
                         onClick={() => setAreaModal({ area: null, locationId: loc.id, locationName: loc.name })}
                         className="text-xs text-primary hover:underline flex items-center gap-1 max-sm:min-h-11"

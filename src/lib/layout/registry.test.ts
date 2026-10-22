@@ -76,6 +76,15 @@ describe('page tabs', () => {
     });
   });
 
+  it('open the Restaurant module with any of its three permissions and gate each tab', () => {
+    expect(GATES.restaurant.mode).toBe('any');
+    expect(GATES.restaurant.requires.map((r) => `${r.resource}:${r.action}`)).toEqual([
+      'Restaurant:read', 'Reservation:read', 'GuestRegister:read',
+    ]);
+    const tabs = Object.fromEntries(PAGE_TABS.restaurant.map((t) => [t.id, t.gate?.requires.map((r) => r.resource)]));
+    expect(tabs).toEqual({ signin: ['GuestRegister'], day: ['Reservation'], manage: ['Restaurant'] });
+  });
+
   it('keep the users-page tabs in the order the page always used', () => {
     expect(PAGE_TABS.users.map((t) => t.id)).toEqual(['users', 'invites', 'roles', 'layouts']);
   });

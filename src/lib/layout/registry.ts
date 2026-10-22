@@ -24,7 +24,9 @@ export const GATES = {
   hr: { mode: 'any', requires: [read('Employee'), read('LeaveRequest'), read('Recruitment')] },
   compliance: { requires: [read('Licence')] },
   inventory: { requires: [read('Inventory')] },
-  restaurant: { requires: [read('Restaurant')] },
+  // The module is three permission resources: bookings, the guest register and
+  // the Locations & Tables catalog. Any one opens it; the tabs gate the rest.
+  restaurant: { mode: 'any', requires: [read('Restaurant'), read('Reservation'), read('GuestRegister')] },
   import: { mode: 'any', requires: [read('Import'), read('SheetSource')] },
   tally: { requires: [read('TallySource')] },
   settings: { requires: [read('Settings')] },
@@ -130,9 +132,9 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'layouts', label: 'Layouts', icon: LayoutTemplate, gate: needs('Layout') },
   ],
   restaurant: [
-    { id: 'signin', label: 'Guest Register', icon: DoorOpen },
-    { id: 'day', label: 'Reservations', icon: CalendarDays },
-    { id: 'manage', label: 'Locations & Tables', icon: Settings2 },
+    { id: 'signin', label: 'Guest Register', icon: DoorOpen, gate: needs('GuestRegister') },
+    { id: 'day', label: 'Reservations', icon: CalendarDays, gate: needs('Reservation') },
+    { id: 'manage', label: 'Locations & Tables', icon: Settings2, gate: needs('Restaurant') },
   ],
   store: [
     { id: 'channels', label: 'Channel Mix' },

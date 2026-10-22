@@ -284,12 +284,14 @@ export function SignInModal({
 // ── Assign / change table ────────────────────────────────────────────────
 
 export function AssignTableModal({
-  signIn, tables, merges, occupiedTableIds, onClose, onSaved,
+  signIn, tables, merges, occupiedTableIds, canWriteBookings = false, onClose, onSaved,
 }: {
   signIn: GuestSignIn;
   tables: ReservationTable[];
   merges: TableMerge[];
   occupiedTableIds: Set<string>;
+  /** Reservation:write - moving the clashing booking is a reservation edit. */
+  canWriteBookings?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -482,12 +484,12 @@ export function AssignTableModal({
           {branch?.code === "reservation_clash" && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-2">
               <p>{branch.message}</p>
-              {clashBooking
+              {clashBooking && canWriteBookings
                 ? <button onClick={() => { /* open reschedule */ setBranch({ ...branch, code: "reschedule" }); }}
                     className="text-xs font-medium px-3 py-1.5 rounded-md bg-amber-600 text-white hover:opacity-90">
                     Reschedule that booking
                   </button>
-                : <p className="opacity-80">Open the Reservations tab to move it.</p>}
+                : <p className="opacity-80">{canWriteBookings ? "Open the Reservations tab to move it." : "Someone with reservation access needs to move that booking."}</p>}
             </div>
           )}
 
@@ -589,7 +591,7 @@ function WaitingRow({
 // ── Main ─────────────────────────────────────────────────────────────────
 
 export default function GuestRegister({
-  locations, areas, tables, history, canWrite, canDelete,
+  locations, areas, tables, history, canWrite, canDelete, canWriteBookings = false,
 }: {
   locations: ReservationLocation[];
   areas: ReservationArea[];
@@ -599,6 +601,8 @@ export default function GuestRegister({
   history?: { locations: ReservationLocation[]; areas: ReservationArea[]; tables: ReservationTable[] };
   canWrite: boolean;
   canDelete: boolean;
+  /** Reservation:write, for rescheduling a booking that clashes with a seating. */
+  canWriteBookings?: boolean;
 }) {
   const [onPremises, setOnPremises] = useState<GuestSignIn[] | null>(null);
   const [dayHistory, setDayHistory] = useState<GuestSignIn[] | null>(null);
@@ -840,6 +844,7 @@ export default function GuestRegister({
           tables={tables}
           merges={merges}
           occupiedTableIds={occupiedTableIds}
+          canWriteBookings={canWriteBookings}
           onClose={() => setAssignTarget(null)}
           onSaved={() => { setAssignTarget(null); refreshAll(); }}
         />
