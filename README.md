@@ -100,6 +100,36 @@ Notes:
   see `npm run role:list` / `npm run permission:list` for what exists. The
   very first user ever created is auto-assigned the built-in `Admin` role.
 
+## Layouts by permission, role and user
+
+What each person sees in the navigation, on page tabs and on the overview is
+a layout, resolved per request from four layers (later wins):
+
+1. the built-in defaults in `src/lib/layout/registry.ts`
+2. permission layouts (lower priority number wins)
+3. role layouts (lower role rank wins)
+4. the person's own layout
+
+Whatever the layers say, an item is only shown if `can(resource, action)`
+allows it, so a layout can never reveal something the person can't open.
+Layouts are presentation only, not a security boundary: hiding a link does
+not block the route or the API.
+
+- Everyone edits their own layout at `/settings/user` (also the "Edit layout"
+  link on the overview). Admins cannot author a person's layout, only reset it
+  (Users tab, needs `User:write`).
+- Role and permission layouts are edited on Users and Permissions -> Layouts.
+  `Layout:read` shows the tab, `Layout:write` changes layouts, and role layouts
+  also need `Role:read`. `Role:read` alone never lets anyone edit a layout.
+- Item ids in the registry are stored in layouts. Rename one only together with
+  a data migration.
+- The "Apply Leadership preset" button writes the Leadership role layout. On
+  each database that has a `Leadership` role, run
+  `npm run db:seed-leadership-layout` in `server/` (stop the server first,
+  PGlite is single-process; add `--force` to overwrite an existing layout).
+- `npm run layouts:verify` in `server/` checks the layout tables, validator
+  and seed script.
+
 ## Checks and scripts
 
 From the repo root:
