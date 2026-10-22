@@ -44,3 +44,7 @@ export function scopeRange(scope: ListScope, today: string, from: string, to: st
   }
   return { from: from || undefined, to: to || undefined, order: "desc" };
 }
+
+/** "Thu, 22 Oct 2026" for a 'YYYY-MM-DD' date. */
+export const prettyDate = (date: string) =>
+  new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });

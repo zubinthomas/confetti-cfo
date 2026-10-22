@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import AreaSelect from "@/components/reservations/AreaSelect";
-import { Plus, X, Loader2, Trash2, Pencil, LogOut, Armchair, Clock, Phone, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react";
+import { Plus, X, Loader2, Trash2, Phone, ArrowUp, ArrowDown, AlertTriangle, Armchair } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import SignInRow, { VISIT_LABELS } from "@/components/reservations/SignInRow";
+import AllSignIns from "@/components/reservations/AllSignIns";
 import ReservationRescheduleModal from "@/components/reservations/ReservationRescheduleModal";
 import { ApiError } from "@/api/http";
 import {
@@ -27,9 +29,6 @@ const clockOf = istClock;
 const nowTimeValue = () => istTimeStr();
 const isoFromTimeToday = (hhmm: string) => istTimeToUtcIso(hhmm);
 
-const VISIT_LABELS: Record<GuestVisitType, string> = { walk_in: "Walk-in", event: "Event" };
-const VISIT_COLORS: Record<GuestVisitType, string> = { walk_in: "#3b82f6", event: "#8b5cf6" };
-const EXTEND_STEPS = [15, 30, 60];
 const MERGE_KIND_LABELS: Record<MergeKind, string> = { adjacent: "Side by side", end_to_end: "End to end" };
 const END_TO_END_SEAT_LOSS = 2;
 
@@ -587,91 +586,17 @@ function WaitingRow({
   );
 }
 
-function SignInRow({
-  s, canWrite, canDelete, onAssign, onEdit, onSignOut, onDelete, onExtend,
-}: {
-  s: GuestSignIn;
-  canWrite: boolean; canDelete: boolean;
-  onAssign: () => void; onEdit: () => void; onSignOut: () => void; onDelete: () => void;
-  onExtend: (minutes: number) => void;
-}) {
-  const [extendOpen, setExtendOpen] = useState(false);
-  const out = s.signedOutAt;
-  return (
-    <div className="border border-border rounded-lg p-3 flex flex-wrap items-start justify-between gap-2">
-      <div className="min-w-0 space-y-0.5">
-        <div className="text-sm flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-foreground">{s.guestName}</span>
-          <span className="text-muted-foreground">party of {s.partySize}</span>
-          <span className="text-xs px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: `${VISIT_COLORS[s.visitType]}20`, color: VISIT_COLORS[s.visitType] }}>
-            {VISIT_LABELS[s.visitType]}
-          </span>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {s.areaName ?? "—"} · {s.tableName ? <span className="text-foreground">{s.tableName}</span> : "unseated"}
-          {" · in "}{clockOf(s.signedInAt)}
-          {out && ` – ${clockOf(out)} out`}
-          {!out && s.expectedUntil && s.tableId && ` · until ~${clockOf(s.expectedUntil)}`}
-        </div>
-        {(s.host || s.purpose) && (
-          <div className="text-xs text-muted-foreground">
-            {s.host && <>Host: {s.host}</>}{s.host && s.purpose && " · "}{s.purpose}
-          </div>
-        )}
-        {s.reservationId && (
-          <div className="text-xs text-primary">↳ booking {s.reservationTime ?? ""} ({s.reservationGuestName ?? ""})</div>
-        )}
-      </div>
-      {canWrite && !out && (
-        <div className="flex items-center gap-2 shrink-0 text-xs">
-          <button onClick={onAssign} className="flex items-center gap-1 text-primary hover:underline">
-            <Armchair className="w-3.5 h-3.5" /> {s.tableId ? "Change table" : "Assign table"}
-          </button>
-          {s.tableId && (
-            <div className="relative">
-              <button onClick={() => setExtendOpen((v) => !v)} className="flex items-center gap-1 text-primary hover:underline">
-                <Clock className="w-3.5 h-3.5" /> Extend
-              </button>
-              {extendOpen && (
-                <div className="absolute right-0 mt-1 z-10 bg-card border border-border rounded-lg p-1 flex gap-1 shadow-md">
-                  {EXTEND_STEPS.map((m) => (
-                    <button key={m} onClick={() => { setExtendOpen(false); onExtend(m); }}
-                      className="text-xs px-2 py-1 rounded hover:bg-muted">+{m}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          <button onClick={onSignOut} className="flex items-center gap-1 text-primary hover:underline">
-            <LogOut className="w-3.5 h-3.5" /> Sign out
-          </button>
-          <button onClick={onEdit} className="text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-          {canDelete && (
-            <button onClick={onDelete} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
-          )}
-        </div>
-      )}
-      {canWrite && out && (
-        <div className="flex items-center gap-2 shrink-0">
-          <button onClick={onEdit} className="text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-          {canDelete && (
-            <button onClick={onDelete} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main ─────────────────────────────────────────────────────────────────
 
 export default function GuestRegister({
-  locations, areas, tables, canWrite, canDelete,
+  locations, areas, tables, history, canWrite, canDelete,
 }: {
   locations: ReservationLocation[];
   areas: ReservationArea[];
   tables: ReservationTable[];
+  /** Everything including archived rows, for the All list's filters (entries can
+   *  still point at a retired table). Defaults to the active lists. */
+  history?: { locations: ReservationLocation[]; areas: ReservationArea[]; tables: ReservationTable[] };
   canWrite: boolean;
   canDelete: boolean;
 }) {
@@ -679,6 +604,9 @@ export default function GuestRegister({
   const [dayHistory, setDayHistory] = useState<GuestSignIn[] | null>(null);
   const [merges, setMerges] = useState<TableMerge[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
+  // Signed out card: Day = one date, All = flat filterable list across every date.
+  const [outMode, setOutMode] = useState<"day" | "all">("day");
+  const [listRefresh, setListRefresh] = useState(0);
   const [error, setError] = useState("");
 
   const [showSignIn, setShowSignIn] = useState(false);
@@ -752,9 +680,12 @@ export default function GuestRegister({
     [onPremises],
   );
 
+  /** Reload the live register and, if it is showing, the All list. */
+  const refreshAll = () => { setListRefresh((n) => n + 1); return load(); };
+
   const runAction = async (fn: () => Promise<unknown>) => {
     setActionError("");
-    try { await fn(); await load(); return true; }
+    try { await fn(); await refreshAll(); return true; }
     catch (err) { setActionError(err instanceof Error ? err.message : "Action failed"); return false; }
   };
 
@@ -848,13 +779,33 @@ export default function GuestRegister({
       <DashCard
         title="Signed out"
         action={(
-          <input
-            type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
-            className="text-sm border border-border rounded-lg px-2 py-1.5 bg-background text-foreground"
-          />
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1" role="group" aria-label="Signed out view">
+              {([["day", "Day"], ["all", "All"]] as const).map(([id, label]) => (
+                <button
+                  key={id} onClick={() => setOutMode(id)} aria-pressed={outMode === id}
+                  className={`text-sm px-3 py-1.5 max-sm:min-h-11 rounded-lg ${outMode === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {outMode === "day" && (
+              <input
+                type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
+                className="text-sm border border-border rounded-lg px-2 py-1.5 max-sm:min-h-11 bg-background text-foreground"
+              />
+            )}
+          </div>
         )}
       >
-        {dayHistory === null ? (
+        {outMode === "all" ? (
+          <AllSignIns
+            locations={history?.locations ?? locations} areas={history?.areas ?? areas} tables={history?.tables ?? tables}
+            canWrite={canWrite} canDelete={canDelete} refreshKey={listRefresh} onError={setError}
+            onEdit={setEditTarget} onDelete={setDeleteTarget}
+          />
+        ) : dayHistory === null ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : signedOut.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">No one has signed out on this date.</p>
@@ -880,7 +831,7 @@ export default function GuestRegister({
           areas={areas}
           existing={editTarget}
           onClose={() => { setShowSignIn(false); setEditTarget(null); }}
-          onSaved={() => { setShowSignIn(false); setEditTarget(null); load(); }}
+          onSaved={() => { setShowSignIn(false); setEditTarget(null); refreshAll(); }}
         />
       )}
       {assignTarget && (
@@ -890,7 +841,7 @@ export default function GuestRegister({
           merges={merges}
           occupiedTableIds={occupiedTableIds}
           onClose={() => setAssignTarget(null)}
-          onSaved={() => { setAssignTarget(null); load(); }}
+          onSaved={() => { setAssignTarget(null); refreshAll(); }}
         />
       )}
       <ConfirmDialog

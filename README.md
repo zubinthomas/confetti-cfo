@@ -127,6 +127,12 @@ seeded. Run it once on dev, staging and production, then fix capacities in the
 UI. `npm run reservation-seed:verify` checks the seed against a throwaway
 database.
 
+The Guest Register's Signed out card has the same Day | All switch (`GET
+/api/guest-sign-ins/all`, 25 per page): search by guest, phone, email, host,
+purpose or table name, and filter by area, table (archived ones included), visit
+type and From / To dates. Edit and delete work from the list, which is how you
+clear old entries off a table before deleting it permanently.
+
 Locations, areas and tables are archived, not deleted. Archive (the button on
 Locations & Tables) hides one from lists, the booking form and the guest
 register, but past bookings keep it and the day view still shows an archived

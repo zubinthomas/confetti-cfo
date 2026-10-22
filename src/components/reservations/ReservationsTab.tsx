@@ -776,7 +776,11 @@ export default function ReservationsTab() {
           </DashCard>
         </>
       ) : view === "signin" ? (
-        <GuestRegister locations={locations} areas={areas} tables={tables} canWrite={canWrite} canDelete={canDelete} />
+        <GuestRegister
+          locations={locations} areas={areas} tables={tables}
+          history={{ locations: allLocations, areas: allAreas, tables: allTables }}
+          canWrite={canWrite} canDelete={canDelete}
+        />
       ) : (
         <DashCard
           title="Locations & Tables"

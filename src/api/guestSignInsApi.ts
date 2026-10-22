@@ -76,6 +76,22 @@ export const listSignIns = (
   return get<GuestSignIn[]>(`/guest-sign-ins${qs ? `?${qs}` : ""}`);
 };
 
+export interface SignInPage { rows: GuestSignIn[]; total: number }
+
+/** One page of register entries across all days, newest first. `from`/`to` are inclusive IST dates;
+ *  `state` defaults to signed-out entries on the server. */
+export const listSignInPage = (params: {
+  from?: string; to?: string; areaId?: string; tableId?: string; visitType?: GuestVisitType | "";
+  q?: string; state?: "signedOut" | "onPremises"; limit?: number; offset?: number;
+} = {}) => {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const qs = query.toString();
+  return get<SignInPage>(`/guest-sign-ins/all${qs ? `?${qs}` : ""}`);
+};
+
 export const estimateWait = (params: { areaId?: string; partySize: number }) => {
   const query = new URLSearchParams();
   if (params.areaId) query.set("areaId", params.areaId);

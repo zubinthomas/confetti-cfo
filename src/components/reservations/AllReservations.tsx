@@ -6,7 +6,7 @@ import {
 } from "@/api/reservationsApi";
 import AreaSelect from "@/components/reservations/AreaSelect";
 import {
-  STATUS_LABELS, STATUS_COLORS, NEXT_ACTIONS, endTime, scopeRange, type ListScope,
+  STATUS_LABELS, STATUS_COLORS, NEXT_ACTIONS, endTime, prettyDate, scopeRange, type ListScope,
 } from "@/components/reservations/reservationUi";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { istDateStr } from "@/lib/ist";
@@ -16,9 +16,6 @@ const FIELD = "text-sm border border-border rounded-lg px-2 py-1.5 max-sm:min-h-
 const SCOPES: { id: ListScope; label: string }[] = [
   { id: "upcoming", label: "Upcoming" }, { id: "past", label: "Past" }, { id: "all", label: "All" },
 ];
-
-const prettyDate = (date: string) =>
-  new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** Flat, filterable list of every reservation (the "All" side of the Day / All
  *  switch). Filtering and paging happen on the server. */

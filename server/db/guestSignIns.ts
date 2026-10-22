@@ -16,8 +16,9 @@
 // / istDayBounds, which apply the fixed UTC+5:30 offset explicitly - so this
 // is correct regardless of the server process timezone.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
+import { escapeLikeTerm } from '../db.ts';
 import {
   ReservationError, updateReservationStatus,
   listActiveReservationOverlaps, listTables, toMinutes, fromMinutes, istNow, istDayBounds,
@@ -132,6 +133,67 @@ export async function listSignIns(
   return unseatedOnly
     ? query.orderBy(asc(schema.guestSignIns.sortOrder), asc(schema.guestSignIns.signedInAt))
     : query.orderBy(desc(schema.guestSignIns.signedInAt));
+}
+
+const SIGN_IN_PAGE_SIZE = 50;
+const SIGN_IN_MAX_PAGE_SIZE = 200;
+
+export interface SignInPageFilter {
+  /** IST calendar days, inclusive. */
+  from?: string;
+  to?: string;
+  areaId?: string;
+  tableId?: string;
+  visitType?: string;
+  /** Guest name, phone, email, host, purpose or table name, case-insensitive. */
+  q?: string;
+  /** 'signedOut' (default) or 'onPremises'. */
+  state?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of register entries across all days, newest first, for the
+ *  "All" side of the Signed out card. Filters combine with AND; ties on
+ *  signedInAt fall back to id so a page boundary never repeats or drops a row. */
+export async function listSignInPage(f: SignInPageFilter = {}) {
+  await ready();
+  const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (f.from && !isDate(f.from)) throw new GuestSignInError('From date must be in YYYY-MM-DD format');
+  if (f.to && !isDate(f.to)) throw new GuestSignInError('To date must be in YYYY-MM-DD format');
+  if (f.visitType && !(VISIT_TYPES as readonly string[]).includes(f.visitType)) throw new GuestSignInError(`Invalid visit type: ${f.visitType}`);
+  if (f.state && f.state !== 'signedOut' && f.state !== 'onPremises') throw new GuestSignInError('State must be signedOut or onPremises');
+  const limit = Math.min(Math.max(Math.trunc(f.limit ?? SIGN_IN_PAGE_SIZE) || SIGN_IN_PAGE_SIZE, 1), SIGN_IN_MAX_PAGE_SIZE);
+  const offset = Math.max(Math.trunc(f.offset ?? 0) || 0, 0);
+
+  const conditions = [f.state === 'onPremises' ? isNull(schema.guestSignIns.signedOutAt) : isNotNull(schema.guestSignIns.signedOutAt)];
+  if (f.from) conditions.push(gte(schema.guestSignIns.signedInAt, istDayBounds(f.from).gte));
+  if (f.to) conditions.push(lt(schema.guestSignIns.signedInAt, istDayBounds(f.to).lt));
+  if (f.areaId) conditions.push(eq(schema.guestSignIns.areaId, f.areaId));
+  if (f.tableId) conditions.push(eq(schema.guestSignIns.tableId, f.tableId));
+  if (f.visitType) conditions.push(eq(schema.guestSignIns.visitType, f.visitType as VisitType));
+  const q = f.q?.trim();
+  if (q) {
+    const term = `%${escapeLikeTerm(q)}%`;
+    conditions.push(or(
+      ilike(schema.guestSignIns.guestName, term), ilike(schema.guestSignIns.guestPhone, term),
+      ilike(schema.guestSignIns.guestEmail, term), ilike(schema.guestSignIns.host, term),
+      ilike(schema.guestSignIns.purpose, term), ilike(schema.reservationTables.name, term),
+    )!);
+  }
+  const where = and(...conditions);
+
+  const rows = await signInQuery()
+    .where(where)
+    .orderBy(desc(schema.guestSignIns.signedInAt), asc(schema.guestSignIns.id))
+    .limit(limit)
+    .offset(offset);
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(schema.guestSignIns)
+    .leftJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.guestSignIns.tableId))
+    .where(where);
+  return { rows, total: Number(total) };
 }
 
 async function getSignIn(id: string) {
