@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   listLocations, createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
-  listAreas, createArea, updateArea, archiveArea, restoreArea, purgeArea, areaLabel,
+  listAreas, createArea, updateArea, archiveArea, restoreArea, purgeArea,
   listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, endReservationEarly, listTableMerges, releaseTableMerge,
@@ -9,7 +9,7 @@ import {
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
-import { Plus, X, Loader2, Trash2, Clock, Link2, Link2Off } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
@@ -18,11 +18,14 @@ import GuestRegister from "@/components/reservations/GuestRegister";
 import AllReservations from "@/components/reservations/AllReservations";
 import AreaSelect from "@/components/reservations/AreaSelect";
 import CatalogManager from "@/components/reservations/CatalogManager";
-import { ArchivedBadge, type CatalogKind } from "@/components/reservations/CatalogParts";
+import DayFloor, { DayFloorControls, isDayLayout, type DayLayout } from "@/components/reservations/DayFloor";
+import type { TableUnit } from "@/components/reservations/TableCard";
+import { type CatalogKind } from "@/components/reservations/CatalogParts";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
-import { STATUS_LABELS, STATUS_COLORS, ACTIVE_STATUSES, NEXT_ACTIONS, endTime } from "@/components/reservations/reservationUi";
+import { ACTIVE_STATUSES, allCollapsed, endTime, collapseAreas, expandAreas, isIdList, toggleId, type FloorInfo } from "@/components/reservations/reservationUi";
+import { usePersistedState } from "@/hooks/usePersistedState";
 
 const todayStr = () => istDateStr();
 
@@ -32,7 +35,6 @@ const toMin = (hhmm: string) => {
 };
 const nowMinutes = () => istMinutes();
 const clockOf = istClock;
-const FLOOR_EXTEND_STEPS = [15, 30, 60];
 
 const EMPTY_BOOKING = { areaId: "", tableId: "", date: todayStr(), time: "19:00", durationMinutes: "90", partySize: "2", guestName: "", guestPhone: "", guestEmail: "", notes: "" };
 
@@ -309,49 +311,6 @@ function TableModal({ table, tables, areaId, areaName, onClose, onSaved }: {
   );
 }
 
-type FloorInfo = {
-  state: "free" | "reserved" | "occupied";
-  label: string;
-  until: string | null;
-  seatedBooking?: Reservation;
-  guests: GuestSignIn[];
-};
-const FLOOR_DOT: Record<FloorInfo["state"], string> = {
-  free: "#10b981", reserved: "#f59e0b", occupied: "#8b5cf6",
-};
-
-function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
-  floor: FloorInfo; canWrite: boolean; onExtend: (m: number) => void; onFree: () => void;
-}) {
-  const [extendOpen, setExtendOpen] = useState(false);
-  return (
-    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-      <span className="text-xs flex items-center gap-1.5">
-        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: FLOOR_DOT[floor.state] }} />
-        <span className="text-muted-foreground">{floor.label}{floor.until ? ` · until ${floor.until}` : ""}</span>
-      </span>
-      {canWrite && floor.state === "occupied" && (
-        <span className="flex items-center gap-2 text-xs">
-          <span className="relative">
-            <button onClick={() => setExtendOpen((v) => !v)} className="flex items-center gap-1 text-primary hover:underline">
-              <Clock className="w-3.5 h-3.5" /> Extend
-            </button>
-            {extendOpen && (
-              <span className="absolute right-0 mt-1 z-10 bg-card border border-border rounded-lg p-1 flex gap-1 shadow-md">
-                {FLOOR_EXTEND_STEPS.map((m) => (
-                  <button key={m} onClick={() => { setExtendOpen(false); onExtend(m); }}
-                    className="text-xs px-2 py-1 rounded hover:bg-muted">+{m}</button>
-                ))}
-              </span>
-            )}
-          </span>
-          <button onClick={onFree} className="text-primary hover:underline">Free table</button>
-        </span>
-      )}
-    </div>
-  );
-}
-
 const CATALOG_CALLS: Record<"archive" | "restore" | "purge", Record<CatalogKind, (id: string) => Promise<unknown>>> = {
   archive: { location: archiveLocation, area: archiveArea, table: archiveTable },
   restore: { location: restoreLocation, area: restoreArea, table: restoreTable },
@@ -396,6 +355,10 @@ export default function ReservationsTab() {
   // Day = per-table floor view for one date; All = flat, filterable list of every booking.
   const [dayMode, setDayMode] = useState<"day" | "all">("day");
   const [listRefresh, setListRefresh] = useState(0);
+  // Day mode layout and which areas are collapsed: remembered per browser. Stored
+  // as collapsed ids, so an area created later starts open.
+  const [dayLayout, setDayLayout] = usePersistedState<DayLayout>("restaurant.day.view", "grid", isDayLayout);
+  const [dayCollapsed, setDayCollapsed] = usePersistedState<string[]>("restaurant.day.collapsed", [], isIdList);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [error, setError] = useState("");
 
@@ -517,10 +480,25 @@ export default function ReservationsTab() {
       };
     }
     if (nextBooking) {
-      return { state: "reserved" as const, label: `Next booking ${nextBooking.time}`, until: null, seatedBooking: undefined, guests: [] };
+      return { state: "reserved" as const, label: `Next booking ${nextBooking.time}`, until: null, nextTime: nextBooking.time, seatedBooking: undefined, guests: [] };
     }
     return { state: "free" as const, label: "Free", until: null, seatedBooking: undefined, guests: [] };
   };
+
+  // One entry per table, or per merged unit (drawn once, at its first table).
+  const dayUnits: TableUnit[] = dayTables
+    .filter((t) => {
+      const m = mergeByTableId.get(t.id);
+      return !m || m.tableIds[0] === t.id;
+    })
+    .map((t) => {
+      const merge = mergeByTableId.get(t.id);
+      const unitIds = merge ? merge.tableIds : [t.id];
+      const bookings = unitIds.flatMap((id) => reservationsByTable.get(id) ?? [])
+        .sort((a, b) => a.time.localeCompare(b.time));
+      return { key: merge ? merge.id : t.id, table: t, merge, bookings, floor: tableFloor(t, merge) };
+    });
+  const dayAreaIds = dayAreas.filter((a) => dayUnits.some((u) => u.table.areaId === a.id)).map((a) => a.id);
 
   const coversBooked = (reservations ?? [])
     .filter((r) => ACTIVE_STATUSES.includes(r.status))
@@ -547,13 +525,13 @@ export default function ReservationsTab() {
     }
   };
 
-  const freeTable = (floor: ReturnType<typeof tableFloor>, table: ReservationTable) => runFloorAction(async () => {
+  const freeTable = (floor: FloorInfo, table: ReservationTable) => runFloorAction(async () => {
     if (floor.seatedBooking) await endReservationEarly(floor.seatedBooking.id);
     await Promise.all(floor.guests.map((g) => signOutGuest(g.id)));
     checkWaitlistMatch(table);
   });
 
-  const extendFloor = (floor: ReturnType<typeof tableFloor>, minutes: number) => runFloorAction(async () => {
+  const extendFloor = (floor: FloorInfo, minutes: number) => runFloorAction(async () => {
     if (floor.seatedBooking) {
       await extendReservation(floor.seatedBooking.id, floor.seatedBooking.durationMinutes + minutes);
     }
@@ -647,10 +625,17 @@ export default function ReservationsTab() {
                   ))}
                 </div>
                 {dayMode === "day" && (
-                  <input
-                    type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
-                    className="text-sm border border-border rounded-lg px-2 py-1.5 max-sm:min-h-11 bg-background text-foreground"
-                  />
+                  <>
+                    <input
+                      type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
+                      className="text-sm border border-border rounded-lg px-2 py-1.5 max-sm:min-h-11 bg-background text-foreground"
+                    />
+                    <DayFloorControls
+                      layout={dayLayout} onLayout={setDayLayout}
+                      everyAreaCollapsed={dayAreaIds.length > 0 ? allCollapsed(dayAreaIds, dayCollapsed) : null}
+                      onToggleAll={() => setDayCollapsed((ids) => (allCollapsed(dayAreaIds, ids) ? expandAreas(dayAreaIds, ids) : collapseAreas(dayAreaIds, ids)))}
+                    />
+                  </>
                 )}
                 {bookWrite && (
                   <button
@@ -675,84 +660,15 @@ export default function ReservationsTab() {
               <p className="text-sm text-muted-foreground text-center py-8">No areas yet - add one under "Locations &amp; Tables".</p>
             ) : (
               <div className="space-y-5">
-                {dayAreas.map((area) => {
-                  const locTables = dayTables.filter((t) => t.areaId === area.id);
-                  if (locTables.length === 0) return null;
-                  const locationName = locations.length > 1 ? locations.find((l) => l.id === area.locationId)?.name : null;
-                  return (
-                    <div key={area.id}>
-                      <p className="text-sm font-semibold text-foreground mb-2">
-                        {locationName && <span className="text-muted-foreground font-normal">{locationName} · </span>}{areaLabel(area)}
-                      </p>
-                      <div className="space-y-3">
-                        {locTables.filter((t) => {
-                          const m = mergeByTableId.get(t.id);
-                          return !m || m.tableIds[0] === t.id; // merged unit renders once, at its first table
-                        }).map((t) => {
-                          const merge = mergeByTableId.get(t.id);
-                          const unitIds = merge ? merge.tableIds : [t.id];
-                          const bookings = unitIds.flatMap((id) => reservationsByTable.get(id) ?? [])
-                            .sort((a, b) => a.time.localeCompare(b.time));
-                          const floor = tableFloor(t, merge);
-                          return (
-                            <div key={merge ? merge.id : t.id} className="border border-border rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-                                <span className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                                  {merge && <Link2 className="w-3.5 h-3.5 text-primary" />}
-                                  {merge ? merge.tableNames.join(" ＋ ") : t.name}
-                                  {t.archivedAt && <ArchivedBadge />}
-                                </span>
-                                <span className="text-xs text-muted-foreground flex items-center gap-2">
-                                  seats {merge ? `${merge.combinedCapacity} (merged)` : `${t.capacity}${t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""}`}
-                                  {merge && mergeWrite && (
-                                    <button onClick={() => splitMerge(merge)} className="text-primary hover:underline flex items-center gap-1">
-                                      <Link2Off className="w-3.5 h-3.5" /> Split
-                                    </button>
-                                  )}
-                                </span>
-                              </div>
-                              <TableFloorLine
-                                floor={floor}
-                                canWrite={floorWritable(floor)}
-                                onExtend={(m) => extendFloor(floor, m)}
-                                onFree={() => freeTable(floor, t)}
-                              />
-                              {bookings.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No bookings today</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {bookings.map((r) => (
-                                    <div key={r.id} className="flex items-center justify-between gap-2 text-sm flex-wrap">
-                                      <div className="min-w-0">
-                                        <span className="font-medium text-foreground">{r.time}–{endTime(r.time, r.durationMinutes)}</span>{" "}
-                                        <span className="text-muted-foreground">· {r.guestName} · party of {r.partySize}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[r.status]}20`, color: STATUS_COLORS[r.status] }}>
-                                          {STATUS_LABELS[r.status]}
-                                        </span>
-                                        {bookWrite && (NEXT_ACTIONS[r.status] ?? []).map((a) => (
-                                          <button key={a.status} onClick={() => setReservationStatus(r.id, a.status)} className="text-xs text-primary hover:underline">
-                                            {a.label}
-                                          </button>
-                                        ))}
-                                        {bookDelete && (
-                                          <button onClick={() => removeReservation(r.id)} className="text-muted-foreground hover:text-destructive">
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+                <DayFloor
+                  areas={dayAreas} locations={locations} units={dayUnits}
+                  layout={dayLayout} collapsed={dayCollapsed}
+                  onToggleArea={(id) => setDayCollapsed((ids) => toggleId(ids, id))}
+                  bookWrite={bookWrite} bookDelete={bookDelete} mergeWrite={mergeWrite}
+                  floorWritable={floorWritable}
+                  onSplit={splitMerge} onExtend={extendFloor} onFree={(u) => freeTable(u.floor, u.table)}
+                  onStatus={setReservationStatus} onRemove={removeReservation}
+                />
                 {areas.every((a) => tables.filter((t) => t.areaId === a.id).length === 0) && (
                   <p className="text-sm text-muted-foreground text-center py-8">No tables yet - add some under "Locations &amp; Tables".</p>
                 )}

@@ -1,5 +1,6 @@
 // Shared by the day view and the All list on the Reservations tab.
-import type { ReservationStatus } from "@/api/reservationsApi";
+import type { Reservation, ReservationStatus } from "@/api/reservationsApi";
+import type { GuestSignIn } from "@/api/guestSignInsApi";
 
 export const STATUS_LABELS: Record<ReservationStatus, string> = {
   pending: "Pending", confirmed: "Confirmed", seated: "Seated",
@@ -70,3 +71,33 @@ export const collapseAreas = (areaIds: string[], collapsed: string[]): string[] 
 /** Expand every listed area, keeping remembered ids for areas not in view. */
 export const expandAreas = (areaIds: string[], collapsed: string[]): string[] =>
   collapsed.filter((id) => !areaIds.includes(id));
+
+/** Live status of one table (or merged unit) on the selected day. */
+export type FloorInfo = {
+  state: "free" | "reserved" | "occupied";
+  label: string;
+  until: string | null;
+  /** Start time of the next pending/confirmed booking, when state is "reserved". */
+  nextTime?: string;
+  seatedBooking?: Reservation;
+  guests: GuestSignIn[];
+};
+
+/** The short status line on a floor tile: "Free", "Next 19:00", "Occupied · until 20:30". */
+export function tileStatus(floor: Pick<FloorInfo, "state" | "until" | "nextTime">): string {
+  if (floor.state === "occupied") return floor.until ? `Occupied · until ${floor.until}` : "Occupied";
+  if (floor.state === "reserved") return floor.nextTime ? `Next ${floor.nextTime}` : "Reserved";
+  return "Free";
+}
+
+/** "2 occupied · 1 reserved · 9 free" for an area header; empty states are left out. */
+export function floorSummary(floors: Pick<FloorInfo, "state">[]): string {
+  const count = (state: FloorInfo["state"]) => floors.filter((f) => f.state === state).length;
+  return (["occupied", "reserved", "free"] as const)
+    .map((state) => [count(state), state] as const)
+    .filter(([n]) => n > 0)
+    .map(([n, state]) => `${n} ${state}`)
+    .join(" · ");
+}
+
+export const isIdList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");

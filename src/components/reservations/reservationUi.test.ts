@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, allCollapsed, collapseAreas, endTime, expandAreas, scopeRange, seatsLabel, toggleId } from "./reservationUi";
+import { addDays, allCollapsed, collapseAreas, endTime, expandAreas, floorSummary, isIdList, scopeRange, seatsLabel, tileStatus, toggleId } from "./reservationUi";
 
 const TODAY = "2026-10-22";
 
@@ -60,5 +60,32 @@ describe("area collapse helpers", () => {
   it("collapse and expand all leave areas that are out of view alone", () => {
     expect(collapseAreas(["a", "b"], ["x", "a"]).sort()).toEqual(["a", "b", "x"]);
     expect(expandAreas(["a", "b"], ["x", "a", "b"])).toEqual(["x"]);
+  });
+});
+
+describe("tileStatus", () => {
+  it("reads the state at a glance", () => {
+    expect(tileStatus({ state: "free", until: null })).toBe("Free");
+    expect(tileStatus({ state: "reserved", until: null, nextTime: "19:00" })).toBe("Next 19:00");
+    expect(tileStatus({ state: "occupied", until: "20:30" })).toBe("Occupied · until 20:30");
+    expect(tileStatus({ state: "occupied", until: null })).toBe("Occupied");
+  });
+});
+
+describe("floorSummary", () => {
+  it("counts each state and drops the empty ones", () => {
+    const f = (state: "free" | "reserved" | "occupied") => ({ state });
+    expect(floorSummary([f("occupied"), f("occupied"), f("reserved"), f("free"), f("free"), f("free")])).toBe("2 occupied · 1 reserved · 3 free");
+    expect(floorSummary([f("free"), f("free")])).toBe("2 free");
+    expect(floorSummary([])).toBe("");
+  });
+});
+
+describe("isIdList", () => {
+  it("accepts only arrays of strings", () => {
+    expect(isIdList(["a"])).toBe(true);
+    expect(isIdList([])).toBe(true);
+    expect(isIdList([1])).toBe(false);
+    expect(isIdList("a")).toBe(false);
   });
 });
