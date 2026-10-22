@@ -55,6 +55,12 @@ export function firstAccessibleRoute<T extends NavItemBase>(nav: ResolvedNav<T>)
   return first?.to ?? null;
 }
 
+/** How many places the person can go from the sidebar and the top bar together.
+ *  The user menu is left out: it holds account pages, not somewhere to browse. */
+export function navDestinationCount<T extends NavItemBase>(nav: ResolvedNav<T>): number {
+  return nav.sidebar.reduce((n, section) => n + section.items.length, 0) + nav.header.length;
+}
+
 interface ResolveNavOptions<T extends NavItemBase> {
   items: T[];
   can: CanFn;

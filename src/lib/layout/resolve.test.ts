@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, resolveNav, resolveTabs, resolveWidgets } from './resolve';
+import { applyOrder, firstAccessibleRoute, flattenLayers, gateAllows, navDestinationCount, resolveNav, resolveTabs, resolveWidgets } from './resolve';
 import type { CanFn, LayoutConfig, NavItemBase, TabBase, WidgetBase } from './types';
 
 const item = (id: string, over: Partial<NavItemBase> = {}): NavItemBase => ({
@@ -154,6 +154,35 @@ describe('firstAccessibleRoute', () => {
     const layer: LayoutConfig = { v: 1, nav: { items: { a: { hidden: true } } } };
     const nav = resolveNav({ items, can: grants('A:read', 'B:read'), hasEmployee: false, layers: [layer] });
     expect(firstAccessibleRoute(nav)).toBe('/b');
+  });
+});
+
+describe('navDestinationCount', () => {
+  const items = [
+    item('a', { group: 'G', gate: { requires: [{ resource: 'A', action: 'read' }] } }),
+    item('b', { group: 'G', gate: { requires: [{ resource: 'B', action: 'read' }] } }),
+    item('hr', { group: 'M', defaultPlacement: 'header', gate: { requires: [{ resource: 'HR', action: 'read' }] } }),
+    item('menu', { group: 'S', defaultPlacement: 'userMenu' }),
+  ];
+  const count = (can: CanFn, layers?: LayoutConfig[]) =>
+    navDestinationCount(resolveNav({ items, can, hasEmployee: false, layers }));
+
+  it('counts sidebar and header items together', () => {
+    expect(count(grants('A:read', 'B:read', 'HR:read'))).toBe(3);
+    expect(count(grants('A:read', 'HR:read'))).toBe(2);
+  });
+  it('is one for a single sidebar page or a single header page', () => {
+    expect(count(grants('A:read'))).toBe(1);
+    expect(count(grants('HR:read'))).toBe(1);
+  });
+  it('ignores the user menu, so no access at all counts zero', () => {
+    expect(count(grants())).toBe(0);
+  });
+  it('does not count items the person hid, or moved into the user menu', () => {
+    const hidden: LayoutConfig = { v: 1, nav: { items: { b: { hidden: true } } } };
+    expect(count(grants('A:read', 'B:read'), [hidden])).toBe(1);
+    const moved: LayoutConfig = { v: 1, nav: { items: { b: { placement: 'userMenu' } } } };
+    expect(count(grants('A:read', 'B:read'), [moved])).toBe(1);
   });
 });
 

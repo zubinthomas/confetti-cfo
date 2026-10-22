@@ -1,12 +1,11 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Employee } from "@/api/entities";
 import { useAuth } from "@/lib/AuthContext";
 import { HR_SUMMARY_KEY, hrSubtitle, summariseEmployees } from "@/lib/hrSummary";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
+import { BackToDashboard, CompactUserMenu } from "@/components/ModuleHeaderNav";
 import HeadcountTab from "@/components/hr/HeadcountTab";
 import LeaveTab from "@/components/hr/LeaveTab";
 import RecruitmentTab from "@/components/hr/RecruitmentTab";
@@ -44,16 +43,14 @@ export default function HR() {
       <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="w-3.5 h-3.5" /> CFO Dashboard
-            </Link>
-            <span className="text-muted-foreground/40">|</span>
+            <BackToDashboard />
             <div>
               <h1 className="text-xl font-bold font-heading text-foreground tracking-tight">HR Module</h1>
               <p className="text-xs text-muted-foreground mt-0.5">{hrSubtitle(summary)}</p>
             </div>
           </div>
           <SpotlightSearchButton className="ml-auto" />
+          <CompactUserMenu />
         </div>
       </header>
 

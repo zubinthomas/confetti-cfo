@@ -5,7 +5,7 @@ import { MenuIcon, X, Plus, LayoutTemplate } from "lucide-react";
 import UserMenu from "./UserMenu";
 import InstallBanner from "./InstallBanner";
 import SpotlightSearchButton from "@/components/SpotlightSearchButton";
-import { useNav } from "@/lib/layout/useNav";
+import { useCompactNav, useNav } from "@/lib/layout/useNav";
 import { navTitle } from "@/lib/layout/registry";
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -64,12 +64,15 @@ export default function DashboardShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
   const nav = useNav();
+  // One place to go (or none): no sidebar, drawer, top-bar links or shortcut,
+  // just the page and the user menu.
+  const compact = useCompactNav();
   const title = navTitle(pathname);
 
   return (
     <div className="min-h-screen bg-background lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 border-r border-border bg-card">
+      {!compact && <aside className="hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 border-r border-border bg-card">
         <div className="px-6 py-5 border-b border-border">
           <h1 className="text-lg font-bold font-heading text-foreground tracking-tight">
             Confetti Exports
@@ -77,10 +80,10 @@ export default function DashboardShell() {
           <p className="text-xs text-muted-foreground mt-0.5">CFO Dashboard</p>
         </div>
         <SidebarNav />
-      </aside>
+      </aside>}
 
       {/* Mobile drawer */}
-      {mobileOpen && (
+      {!compact && mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
             className="absolute inset-0 bg-black/40"
@@ -105,13 +108,15 @@ export default function DashboardShell() {
       <div className="flex-1 min-w-0">
         <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
           <div className="px-4 sm:px-6 py-4 flex items-center gap-3">
-            <button
-              className="lg:hidden inline-flex items-center justify-center w-10 h-10 -ml-2.5 text-muted-foreground hover:text-foreground"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open menu"
-            >
-              <MenuIcon className="w-5 h-5" />
-            </button>
+            {!compact && (
+              <button
+                className="lg:hidden inline-flex items-center justify-center w-10 h-10 -ml-2.5 text-muted-foreground hover:text-foreground"
+                onClick={() => setMobileOpen(true)}
+                aria-label="Open menu"
+              >
+                <MenuIcon className="w-5 h-5" />
+              </button>
+            )}
             <div>
               <h2 className="text-base font-semibold font-heading text-foreground leading-tight">
                 {title || "Confetti Exports"}
@@ -129,7 +134,7 @@ export default function DashboardShell() {
                 </Link>
               )}
               <SpotlightSearchButton showHint />
-              <div className="hidden md:flex items-center gap-4">
+              {!compact && <div className="hidden md:flex items-center gap-4">
                 {nav.header.map(({ id, to, label, icon: Icon }) => (
                   <Link
                     key={id}
@@ -139,7 +144,7 @@ export default function DashboardShell() {
                     <Icon className="w-4 h-4 shrink-0" /> {label}
                   </Link>
                 ))}
-              </div>
+              </div>}
               <UserMenu />
             </div>
           </div>
@@ -157,13 +162,13 @@ export default function DashboardShell() {
       </div>
 
       {/* Mobile-only shortcut to Import Workbooks */}
-      <Link
+      {!compact && <Link
         to="/data/import"
         aria-label="Import Workbooks"
         className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
       >
         <Plus className="w-6 h-6" />
-      </Link>
+      </Link>}
     </div>
   );
 }
