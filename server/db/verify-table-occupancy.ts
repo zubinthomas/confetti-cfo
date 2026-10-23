@@ -89,7 +89,7 @@ await db.delete(schema.guestSignIns).where(eq(schema.guestSignIns.id, stale));
 
 // ── Seating a booking onto an occupied table ─────────────────────────────
 const late = await book(c4.id, '15:00', 90, 'confirmed', 3, 'Late Lena');
-await assert.rejects(() => R.updateReservationStatus(late, 'seated', { now: NOW }), /walk-in party is at C4 until about 17:00/);
+await assert.rejects(() => R.updateReservationStatus(late, 'seated', { now: NOW }), /walk-in party is at C4 \(until about 17:00\)/);
 assert.equal((await row(late)).status, 'confirmed', 'a refused seat changes nothing');
 await assert.doesNotReject(() => R.updateReservationStatus(late, 'cancelled', { now: NOW }), 'other transitions are untouched');
 await R.updateReservationStatus(late, 'confirmed', { now: NOW });
@@ -101,6 +101,13 @@ const second = await book(c4.id, '17:00', 60, 'confirmed', 2, 'Second');
 await assert.rejects(() => R.updateReservationStatus(second, 'seated', { now: NOW }), /seated booking is at C4/);
 await db.delete(schema.reservations).where(eq(schema.reservations.id, second));
 await db.delete(schema.reservations).where(eq(schema.reservations.id, late));
+
+// A party past its expected finish is still occupying the table until signed out.
+const overstayer = await walkIn(b2.id, { until: '2026-10-22T08:00:00Z' }); // 13:30 IST, now 15:30
+const overdue = await book(b2.id, '17:00', 30, 'confirmed', 2, 'Overdue');
+await assert.rejects(() => R.updateReservationStatus(overdue, 'seated', { now: NOW }), /expected to leave at 13:30, still there/);
+await db.delete(schema.reservations).where(eq(schema.reservations.id, overdue));
+await signOut(overstayer);
 
 // ── Creating and rescheduling over "now" on an occupied table ────────────
 const w2 = await walkIn(c4.id);

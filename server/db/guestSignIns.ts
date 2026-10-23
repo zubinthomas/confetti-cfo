@@ -317,7 +317,7 @@ async function checkTableAssignment(
   });
   if (occupant) {
     throw new GuestSignInError(
-      `${unitName} is occupied until about ${occupant.until}. Pick another table, or wait until they leave.`,
+      `${unitName} is occupied (${occupant.until <= fromMinutes(startMin) ? `expected to leave at ${occupant.until}, still there` : `until about ${occupant.until}`}). Pick another table, or wait until they leave.`,
       'table_occupied',
       { tableName: unitName, until: occupant.until },
     );

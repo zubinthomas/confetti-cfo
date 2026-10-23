@@ -143,5 +143,10 @@ export async function assertNotOccupied(
   const [t] = await db.select({ name: schema.reservationTables.name }).from(schema.reservationTables)
     .where(eq(schema.reservationTables.id, first.tableId));
   const kind = first.kind === 'walk_in' ? 'A walk-in party' : 'A seated booking';
-  throw new TableOccupiedError(`${kind} is at ${t?.name ?? 'this table'} until about ${first.until}`);
+  const { minutes } = istNow(opts.now ?? new Date());
+  // A party past its expected finish is still there until someone signs them out.
+  const when = first.until <= fromMinutes(minutes)
+    ? `expected to leave at ${first.until}, still there`
+    : `until about ${first.until}`;
+  throw new TableOccupiedError(`${kind} is at ${t?.name ?? 'this table'} (${when})`);
 }
