@@ -2,7 +2,7 @@ import React from "react";
 import { Link2 } from "lucide-react";
 import { ArchivedBadge } from "@/components/reservations/CatalogParts";
 import { FLOOR_DOT, type TableUnit } from "@/components/reservations/TableCard";
-import { seatsLabel, tileStatus } from "@/components/reservations/reservationUi";
+import { seatsLabel, tileNote, tileStatus } from "@/components/reservations/reservationUi";
 
 /** One table (or merged unit) on the floor map. The state is a colour bar plus
  *  a text line, so it never relies on colour alone. Opens the table's card. */
@@ -26,6 +26,7 @@ export default function FloorTile({ unit, onOpen }: { unit: TableUnit; onOpen: (
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: FLOOR_DOT[floor.state] }} />
         {tileStatus(floor)}
       </span>
+      {tileNote(floor) && <span className="text-xs text-destructive truncate" title={tileNote(floor)!}>{tileNote(floor)}</span>}
       <span className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
         {bookings.length === 0 ? "No bookings" : `${bookings.length} ${bookings.length === 1 ? "booking" : "bookings"}`}
         {t.archivedAt && <ArchivedBadge />}

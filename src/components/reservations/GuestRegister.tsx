@@ -319,7 +319,7 @@ export function AssignTableModal({
   const toggleMergeWith = (id: string) => setMergeWithIds((cur) =>
     cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
 
-  const submit = async (acknowledgeMerge = false) => {
+  const submit = async () => {
     setError(""); setBranch(null);
     if (!tableId) { setError("Pick a table"); return; }
     setSaving(true);
@@ -327,7 +327,6 @@ export function AssignTableModal({
       await assignTable(signIn.id, {
         tableId,
         expectedUntil: until ? isoFromTimeToday(until) : undefined,
-        acknowledgeMerge,
       });
       onSaved();
     } catch (err) {
@@ -356,7 +355,7 @@ export function AssignTableModal({
         tableIds: [tableId, ...mergeWithIds], mergeKind, combinedCapacity: capacity,
       });
       setMergeOpen(false); setMergeWithIds([]); setCombinedOverride(null); setBranch(null);
-      await submit(false);
+      await submit();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to merge tables");
       setSaving(false);
@@ -418,12 +417,12 @@ export function AssignTableModal({
           </div>
           <FormField label="Expected until" name="until" type="time" value={until} onChange={(_n, v) => setUntil(v)} />
 
-          {branch?.code === "merge_prompt" && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-2">
+          {branch?.code === "table_occupied" && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
               <p>{branch.message}</p>
-              <button onClick={() => submit(true)} disabled={saving}
-                className="text-xs font-medium px-3 py-1.5 rounded-md bg-amber-600 text-white hover:opacity-90 disabled:opacity-50">
-                Seat them together
+              <button onClick={keepWaiting}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-destructive/40 text-destructive hover:bg-destructive/10">
+                Keep waiting
               </button>
             </div>
           )}
@@ -432,8 +431,6 @@ export function AssignTableModal({
               <p>{branch.message}</p>
               {branch.detail?.alreadyMerged ? (
                 <p className="opacity-80">Too big even for the joined tables — split the party across areas or reduce it.</p>
-              ) : Number(branch.detail?.occupants ?? 0) > 0 ? (
-                <p className="opacity-80">Another party is seated here. Pick an empty table, or reduce the party.</p>
               ) : mergeCandidates.length === 0 ? (
                 <p className="opacity-80">No tables here are set up to merge with this one. Set merge targets in Locations and Tables, or reduce the party.</p>
               ) : !mergeOpen ? (
@@ -501,7 +498,7 @@ export function AssignTableModal({
             : <span />}
           <div className="flex gap-3">
             <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
-            <button onClick={() => submit(false)} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+            <button onClick={() => submit()} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />} Seat
             </button>
           </div>
@@ -513,7 +510,7 @@ export function AssignTableModal({
           reservation={clashBooking}
           title="Reschedule the clashing booking"
           onClose={() => setBranch({ ...branch, code: "reservation_clash" })}
-          onSaved={() => { setBranch(null); setClashBooking(null); submit(false); }}
+          onSaved={() => { setBranch(null); setClashBooking(null); submit(); }}
         />
       )}
     </div>

@@ -12,7 +12,7 @@ export const isDayLayout = (v: unknown): v is DayLayout => v === "grid" || v ===
 const PILL = "text-sm px-3 py-1.5 max-sm:min-h-11 rounded-lg";
 // Two tiles across on a phone, wider tiles from sm up.
 const GRID = "grid gap-2 grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]";
-const LEGEND: [FloorInfo["state"], string][] = [["free", "Free"], ["reserved", "Next booking"], ["occupied", "Occupied"]];
+const LEGEND: [FloorInfo["state"], string][] = [["free", "Free"], ["reserved", "Next booking"], ["late", "Late"], ["occupied", "Occupied"]];
 
 /** Grid | List switch and Collapse all / Expand all, for the card header. */
 export function DayFloorControls({ layout, onLayout, everyAreaCollapsed, onToggleAll }: {
@@ -46,7 +46,7 @@ export function DayFloorControls({ layout, onLayout, everyAreaCollapsed, onToggl
 export default function DayFloor({
   areas, locations, units, layout, collapsed, onToggleArea,
   bookWrite, bookDelete, mergeWrite, floorWritable,
-  onSplit, onExtend, onFree, onStatus, onRemove,
+  onSplit, onExtend, onFree, onStatus, onRemove, onMoved, nowMin,
 }: {
   areas: ReservationArea[];
   locations: ReservationLocation[];
@@ -62,6 +62,10 @@ export default function DayFloor({
   onFree: (unit: TableUnit) => void;
   onStatus: (id: string, status: ReservationStatus) => void;
   onRemove: (id: string) => void;
+  /** A booking was moved to another table: reload the floor. */
+  onMoved: () => void;
+  /** Minutes past midnight in IST, so a card can tell which bookings are running now. */
+  nowMin: number;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Read live every render, so the dialog follows status changes and closes by
@@ -74,7 +78,7 @@ export default function DayFloor({
     onSplit: () => unit.merge && onSplit(unit.merge),
     onExtend: (m: number) => onExtend(unit.floor, m),
     onFree: () => onFree(unit),
-    onStatus, onRemove,
+    onStatus, onRemove, onMoved, nowMin,
   });
 
   return (

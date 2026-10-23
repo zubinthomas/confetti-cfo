@@ -4,8 +4,8 @@ import {
   listAreas, createArea, updateArea, archiveArea, restoreArea, purgeArea,
   listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
   listReservations, createReservation, updateReservationStatus, deleteReservation,
-  extendReservation, endReservationEarly, listTableMerges, releaseTableMerge,
-  type ReservationLocation, type ReservationArea, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
+  extendReservation, endReservationEarly, listTableMerges, releaseTableMerge, listTableOccupancy,
+  type TableOccupancy, type ReservationLocation, type ReservationArea, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
 } from "@/api/reservationsApi";
 import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
@@ -24,15 +24,11 @@ import { type CatalogKind } from "@/components/reservations/CatalogParts";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
-import { ACTIVE_STATUSES, allCollapsed, endTime, collapseAreas, expandAreas, isIdList, toggleId, type FloorInfo } from "@/components/reservations/reservationUi";
+import { ACTIVE_STATUSES, allCollapsed, collapseAreas, expandAreas, floorInfoFor, isIdList, toggleId, type FloorInfo } from "@/components/reservations/reservationUi";
 import { usePersistedState } from "@/hooks/usePersistedState";
 
 const todayStr = () => istDateStr();
 
-const toMin = (hhmm: string) => {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
-};
 const nowMinutes = () => istMinutes();
 const clockOf = istClock;
 
@@ -341,8 +337,9 @@ export default function ReservationsTab() {
   const mergeWrite = bookWrite || regWrite;
   // Free table / Extend touch the seated booking and the signed-in guests, so
   // the user needs the write permission for every part the table actually has.
-  const floorWritable = (floor: { seatedBooking?: unknown; guests: unknown[] }) =>
-    (!floor.seatedBooking || bookWrite) && (floor.guests.length === 0 || regWrite);
+  // A walk-in the viewer can't name still needs register write to end or extend.
+  const floorWritable = (floor: { seatedBooking?: unknown; guests: unknown[]; hiddenWalkIns: number }) =>
+    (!floor.seatedBooking || bookWrite) && (floor.guests.length + floor.hiddenWalkIns === 0 || regWrite);
 
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
   const { tabs: viewTabs, active: view, setActive: setView } = useTabs("restaurant");
@@ -358,6 +355,7 @@ export default function ReservationsTab() {
   const tables = useMemo(() => allTables.filter((t) => !t.archivedAt), [allTables]);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [daySignIns, setDaySignIns] = useState<GuestSignIn[]>([]);
+  const [occupancy, setOccupancy] = useState<TableOccupancy[]>([]);
   const [merges, setMerges] = useState<TableMerge[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   // Day = per-table floor view for one date; All = flat, filterable list of every booking.
@@ -396,14 +394,17 @@ export default function ReservationsTab() {
   const loadReservations = async (date: string) => {
     if (!bookRead) return;
     try {
-      const [rs, signIns, ms] = await Promise.all([
+      const [rs, signIns, ms, occ] = await Promise.all([
         listReservations({ date }),
+        // Names only come back for someone with Guest Register access.
         listSignIns({ date }).catch(() => [] as GuestSignIn[]),
         listTableMerges().catch(() => [] as TableMerge[]),
+        listTableOccupancy().catch(() => [] as TableOccupancy[]),
       ]);
       setReservations(rs);
       setDaySignIns(signIns);
       setMerges(ms);
+      setOccupancy(occ);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load reservations");
     }
@@ -414,6 +415,13 @@ export default function ReservationsTab() {
   // Guest Register tab mutates the same sign-ins/merges from its own state, so
   // switching back here must pick those changes up without a page reload.
   useEffect(() => { loadReservations(selectedDate); }, [view, selectedDate]);
+  // Other staff seat and clear tables too, and a booking turns Late on the
+  // clock, so today's floor refreshes itself while the tab is in front.
+  useEffect(() => {
+    if (!bookRead || selectedDate !== todayStr()) return;
+    const timer = setInterval(() => { if (!document.hidden) loadReservations(selectedDate); }, 30_000);
+    return () => clearInterval(timer);
+  }, [bookRead, selectedDate]);
 
   const reservationsByTable = useMemo(() => {
     const map = new Map<string, Reservation[]>();
@@ -450,6 +458,8 @@ export default function ReservationsTab() {
 
   const isToday = selectedDate === todayStr();
 
+  const occupancyByTable = useMemo(() => new Map(occupancy.map((o) => [o.tableId, o])), [occupancy]);
+
   const mergeByTableId = useMemo(() => {
     const map = new Map<string, TableMerge>();
     for (const m of merges) for (const id of m.tableIds) map.set(id, m);
@@ -457,40 +467,20 @@ export default function ReservationsTab() {
   }, [merges]);
 
   /** Live status of a table (or a merged unit, when `merge` is passed) on the
-   *  selected day: who's sitting there now and what's next. */
+   *  selected day: who's sitting there now, who is late, and what's next. */
   const tableFloor = (t: ReservationTable, merge?: TableMerge): FloorInfo => {
     const ids = merge ? merge.tableIds : [t.id];
-    const bookings = ids.flatMap((id) => reservationsByTable.get(id) ?? []);
-    const guests = ids.flatMap((id) => signInsByTable.get(id) ?? []);
-    const seatedBooking = bookings.find((b) => b.status === "seated");
-    const now = nowMinutes();
-    const nextBooking = isToday
-      ? bookings.find((b) => ["pending", "confirmed"].includes(b.status) && toMin(b.time) >= now)
-      : undefined;
-
-    if (seatedBooking || guests.length > 0) {
-      const names = [
-        ...(seatedBooking ? [seatedBooking.guestName] : []),
-        ...guests.map((g) => g.guestName),
-      ];
-      const untilBooking = seatedBooking ? endTime(seatedBooking.time, seatedBooking.durationMinutes) : null;
-      const untilGuest = guests
-        .map((g) => (g.expectedUntil ? clockOf(g.expectedUntil) : null))
-        .filter(Boolean)
-        .sort()
-        .pop();
-      return {
-        state: "occupied" as const,
-        label: `Occupied · ${names.join(", ")}`,
-        until: untilBooking ?? untilGuest ?? null,
-        seatedBooking,
-        guests,
-      };
-    }
-    if (nextBooking) {
-      return { state: "reserved" as const, label: `Next booking ${nextBooking.time}`, until: null, nextTime: nextBooking.time, seatedBooking: undefined, guests: [] };
-    }
-    return { state: "free" as const, label: "Free", until: null, seatedBooking: undefined, guests: [] };
+    const here = ids.map((id) => occupancyByTable.get(id)).filter((o): o is TableOccupancy => !!o);
+    return floorInfoFor({
+      bookings: ids.flatMap((id) => reservationsByTable.get(id) ?? []),
+      guests: ids.flatMap((id) => signInsByTable.get(id) ?? []),
+      occupancy: here.length > 0
+        ? { parties: here.reduce((n, o) => n + o.parties, 0), until: here.map((o) => o.until).sort().pop()! }
+        : undefined,
+      nowMin: nowMinutes(),
+      isToday,
+      clock: clockOf,
+    });
   };
 
   // One entry per table, or per merged unit (drawn once, at its first table).
@@ -676,6 +666,7 @@ export default function ReservationsTab() {
                   floorWritable={floorWritable}
                   onSplit={splitMerge} onExtend={extendFloor} onFree={(u) => freeTable(u.floor, u.table)}
                   onStatus={setReservationStatus} onRemove={removeReservation}
+                  onMoved={() => loadReservations(selectedDate)} nowMin={nowMinutes()}
                 />
                 {areas.every((a) => tables.filter((t) => t.areaId === a.id).length === 0) && (
                   <p className="text-sm text-muted-foreground text-center py-8">No tables yet - add some under "Locations &amp; Tables".</p>

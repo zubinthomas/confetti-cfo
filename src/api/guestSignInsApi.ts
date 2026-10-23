@@ -1,7 +1,7 @@
 // Guest sign-in register (server/routes/guestSignIns.ts) - Sienna's digital
 // arrivals book. Sits beside reservations on the Reservations page and shares
 // the `Reservation` permission. A coded 409 from assign-table
-// (reservation_clash | merge_prompt | over_capacity) surfaces as an ApiError
+// (reservation_clash | table_occupied | over_capacity) surfaces as an ApiError
 // whose .data.code / .data.detail the UI branches on.
 import { get, post, patch, del } from "./http";
 
@@ -109,7 +109,7 @@ export const updateSignIn = (
 
 export const assignTable = (
   id: string,
-  data: { tableId: string | null; expectedUntil?: string; acknowledgeMerge?: boolean },
+  data: { tableId: string | null; expectedUntil?: string },
 ) => patch<GuestSignIn>(`/guest-sign-ins/${id}/assign-table`, data);
 
 export const extendSignIn = (id: string, minutes: number) =>

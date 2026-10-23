@@ -166,6 +166,45 @@ export const endReservationEarly = (id: string) =>
 
 export const deleteReservation = (id: string) => del(`/restaurant/${id}`);
 
+// ── Live occupancy and moving a booking ──────────────────────────────────
+
+/** Who is at a table right now, without names: served to anyone who can open
+ *  the module, so a Reservation-only user still sees walk-ins. */
+export interface TableOccupancy {
+  tableId: string;
+  parties: number;
+  covers: number;
+  /** Latest expected finish among the parties, 'HH:MM' IST. */
+  until: string;
+  /** At least one party is a guest-register entry rather than a booking. */
+  walkIn: boolean;
+}
+
+export const listTableOccupancy = () => get<TableOccupancy[]>("/restaurant/occupancy");
+
+export interface SeatingOption {
+  tableId: string;
+  name: string;
+  areaId: string;
+  areaName: string;
+  capacity: number;
+  /** Seats left over once the party sits down. */
+  spare: number;
+  sameArea: boolean;
+}
+
+export interface SeatingOptions {
+  partySize: number;
+  currentTable: { id: string; name: string; blockedReason: string | null };
+  /** Best fit first. */
+  options: SeatingOption[];
+}
+
+export const getSeatingOptions = (id: string) => get<SeatingOptions>(`/restaurant/${id}/seating-options`);
+
+export const moveReservation = (id: string, data: { tableId: string; seat?: boolean }) =>
+  post<Reservation>(`/restaurant/${id}/move`, data);
+
 // ── Table merges ─────────────────────────────────────────────────────────
 
 export type MergeKind = "adjacent" | "end_to_end";

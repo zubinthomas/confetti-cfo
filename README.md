@@ -158,6 +158,27 @@ or location also has to be empty of active children first. Show archived
 lists them with Restore, and Delete permanently for rows that never had any
 history. Names can be reused once the old row is archived.
 
+A table someone is sitting at is closed to every other party. "Occupied" means a
+seated booking or a guest-register entry with a table and no sign-out, today only
+(a never-signed-out entry from an earlier day doesn't count). Seating a booking,
+creating or rescheduling one that is running now, and assigning a walk-in all
+refuse an occupied table, and a table merged with others counts as one unit. The
+register's old "seat them together" prompt is gone. The floor map reads
+`GET /api/restaurant/occupancy`, which any of the three read permissions can call
+and which returns parties, covers and expected finish per table with no names, so
+a Reservation-only user sees a walk-in as "Walk-in party" and can't Free or Extend
+it (that needs `GuestRegister:write`).
+
+A pending or confirmed booking whose time has come but who hasn't been seated
+shows as Late (red) instead of Free. If the table is occupied the tile stays
+Occupied and notes who is waiting. In the table's dialog, a late party on an
+occupied table gets a "Seat at ..." button for the best fit: an active table that
+holds the party, has nobody on it now and no clashing booking, with the fewest
+spare seats first, then the same area, then name (`GET /api/restaurant/:id/seating-options`).
+`POST /api/restaurant/:id/move` (`Reservation:write`) moves the booking, keeps its
+time and seats it. Today's floor refreshes every 30 seconds.
+`npm run table-occupancy:verify` covers the rules.
+
 Pending and confirmed bookings whose time + duration has passed turn into
 no-shows by themselves (checked every minute; `RESERVATION_AUTO_NOSHOW_SECONDS`,
 0 turns it off). Seated bookings are never touched.
