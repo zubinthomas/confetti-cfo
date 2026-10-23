@@ -10,8 +10,9 @@ import {
   listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
   type ArchivedFilter,
   listReservations, listReservationPage, createReservation, updateReservationStatus, deleteReservation,
-  extendReservation, rescheduleReservation, endReservationEarly,
+  extendReservation, rescheduleReservation, endReservationEarly, seatingOptions, moveReservation,
 } from '../db/reservations.ts';
+import { listOccupancy } from '../db/tableOccupancy.ts';
 import { TableMergeError, listActiveMerges, createMerge, releaseMerge } from '../db/tableMerges.ts';
 import { pushReservationEvent, deleteReservationEvent, claimAppAuthority } from '../calendar/sync.ts';
 import type { schema } from '../db/client.ts';
@@ -274,6 +275,18 @@ router.patch('/table-merges/:id/release', requireAnyPermission(...FLOOR_WRITE), 
   }
 });
 
+// ── Live occupancy ───────────────────────────────────────────────────────
+
+// Who is at which table right now, for anyone who can open the module. Anonymous
+// on purpose (parties, covers, expected finish): names stay behind GuestRegister:read.
+router.get('/occupancy', requireAnyPermission(...ANY_READ), async (_req: AuthedRequest, res) => {
+  try {
+    res.json(await listOccupancy());
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
 // ── Reservations ─────────────────────────────────────────────────────────
 
 router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
@@ -324,6 +337,26 @@ router.patch('/:id/status', requirePermission('Reservation', 'write'), async (re
     const { status: newStatus } = req.body ?? {};
     if (typeof newStatus !== 'string') return res.status(400).json({ message: 'status is required' });
     res.json(await syncAfterMutation(await updateReservationStatus(req.params.id, newStatus)));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+// Where else this booking could sit, best fit first (smallest table that holds the party).
+router.get('/:id/seating-options', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
+  try {
+    res.json(await seatingOptions(req.params.id));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.post('/:id/move', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const { tableId, seat } = req.body ?? {};
+    if (typeof tableId !== 'string') return res.status(400).json({ message: 'tableId is required' });
+    if (seat !== undefined && typeof seat !== 'boolean') return res.status(400).json({ message: 'seat must be a boolean' });
+    res.json(await syncAfterMutation(await moveReservation(req.params.id, { tableId, seat })));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }

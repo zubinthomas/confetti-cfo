@@ -85,11 +85,11 @@ router.patch('/:id', requirePermission('GuestRegister', 'write'), async (req: Au
 
 router.patch('/:id/assign-table', requirePermission('GuestRegister', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { tableId, expectedUntil, acknowledgeMerge } = req.body ?? {};
+    const { tableId, expectedUntil } = req.body ?? {};
     if (tableId !== null && typeof tableId !== 'string') {
       return res.status(400).json({ message: 'tableId must be a string or null' });
     }
-    res.json(await assignTable(req.params.id, { tableId, expectedUntil, acknowledgeMerge: acknowledgeMerge === true }));
+    res.json(await assignTable(req.params.id, { tableId, expectedUntil }));
   } catch (err) {
     fail(res, err);
   }

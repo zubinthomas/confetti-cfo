@@ -12,6 +12,7 @@ import { escapeLikeTerm } from '../db.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
 import { DEFAULT_AREAS, DEFAULT_LOCATION } from './reservationCatalog.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow } from './tableMerges.ts';
+import { TableOccupiedError, assertNotOccupied, listOccupants } from './tableOccupancy.ts';
 
 // Re-exported for server/db/guestSignIns.ts, which imports the time helpers
 // from here alongside the reservation query helpers below.
@@ -684,10 +685,60 @@ export async function searchReservations(q: string, limit: number) {
     .limit(limit);
 }
 
+/** Someone is sitting at the table (or its merged unit) right now: rethrown as
+ *  a ReservationError so the routes answer 400. `excludeReservationId` is the
+ *  booking being seated/moved, which is not its own obstacle. */
+async function assertTableNotOccupied(tableId: string, excludeReservationId?: string, now?: Date) {
+  try {
+    await assertNotOccupied(tableId, { excludeReservationId, now });
+  } catch (err) {
+    if (err instanceof TableOccupiedError) throw new ReservationError(err.message);
+    throw err;
+  }
+}
+
+/** True when [start, end) on `date` contains the current IST minute. */
+function windowIsLive(date: string, start: number, end: number, now = new Date()): boolean {
+  const n = istNow(now);
+  return n.date === date && start <= n.minutes && n.minutes < end;
+}
+
+/** The slot checks shared by create and move: no other active booking on this
+ *  table in [start, end), and not inside a merged party's turn + reset buffer. */
+async function assertSlotFree(
+  table: { id: string; name: string },
+  date: string, start: number, end: number, excludeId?: string,
+) {
+  const sameDay = await db.select().from(schema.reservations)
+    .where(and(eq(schema.reservations.tableId, table.id), eq(schema.reservations.date, date)));
+  for (const existing of sameDay) {
+    if (existing.id === excludeId || INACTIVE_STATUSES.includes(existing.status)) continue;
+    const existingStart = toMinutes(existing.time);
+    const existingEnd = existingStart + existing.durationMinutes;
+    if (existingStart < end && existingEnd > start) {
+      throw new ReservationError(`${table.name} is already booked ${existing.time}–${fromMinutes(existingEnd)} (${existing.guestName})`);
+    }
+  }
+
+  // A table physically merged with others right now can still take a booking,
+  // but not one overlapping the merged party's turn + reset buffer.
+  const merge = await activeMergeForTable(table.id);
+  if (merge) {
+    const blocked = await mergeBlockWindow(merge, date);
+    if (blocked && start < blocked.endMin && end > blocked.startMin) {
+      const others = merge.tableNames.filter((n) => n !== table.name).join(' + ') || 'another table';
+      throw new ReservationError(
+        `${table.name} is merged with ${others} until about ${fromMinutes(blocked.endMin)} (includes a ${merge.bufferMinutes}-min reset) - book a later slot or a different table`,
+      );
+    }
+  }
+}
+
 export async function createReservation(
   userId: number,
   { tableId, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes }:
   { tableId: string; date: string; time: string; durationMinutes?: number; partySize: number; guestName: string; guestPhone?: string; guestEmail?: string; notes?: string },
+  now = new Date(),
 ) {
   await ready();
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
@@ -706,29 +757,9 @@ export async function createReservation(
   const end = start + duration;
   if (end > 24 * 60) throw new ReservationError("Reservations can't run past midnight - use a shorter duration or an earlier time");
 
-  const sameDay = await db.select().from(schema.reservations)
-    .where(and(eq(schema.reservations.tableId, tableId), eq(schema.reservations.date, date)));
-  for (const existing of sameDay) {
-    if (INACTIVE_STATUSES.includes(existing.status)) continue;
-    const existingStart = toMinutes(existing.time);
-    const existingEnd = existingStart + existing.durationMinutes;
-    if (existingStart < end && existingEnd > start) {
-      throw new ReservationError(`${table.name} is already booked ${existing.time}–${fromMinutes(existingEnd)} (${existing.guestName})`);
-    }
-  }
-
-  // A table physically merged with others right now can still take a booking,
-  // but not one overlapping the merged party's turn + reset buffer.
-  const merge = await activeMergeForTable(tableId);
-  if (merge) {
-    const blocked = await mergeBlockWindow(merge, date);
-    if (blocked && start < blocked.endMin && end > blocked.startMin) {
-      const others = merge.tableNames.filter((n) => n !== table.name).join(' + ') || 'another table';
-      throw new ReservationError(
-        `${table.name} is merged with ${others} until about ${fromMinutes(blocked.endMin)} (includes a ${merge.bufferMinutes}-min reset) - book a later slot or a different table`,
-      );
-    }
-  }
+  await assertSlotFree(table, date, start, end);
+  // A booking that starts now or earlier can't go onto a table someone is at.
+  if (windowIsLive(date, start, end, now)) await assertTableNotOccupied(tableId, undefined, now);
 
   const [row] = await db.insert(schema.reservations).values({
     id: randomUUID(),
@@ -748,22 +779,29 @@ export async function createReservation(
   return row;
 }
 
-export async function updateReservationStatus(id: string, status: string) {
+/** `skipOccupancyCheck` is for the guest register, which has already vetted the
+ *  physical table before it advances a linked booking. */
+export async function updateReservationStatus(
+  id: string, status: string, { skipOccupancyCheck = false, now = new Date() }: { skipOccupancyCheck?: boolean; now?: Date } = {},
+) {
   await ready();
   if (!RESERVATION_STATUSES.includes(status as ReservationStatus)) {
     throw new ReservationError(`Invalid status: ${status}`);
   }
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  if (status === 'seated' && existing.status !== 'seated' && !skipOccupancyCheck) {
+    await assertTableNotOccupied(existing.tableId, id, now);
+  }
 
   // Keep the floor-view timestamps in step with the lifecycle no matter where
   // the transition came from (this screen, or a linked guest sign-in).
   const patch: { status: ReservationStatus; seatedAt?: string; departedAt?: string } = {
     status: status as ReservationStatus,
   };
-  const now = new Date().toISOString();
-  if (status === 'seated' && !existing.seatedAt) patch.seatedAt = now;
-  if (status === 'completed' && !existing.departedAt) patch.departedAt = now;
+  const stamp = now.toISOString();
+  if (status === 'seated' && !existing.seatedAt) patch.seatedAt = stamp;
+  if (status === 'completed' && !existing.departedAt) patch.departedAt = stamp;
 
   const [row] = await db.update(schema.reservations).set(patch)
     .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
@@ -833,6 +871,7 @@ export async function extendReservation(id: string, { durationMinutes }: { durat
 export async function rescheduleReservation(
   id: string,
   { date, time, durationMinutes }: { date?: string; time?: string; durationMinutes?: number },
+  now = new Date(),
 ) {
   await ready();
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
@@ -858,10 +897,141 @@ export async function rescheduleReservation(
   if (clash) {
     throw new ReservationError(`${table?.name ?? 'That table'} is already booked ${clash.time}–${fromMinutes(toMinutes(clash.time) + clash.durationMinutes)} (${clash.guestName})`);
   }
+  if (!INACTIVE_STATUSES.includes(existing.status) && existing.status !== 'completed'
+    && windowIsLive(nextDate, start, start + nextDuration, now)) {
+    await assertTableNotOccupied(existing.tableId, id, now);
+  }
 
   const [row] = await db.update(schema.reservations)
     .set({ date: nextDate, time: nextTime, durationMinutes: nextDuration })
     .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
+  return row;
+}
+
+// ── Moving a booking to another table ────────────────────────────────────
+
+export interface SeatingOption {
+  tableId: string;
+  name: string;
+  areaId: string;
+  areaName: string;
+  capacity: number;
+  /** Seats left over once the party sits down; the smaller, the better the fit. */
+  spare: number;
+  sameArea: boolean;
+}
+
+export interface SeatingOptions {
+  partySize: number;
+  /** The booking's current table, and why it can't be used right now (null = free). */
+  currentTable: { id: string; name: string; blockedReason: string | null };
+  options: SeatingOption[];
+}
+
+const MOVABLE_STATUSES: readonly string[] = ['pending', 'confirmed', 'seated'];
+const MAX_SEATING_OPTIONS = 5;
+
+/** Does `table` work for `booking` over the booking's own window? Returns null
+ *  when it does, otherwise why not. Ignores occupancy unless `checkOccupancy`. */
+async function tableFitsBooking(
+  table: { id: string; name: string; capacity: number },
+  booking: typeof schema.reservations.$inferSelect,
+  checkOccupancy: boolean,
+  now: Date,
+): Promise<string | null> {
+  if (booking.partySize > table.capacity) return `${table.name} seats up to ${table.capacity}`;
+  const start = toMinutes(booking.time);
+  try {
+    await assertSlotFree(table, booking.date, start, start + booking.durationMinutes, booking.id);
+    if (checkOccupancy) await assertTableNotOccupied(table.id, booking.id, now);
+  } catch (err) {
+    if (err instanceof ReservationError) return err.message;
+    throw err;
+  }
+  return null;
+}
+
+/** Tables a booking could be seated at instead of its own: active, big enough,
+ *  nobody there now, no other booking in the way. Best fit first: fewest spare
+ *  seats, then the booking's own area, then area and table name. */
+export async function seatingOptions(id: string, now = new Date()): Promise<SeatingOptions> {
+  await ready();
+  const [booking] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!booking) throw new ReservationError(`No reservation with id ${id}`);
+  if (!MOVABLE_STATUSES.includes(booking.status)) {
+    throw new ReservationError(`A ${booking.status.replace('_', ' ')} booking can't be moved`);
+  }
+
+  const tables = await listTables({ archived: 'exclude' });
+  const areas = await listAreas({ archived: 'exclude' });
+  const areaName = new Map(areas.map((a) => [a.id, a.name]));
+  const current = tables.find((t) => t.id === booking.tableId)
+    ?? (await listTables({ archived: 'include' })).find((t) => t.id === booking.tableId);
+  if (!current) throw new ReservationError('This booking\'s table no longer exists');
+
+  const [occupant] = await listOccupants(await mergedGroup(booking.tableId), { excludeReservationId: id, now });
+  let blockedReason: string | null = null;
+  if (occupant) {
+    try { await assertNotOccupied(booking.tableId, { excludeReservationId: id, now }); } catch (err) {
+      if (err instanceof TableOccupiedError) blockedReason = err.message; else throw err;
+    }
+  }
+
+  const options: SeatingOption[] = [];
+  for (const t of tables) {
+    if (t.id === booking.tableId || !areaName.has(t.areaId)) continue;
+    if (await tableFitsBooking(t, booking, true, now)) continue;
+    options.push({
+      tableId: t.id, name: t.name, areaId: t.areaId, areaName: areaName.get(t.areaId)!,
+      capacity: t.capacity, spare: t.capacity - booking.partySize, sameArea: t.areaId === current.areaId,
+    });
+  }
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  options.sort((a, b) => a.spare - b.spare
+    || Number(b.sameArea) - Number(a.sameArea)
+    || byName(a.areaName, b.areaName)
+    || byName(a.name, b.name));
+
+  return {
+    partySize: booking.partySize,
+    currentTable: { id: current.id, name: current.name, blockedReason },
+    options: options.slice(0, MAX_SEATING_OPTIONS),
+  };
+}
+
+/** Put a booking on another table, keeping its date, time and duration, and
+ *  optionally seat it in the same step. Same rules as creating a booking there:
+ *  active table, party fits, no overlapping booking, nobody sitting there when
+ *  the booking is running now or is being seated. */
+export async function moveReservation(
+  id: string, { tableId, seat = false }: { tableId: string; seat?: boolean },
+  now = new Date(),
+) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  if (!MOVABLE_STATUSES.includes(existing.status)) {
+    throw new ReservationError(`A ${existing.status.replace('_', ' ')} booking can't be moved`);
+  }
+  if (tableId === existing.tableId) throw new ReservationError('This booking is already on that table');
+  const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
+  if (!table) throw new ReservationError(`No table with id ${tableId}`);
+  if (table.archivedAt) throw new ReservationError(`${table.name} is archived and can't take bookings`);
+
+  const start = toMinutes(existing.time);
+  const live = windowIsLive(existing.date, start, start + existing.durationMinutes, now);
+  const why = await tableFitsBooking(table, existing, seat || live, now);
+  if (why) throw new ReservationError(why);
+
+  const patch: { tableId: string; status?: ReservationStatus; seatedAt?: string } = { tableId };
+  if (seat && existing.status !== 'seated') {
+    patch.status = 'seated';
+    if (!existing.seatedAt) patch.seatedAt = now.toISOString();
+  }
+  const [row] = await db.update(schema.reservations).set(patch)
+    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
+  // A seated party held its old table's merge; moving off it ends that hold.
+  if (existing.status === 'seated') await releaseMergeForTable(existing.tableId);
   return row;
 }
 

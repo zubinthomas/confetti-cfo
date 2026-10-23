@@ -8,7 +8,7 @@
 // It IS table-aware, though: once the floor seats a party, assignTable checks
 // the chosen table against upcoming bookings (a hard clash the host resolves
 // by rescheduling the booking) and against whoever is already sitting there
-// (a merge prompt, allowed up to capacity + maxExtraCapacity).
+// (an occupied table is refused outright).
 //
 // Wall-clock note: real instants (signedInAt, seatedAt, expectedUntil) are
 // stored as UTC ISO strings, but reservations store `date`/`time` as naive
@@ -24,8 +24,9 @@ import {
   listActiveReservationOverlaps, listTables, toMinutes, fromMinutes, istNow, istDayBounds,
 } from './reservations.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable } from './tableMerges.ts';
+import { listOccupants } from './tableOccupancy.ts';
 
-/** `code` drives the assign-table UI branch (reservation_clash | merge_prompt |
+/** `code` drives the assign-table UI branch (reservation_clash | table_occupied |
  *  over_capacity); `detail` carries the ids/numbers that branch needs. A plain
  *  GuestSignInError (no code) is just a 400. */
 export class GuestSignInError extends Error {
@@ -65,7 +66,6 @@ export interface CreateSignInInput {
   signedInAt?: string;
   expectedUntil?: string;
   notes?: string;
-  acknowledgeMerge?: boolean;
   quotedWaitMinutes?: number;
 }
 
@@ -267,7 +267,7 @@ export async function estimateWaitMinutes(
 
 /** Validates seating `partySize` at `tableId` for the window
  *  [seatIso, expectedUntil). Throws a coded GuestSignInError on a booking
- *  clash, an unacknowledged merge, or a hard over-capacity. Returns the table
+ *  clash, an occupied table, or a party that won't fit. Returns the table
  *  on success.
  *
  *  `excludeReservationId` is this sign-in's own linked booking, if any: it is
@@ -275,8 +275,8 @@ export async function estimateWaitMinutes(
  *  link automation has advanced it to `seated`. `excludeSignInId` is this
  *  sign-in itself, excluded from the occupied-now guest sum on a re-seat. */
 async function checkTableAssignment(
-  { tableId, partySize, seatIso, expectedUntil, excludeSignInId, excludeReservationId, acknowledgeMerge }:
-  { tableId: string; partySize: number; seatIso: string; expectedUntil: string | null; excludeSignInId?: string; excludeReservationId?: string; acknowledgeMerge: boolean },
+  { tableId, partySize, seatIso, expectedUntil, excludeSignInId, excludeReservationId }:
+  { tableId: string; partySize: number; seatIso: string; expectedUntil: string | null; excludeSignInId?: string; excludeReservationId?: string },
 ) {
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
   if (!table) throw new GuestSignInError(`No table with id ${tableId}`);
@@ -308,24 +308,20 @@ async function checkTableAssignment(
     );
   }
 
-  // (B) Who is physically at the unit *right now*, so we can offer a merge or
-  // block. Both scans are scoped to today (IST) and the seating window: a
-  // booking left in `seated` or a walk-in never signed out on a past day is
-  // not sitting here now, and must not inflate the occupant count.
-  const winEnd = Math.max(endMin, startMin + 1);
-  const { gte: dayFrom, lt: dayUntil } = istDayBounds(seatAt.date);
-  const seatedRes = (await db.select().from(schema.reservations)
-    .where(and(inArray(schema.reservations.tableId, groupIds), eq(schema.reservations.status, 'seated'))))
-    .filter((r) => r.id !== excludeReservationId && r.date === seatAt.date
-      && toMinutes(r.time) < winEnd && toMinutes(r.time) + r.durationMinutes > startMin);
-  const seatedGuests = (await db.select().from(schema.guestSignIns)
-    .where(and(inArray(schema.guestSignIns.tableId, groupIds), isNull(schema.guestSignIns.signedOutAt))))
-    .filter((g) => {
-      if (g.id === excludeSignInId) return false;
-      const at = g.seatedAt ?? g.signedInAt;
-      return at >= dayFrom && at < dayUntil;
-    });
-  const occupants = seatedRes.reduce((s, r) => s + r.partySize, 0) + seatedGuests.reduce((s, g) => s + g.partySize, 0);
+  // (B) Anyone physically at the unit blocks it outright: an occupied table is
+  // not offered to another party, whoever is asking. Counted by the same
+  // module the booking side uses, so a walk-in and a seated booking can't both
+  // end up on one table.
+  const [occupant] = await listOccupants(groupIds, {
+    now: new Date(seatIso), excludeSignInId, excludeReservationId,
+  });
+  if (occupant) {
+    throw new GuestSignInError(
+      `${unitName} is occupied until about ${occupant.until}. Pick another table, or wait until they leave.`,
+      'table_occupied',
+      { tableName: unitName, until: occupant.until },
+    );
+  }
 
   // How to say the ceiling: a bare number, or "4 + 2 extra", or "8 when joined".
   const capacityText = merge
@@ -334,25 +330,7 @@ async function checkTableAssignment(
       ? `${capacity} seats (${table.capacity} + ${table.maxExtraCapacity} extra)`
       : `${capacity} seats`;
 
-  if (occupants > 0) {
-    const combined = occupants + partySize;
-    const occName = seatedRes[0]?.guestName ?? seatedGuests[0]?.guestName ?? 'Another party';
-    if (combined > capacity) {
-      throw new GuestSignInError(
-        `${unitName} has ${capacityText} and ${occupants} already seated - no room for ${partySize} more.`,
-        'over_capacity',
-        { tableName: unitName, occupants, partySize, capacity, combined, alreadyMerged: !!merge },
-      );
-    }
-    if (!acknowledgeMerge) {
-      throw new GuestSignInError(
-        `${occName}'s party of ${occupants} is already at ${unitName}. Seat this party of ${partySize} with them? That fills ${combined} of ${capacity} seats.`,
-        'merge_prompt',
-        { tableName: unitName, occupants, partySize, capacity, combined },
-      );
-    }
-  } else if (partySize > capacity) {
-    // Empty table, but the party alone doesn't fit.
+  if (partySize > capacity) {
     throw new GuestSignInError(
       `${unitName} has ${capacityText} - a party of ${partySize} won't fit.`,
       'over_capacity',
@@ -411,7 +389,6 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
     const table = await checkTableAssignment({
       tableId, partySize, seatIso: signedInAt, expectedUntil,
       excludeReservationId: reservationId ?? undefined,
-      acknowledgeMerge: input.acknowledgeMerge ?? false,
     });
     seatedAt = signedInAt;
     expectedUntil = expectedUntil ?? addMinutesIso(signedInAt, DEFAULT_TURN_MINUTES);
@@ -493,10 +470,10 @@ export async function updateSignIn(id: string, patch: Partial<CreateSignInInput>
 }
 
 /** Seat a party at a table (or move them). Pass `tableId: null` to unseat.
- *  Runs the clash / merge / capacity checks. */
+ *  Runs the clash / occupied / capacity checks. */
 export async function assignTable(
   id: string,
-  { tableId, expectedUntil, acknowledgeMerge }: { tableId: string | null; expectedUntil?: string; acknowledgeMerge?: boolean },
+  { tableId, expectedUntil }: { tableId: string | null; expectedUntil?: string },
 ) {
   await ready();
   const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
@@ -520,7 +497,6 @@ export async function assignTable(
   await checkTableAssignment({
     tableId, partySize: existing.partySize, seatIso, expectedUntil: nextExpected,
     excludeSignInId: id, excludeReservationId: existing.reservationId ?? undefined,
-    acknowledgeMerge: acknowledgeMerge ?? false,
   });
 
   await db.update(schema.guestSignIns).set({
@@ -643,7 +619,7 @@ async function maybeAdvanceReservation(
   const from = to === 'seated' ? ['pending', 'confirmed'] : ['seated'];
   if (!from.includes(reservation.status)) return;
   try {
-    await updateReservationStatus(reservation.id, to);
+    await updateReservationStatus(reservation.id, to, { skipOccupancyCheck: true });
   } catch (err) {
     if (err instanceof ReservationError) throw new GuestSignInError(err.message);
     throw err;
