@@ -196,6 +196,48 @@ with read, write and delete on Restaurant, Reservation and GuestRegister and not
 shell shows no navigation beyond the user menu, and they land on `/restaurant`.
 Assign it on the Users page.
 
+## Guest self check-in ("Check a Table")
+
+A public page at `/check-a-table?t=<token>` lets a guest at the venue pick an
+area and party size, see whether a table is free or how long the wait is, and
+join the waiting list with a WhatsApp number. The entry lands in the Guest
+Register as a "Self check-in" row. The host seats it as usual or taps
+"Message on WhatsApp" (a prefilled `wa.me` link, then the entry is marked
+notified via `whatsapp`). Automatic WhatsApp messages need the Business API and
+are not built.
+
+Staff set it up under Restaurant -> Guest check-in (`GuestCheckIn:read/write`):
+on/off, which areas guests can pick, the booking buffer (a table stops counting
+as free this many minutes before a booking, default 90), minutes added per party
+ahead (15), largest party (10), longest wait quoted (180, past it the page says
+to speak to the host), the venue WhatsApp number and the shop link. The same
+tab shows the QR code with Print, Download and Rotate. The code carries a random
+token and every public call must send it (`X-Checkin-Token`). A wrong, rotated
+or switched-off token gets a 403 and the page asks the guest to scan the code.
+Rotating invalidates every printed code.
+
+The menu behind "Browse menu" is edited under Restaurant -> Menu
+(`Menu:read/write/delete`): sections (for one area or all) holding priced items,
+with reorder, hide and archive. "Shop" is a plain link to the shop URL.
+
+How the wait is worked out (`server/db/tableCheck.ts`): for each table, the first
+moment nobody is on it and no pending or confirmed booking starts within the
+buffer. A party past its expected finish counts as five more minutes. A party
+that fits no single table can use two tables joined, only where the Locations &
+Tables merge rules allow it. The best option is the shortest wait, then fewest
+tables, then least waste. The quote is that wait plus the minutes per party for
+each unseated party already waiting in the area, rounded up to five minutes, and
+it is recomputed on the server when the guest joins.
+
+Limits: 90 requests a minute per IP on the public API, 10 joins an hour per IP,
+3 an hour per phone number (in memory, reset on restart). One active self entry
+per phone per day: joining again returns the existing one. The server trusts
+the loopback proxy for the client IP, so nginx must pass `X-Forwarded-For`.
+For extra cover, add `limit_req` on `location /api/public/`.
+
+`npm run checkin:verify` (in `server/`) covers the engine, settings, token, join
+and leave, menu and the rate limiter.
+
 ## Layouts by permission, role and user
 
 What each person sees in the navigation, on page tabs and on the overview is
