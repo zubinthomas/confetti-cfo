@@ -8,7 +8,7 @@ import {
   Store, Handshake, Factory, Paintbrush, Scissors, Package, Banknote, Sparkles,
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
-  CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2, LayoutTemplate,
+  CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2, LayoutTemplate, QrCode,
 } from 'lucide-react';
 import type { Gate, NavItemBase, TabBase, WidgetBase } from './types';
 
@@ -135,6 +135,8 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'signin', label: 'Guest Register', icon: DoorOpen, gate: needs('GuestRegister') },
     { id: 'day', label: 'Reservations', icon: CalendarDays, gate: needs('Reservation') },
     { id: 'manage', label: 'Locations & Tables', icon: Settings2, gate: needs('Restaurant') },
+    { id: 'checkin', label: 'Guest check-in', icon: QrCode, gate: needs('GuestCheckIn') },
+    { id: 'menu', label: 'Menu', icon: UtensilsCrossed, gate: needs('Menu') },
   ],
   store: [
     { id: 'channels', label: 'Channel Mix' },

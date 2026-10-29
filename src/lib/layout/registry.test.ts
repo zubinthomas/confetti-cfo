@@ -82,7 +82,9 @@ describe('page tabs', () => {
       'Restaurant:read', 'Reservation:read', 'GuestRegister:read',
     ]);
     const tabs = Object.fromEntries(PAGE_TABS.restaurant.map((t) => [t.id, t.gate?.requires.map((r) => r.resource)]));
-    expect(tabs).toEqual({ signin: ['GuestRegister'], day: ['Reservation'], manage: ['Restaurant'] });
+    expect(tabs).toEqual({
+      signin: ['GuestRegister'], day: ['Reservation'], manage: ['Restaurant'], checkin: ['GuestCheckIn'], menu: ['Menu'],
+    });
   });
 
   it('keep the users-page tabs in the order the page always used', () => {

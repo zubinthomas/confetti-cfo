@@ -27,6 +27,8 @@ export interface ReservationArea {
   archivedAt: string | null;
   /** Has (or had) tables or guest-register entries: archive only. */
   hasHistory: boolean;
+  /** Offered as a venue button on the guest self check-in page. */
+  checkinEnabled: boolean;
 }
 
 /** "Cafe, Ground Floor", or just the name when the area has no floor label. */

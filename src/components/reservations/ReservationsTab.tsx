@@ -18,6 +18,8 @@ import GuestRegister from "@/components/reservations/GuestRegister";
 import AllReservations from "@/components/reservations/AllReservations";
 import AreaSelect from "@/components/reservations/AreaSelect";
 import CatalogManager from "@/components/reservations/CatalogManager";
+import GuestCheckInSettings from "@/components/reservations/GuestCheckInSettings";
+import MenuManager from "@/components/reservations/MenuManager";
 import DayFloor, { DayFloorControls, isDayLayout, type DayLayout } from "@/components/reservations/DayFloor";
 import type { TableUnit } from "@/components/reservations/TableCard";
 import { type CatalogKind } from "@/components/reservations/CatalogParts";
@@ -333,6 +335,9 @@ export default function ReservationsTab() {
   const bookDelete = can("Reservation", "delete");
   const regWrite = can("GuestRegister", "write");
   const regDelete = can("GuestRegister", "delete");
+  const checkinWrite = can("GuestCheckIn", "write");
+  const menuWrite = can("Menu", "write");
+  const menuDelete = can("Menu", "delete");
   // Splitting a merge is open to either floor permission (same as the API).
   const mergeWrite = bookWrite || regWrite;
   // Free table / Extend touch the seated booking and the signed-in guests, so
@@ -681,6 +686,10 @@ export default function ReservationsTab() {
           history={{ locations: allLocations, areas: allAreas, tables: allTables }}
           canWrite={regWrite} canDelete={regDelete} canWriteBookings={bookWrite}
         />
+      ) : view === "checkin" ? (
+        <GuestCheckInSettings areas={areas} canWrite={checkinWrite} onAreasChanged={loadCatalog} />
+      ) : view === "menu" ? (
+        <MenuManager areas={areas} canWrite={menuWrite} canDelete={menuDelete} />
       ) : (
         <CatalogManager
           loading={loadingCatalog}
