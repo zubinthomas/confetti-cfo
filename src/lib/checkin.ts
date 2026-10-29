@@ -25,3 +25,15 @@ export function venueMessage(areaName: string, partySize: number, localPhone: st
 }
 
 export const rupees = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
+/** A phone as wa.me wants it (country code first, digits only): a bare 10-digit
+ *  number is taken as Indian. null when it can't be a number. */
+export function waPhone(raw: string | null | undefined): string | null {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length === 10) return `91${d}`;
+  return d.length >= 11 && d.length <= 15 ? d : null;
+}
+
+export function tableReadyMessage(name: string, partySize: number, areaName: string | null): string {
+  return `Hi ${name}, your table for ${partySize}${areaName ? ` at the ${areaName}` : ""} is ready. Please come to the host stand.`;
+}

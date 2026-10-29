@@ -36,6 +36,8 @@ export interface GuestSignIn {
   quotedWaitMinutes: number | null;
   notifiedAt: string | null;
   notifiedVia: string | null;
+  /** 'staff' (entered at the desk) or 'self' (guest check-in page). */
+  source: "staff" | "self";
   createdByUserId: number | null;
 }
 

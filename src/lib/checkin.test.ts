@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { localDigits, formatLocal, waLink, venueMessage, rupees } from "./checkin";
+import { localDigits, formatLocal, waLink, venueMessage, rupees, waPhone, tableReadyMessage } from "./checkin";
 
 describe("localDigits", () => {
   it("accepts spaced and prefixed numbers", () => {
@@ -32,4 +32,23 @@ describe("waLink", () => {
 
 describe("rupees", () => {
   it("uses Indian grouping", () => expect(rupees(100000)).toBe("₹1,00,000"));
+});
+
+describe("waPhone", () => {
+  it("prefixes bare Indian numbers and keeps full ones", () => {
+    expect(waPhone("98765 43210")).toBe("919876543210");
+    expect(waPhone("+91 98765 43210")).toBe("919876543210");
+    expect(waPhone("+44 7700 900123")).toBe("447700900123");
+  });
+  it("rejects what can't be a number", () => {
+    expect(waPhone("12345")).toBeNull();
+    expect(waPhone(null)).toBeNull();
+  });
+});
+
+describe("tableReadyMessage", () => {
+  it("names the area when there is one", () => {
+    expect(tableReadyMessage("Asha", 4, "Cafe")).toBe("Hi Asha, your table for 4 at the Cafe is ready. Please come to the host stand.");
+    expect(tableReadyMessage("Asha", 4, null)).toBe("Hi Asha, your table for 4 is ready. Please come to the host stand.");
+  });
 });

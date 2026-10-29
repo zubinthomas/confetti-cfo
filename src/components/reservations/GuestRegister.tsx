@@ -19,6 +19,7 @@ import {
   type Reservation, type ReservationLocation, type ReservationArea, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
+import { waPhone, waLink, tableReadyMessage } from "@/lib/checkin";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
 import { useDraftPersistence } from "@/hooks/useDraftPersistence";
 import { toast } from "@/components/ui/use-toast";
@@ -537,6 +538,9 @@ function WaitingRow({
         <div className="text-sm flex items-center gap-2 flex-wrap">
           <span className="font-medium text-foreground">{s.guestName}</span>
           <span className="text-muted-foreground">party of {s.partySize}</span>
+          {s.source === "self" && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">Self check-in</span>
+          )}
           <span className="text-xs px-2 py-0.5 rounded-full"
             style={notified ? { backgroundColor: "#3b82f620", color: "#3b82f6" } : { backgroundColor: "#f59e0b20", color: "#f59e0b" }}>
             {notified ? "Notified" : "Waiting"}
@@ -569,7 +573,7 @@ function WaitingRow({
           </div>
           {!notified && (
             <button onClick={onNotify} disabled={notifying} className="flex items-center gap-1 text-primary hover:underline disabled:opacity-50">
-              {notifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} Notify
+              {notifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} {waPhone(s.guestPhone) ? "Message on WhatsApp" : "Notify"}
             </button>
           )}
           <button onClick={onAssign} className="flex items-center gap-1 text-primary hover:underline">
@@ -693,9 +697,16 @@ export default function GuestRegister({
   const doExtend = (s: GuestSignIn, minutes: number) =>
     runAction(() => extendSignIn(s.id, minutes));
 
+  // With a usable number the host messages the guest on WhatsApp (a prefilled
+  // link, opened before any await so the browser lets the tab through), then
+  // the entry is marked notified. Without one it is the plain "staff called" mark.
   const doNotify = async (s: GuestSignIn) => {
+    const phone = waPhone(s.guestPhone);
+    if (phone) {
+      window.open(waLink(phone, tableReadyMessage(s.guestName, s.partySize, s.areaName)), "_blank", "noopener");
+    }
     setNotifyingId(s.id);
-    await runAction(() => notifyGuest(s.id));
+    await runAction(() => notifyGuest(s.id, phone ? "whatsapp" : undefined));
     setNotifyingId(null);
   };
 

@@ -102,6 +102,7 @@ function signInQuery() {
       quotedWaitMinutes: schema.guestSignIns.quotedWaitMinutes,
       notifiedAt: schema.guestSignIns.notifiedAt,
       notifiedVia: schema.guestSignIns.notifiedVia,
+      source: schema.guestSignIns.source,
       createdByUserId: schema.guestSignIns.createdByUserId,
     })
     .from(schema.guestSignIns)
