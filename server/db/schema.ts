@@ -900,7 +900,7 @@ export const reservationAreas = pgTable('reservation_areas', {
   type: text('type'),
   archivedAt: text('archived_at'), // ISO-8601, null = active
   // Offered as a venue button on the public self check-in page (see checkin_settings).
-  checkinEnabled: boolean('checkin_enabled').notNull().default(false),
+  checkinEnabled: boolean('checkin_enabled').notNull().default(true),
 }, (t) => [
   uniqueIndex('reservation_areas_location_name').on(t.locationId, t.name).where(sql`${t.archivedAt} is null`),
 ]);
@@ -1044,7 +1044,6 @@ export const checkinSettings = pgTable('checkin_settings', {
   token: text('token').notNull(),
   bookingBufferMinutes: integer('booking_buffer_minutes').notNull().default(90),
   minutesPerParty: integer('minutes_per_party').notNull().default(15),
-  maxPartySize: integer('max_party_size').notNull().default(10),
   maxWaitMinutes: integer('max_wait_minutes').notNull().default(180),
   venueWhatsapp: text('venue_whatsapp'),
   shopUrl: text('shop_url'),

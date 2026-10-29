@@ -5,8 +5,9 @@
 import { Router } from 'express';
 import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
 import {
-  CheckinError, getCheckinSettings, updateCheckinSettings, rotateCheckinToken, setCheckinAreas, type CheckinPatch,
+  CheckinError, getCheckinSettings, updateCheckinSettings, rotateCheckinToken, setAreaOffered, type CheckinPatch,
 } from '../db/checkinSettings.ts';
+import { checkinAreaSummary } from '../db/tableCheck.ts';
 
 const router = Router();
 router.use(authMiddleware);
@@ -27,7 +28,7 @@ router.patch('/checkin-settings', requirePermission('GuestCheckIn', 'write'), as
     const b = (req.body ?? {}) as CheckinPatch;
     res.json(await updateCheckinSettings({
       enabled: b.enabled, bookingBufferMinutes: b.bookingBufferMinutes, minutesPerParty: b.minutesPerParty,
-      maxPartySize: b.maxPartySize, maxWaitMinutes: b.maxWaitMinutes, venueWhatsapp: b.venueWhatsapp, shopUrl: b.shopUrl,
+      maxWaitMinutes: b.maxWaitMinutes, venueWhatsapp: b.venueWhatsapp, shopUrl: b.shopUrl,
     }));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
@@ -42,9 +43,17 @@ router.post('/checkin-settings/rotate-token', requirePermission('GuestCheckIn', 
   }
 });
 
-router.put('/checkin-settings/areas', requirePermission('GuestCheckIn', 'write'), async (req: AuthedRequest, res) => {
+router.get('/checkin-settings/areas', requirePermission('GuestCheckIn', 'read'), async (_req: AuthedRequest, res) => {
   try {
-    await setCheckinAreas(req.body?.areaIds);
+    res.json(await checkinAreaSummary());
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.put('/checkin-settings/areas/:id', requirePermission('GuestCheckIn', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    await setAreaOffered(req.params.id, req.body?.offered);
     res.json({ message: 'Saved' });
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });

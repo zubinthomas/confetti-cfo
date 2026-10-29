@@ -2,7 +2,7 @@
 // One row, created on first read with a fresh on-site token. The token is what
 // the QR code carries; rotating it kills every printed or bookmarked link.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 
 export class CheckinError extends Error {}
@@ -45,7 +45,6 @@ export interface CheckinPatch {
   enabled?: boolean;
   bookingBufferMinutes?: number;
   minutesPerParty?: number;
-  maxPartySize?: number;
   maxWaitMinutes?: number;
   venueWhatsapp?: string | null;
   shopUrl?: string | null;
@@ -60,7 +59,6 @@ export async function updateCheckinSettings(patch: CheckinPatch): Promise<Checki
   }
   if (patch.bookingBufferMinutes !== undefined) set.bookingBufferMinutes = int('Booking buffer', patch.bookingBufferMinutes, 0, 480);
   if (patch.minutesPerParty !== undefined) set.minutesPerParty = int('Minutes per party', patch.minutesPerParty, 0, 120);
-  if (patch.maxPartySize !== undefined) set.maxPartySize = int('Max party size', patch.maxPartySize, 1, 50);
   if (patch.maxWaitMinutes !== undefined) set.maxWaitMinutes = int('Max wait', patch.maxWaitMinutes, 5, 720);
   if (patch.venueWhatsapp !== undefined) {
     const raw = patch.venueWhatsapp?.trim();
@@ -107,19 +105,12 @@ export async function checkinTokenValid(token: unknown): Promise<boolean> {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Which areas guests can pick on the page: exactly `areaIds`, all others off. */
-export async function setCheckinAreas(areaIds: string[]) {
+/** Show or hide one area on the guest page. Areas are offered by default. */
+export async function setAreaOffered(areaId: unknown, offered: unknown) {
   await ready();
-  if (!Array.isArray(areaIds) || !areaIds.every((x) => typeof x === 'string')) throw new CheckinError('areaIds must be a list of area ids');
-  const ids = [...new Set(areaIds)];
-  if (ids.length > 0) {
-    const found = await db.select({ id: schema.reservationAreas.id, archivedAt: schema.reservationAreas.archivedAt })
-      .from(schema.reservationAreas).where(inArray(schema.reservationAreas.id, ids));
-    if (found.length !== ids.length) throw new CheckinError('One or more areas no longer exist');
-    if (found.some((a) => a.archivedAt)) throw new CheckinError('Archived areas can not be offered to guests');
-  }
-  await db.transaction(async (tx) => {
-    await tx.update(schema.reservationAreas).set({ checkinEnabled: false });
-    if (ids.length > 0) await tx.update(schema.reservationAreas).set({ checkinEnabled: true }).where(inArray(schema.reservationAreas.id, ids));
-  });
+  if (typeof areaId !== 'string') throw new CheckinError('Unknown area');
+  if (typeof offered !== 'boolean') throw new CheckinError('offered must be true or false');
+  const updated = await db.update(schema.reservationAreas).set({ checkinEnabled: offered })
+    .where(eq(schema.reservationAreas.id, areaId)).returning({ id: schema.reservationAreas.id });
+  if (updated.length === 0) throw new CheckinError('Unknown area');
 }

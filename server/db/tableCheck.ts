@@ -8,7 +8,7 @@
 // is the booking protection window, so a walk-in is only offered a table they
 // could plausibly finish at before a reservation. A late booking therefore
 // holds its table until it ends.
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { listTables, toMinutes, istNow, istDayBounds } from './reservations.ts';
 import { listActiveMerges, loadLinkSet, tablesCanMerge } from './tableMerges.ts';
@@ -19,7 +19,8 @@ import { getCheckinSettings } from './checkinSettings.ts';
 const OVERDUE_MINUTES = 5;
 const DAY_END = 24 * 60;
 
-export interface CheckTable { id: string; capacity: number }
+/** `seats` is capacity plus the table's overflow seats: what staff can really seat. */
+export interface CheckTable { id: string; seats: number }
 export interface Slot { start: number; end: number }
 
 export interface CheckInput {
@@ -44,8 +45,10 @@ export interface CheckResult {
   status: CheckStatus;
   /** Quoted wait for 'wait', rounded up to 5. 0 for 'available'. */
   minutes: number;
-  /** Two tables joined would be used. */
+  /** More than one table would be pushed together. */
   joined: boolean;
+  /** How many tables the quoted option uses (1 when none are joined). */
+  tablesUsed: number;
   partiesAhead: number;
   tablesFree: number;
   tablesTotal: number;
@@ -67,32 +70,98 @@ function readyIn(ids: string[], i: CheckInput): number {
   return t >= DAY_END ? Infinity : t - i.nowMin;
 }
 
+const MAX_GROUP = 6;
+const NODE_BUDGET = 20_000;
+
+/** Every set of tables that may be pushed together (each pair allowed to merge,
+ *  the rule createMerge enforces), single tables included, up to MAX_GROUP
+ *  tables. A node budget keeps a huge free-merge area from stalling a request;
+ *  checkAvailability and maxPartyFor share this, so they never disagree. */
+export function tableGroups(tables: CheckTable[], canJoin: (a: CheckTable, b: CheckTable) => boolean): CheckTable[][] {
+  const out: CheckTable[][] = [];
+  let nodes = 0;
+  const grow = (group: CheckTable[], from: number) => {
+    for (let i = from; i < tables.length && nodes < NODE_BUDGET; i++) {
+      if (!group.every((m) => canJoin(m, tables[i]))) continue;
+      nodes++;
+      const next = [...group, tables[i]];
+      out.push(next);
+      if (next.length < MAX_GROUP) grow(next, i + 1);
+    }
+  };
+  grow([], 0);
+  return out;
+}
+
+/** The largest party an area can seat: the biggest seat total over any group of
+ *  tables that may be joined. 0 when there are no tables. */
+export function maxPartyFor(tables: CheckTable[], canJoin: (a: CheckTable, b: CheckTable) => boolean): number {
+  return tableGroups(tables, canJoin).reduce((m, g) => Math.max(m, g.reduce((n, t) => n + t.seats, 0)), 0);
+}
+
 export function checkAvailability(i: CheckInput): CheckResult {
   const n = i.partySize;
-  type Option = { wait: number; k: number; waste: number; ids: string[] };
+  type Option = { wait: number; k: number; waste: number };
   const options: Option[] = [];
-  for (let a = 0; a < i.tables.length; a++) {
-    const ta = i.tables[a];
-    if (ta.capacity >= n) options.push({ wait: readyIn([ta.id], i), k: 1, waste: ta.capacity - n, ids: [ta.id] });
-    for (let b = a + 1; b < i.tables.length; b++) {
-      const tb = i.tables[b];
-      if (ta.capacity < n && tb.capacity < n && ta.capacity + tb.capacity >= n && i.canJoin(ta, tb)) {
-        options.push({ wait: readyIn([ta.id, tb.id], i), k: 2, waste: ta.capacity + tb.capacity - n, ids: [ta.id, tb.id] });
-      }
-    }
+  for (const g of tableGroups(i.tables, i.canJoin)) {
+    const seats = g.reduce((sum, t) => sum + t.seats, 0);
+    // Only groups where every member is needed: drop the smallest and it must stop fitting.
+    if (seats < n || seats - Math.min(...g.map((t) => t.seats)) >= n) continue;
+    options.push({ wait: readyIn(g.map((t) => t.id), i), k: g.length, waste: seats - n });
   }
   const tablesFree = i.tables.filter((t) => readyIn([t.id], i) === 0).length;
   const base = { partiesAhead: i.partiesAhead, tablesFree, tablesTotal: i.tables.length };
-  if (options.length === 0) return { ...base, status: 'too_large', minutes: 0, joined: false };
+  if (options.length === 0) return { ...base, status: 'too_large', minutes: 0, joined: false, tablesUsed: 0 };
 
   options.sort((x, y) => x.wait - y.wait || x.k - y.k || x.waste - y.waste);
   const best = options[0];
-  if (!Number.isFinite(best.wait)) return { ...base, status: 'long_wait', minutes: 0, joined: best.k === 2 };
-  if (best.wait === 0 && i.partiesAhead === 0) return { ...base, status: 'available', minutes: 0, joined: best.k === 2 };
+  const used = { joined: best.k > 1, tablesUsed: best.k };
+  if (!Number.isFinite(best.wait)) return { ...base, status: 'long_wait', minutes: 0, ...used };
+  if (best.wait === 0 && i.partiesAhead === 0) return { ...base, status: 'available', minutes: 0, ...used };
 
   const quote = best.wait + i.partiesAhead * i.minutesPerParty;
-  if (quote > i.maxWaitMin) return { ...base, status: 'long_wait', minutes: 0, joined: best.k === 2 };
-  return { ...base, status: 'wait', minutes: Math.max(5, Math.ceil(quote / 5) * 5), joined: best.k === 2 };
+  if (quote > i.maxWaitMin) return { ...base, status: 'long_wait', minutes: 0, ...used };
+  return { ...base, status: 'wait', minutes: Math.max(5, Math.ceil(quote / 5) * 5), ...used };
+}
+
+type FloorTable = Awaited<ReturnType<typeof listTables>>[number];
+
+/** Seats a table can take and the join rule for a set of tables (all from one area or several). */
+async function joinRule(all: FloorTable[]) {
+  const linkSet = await loadLinkSet(all.map((t) => t.id));
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const toCheck = (t: FloorTable): CheckTable => ({ id: t.id, seats: t.capacity + t.maxExtraCapacity });
+  const canJoin = (a: CheckTable, b: CheckTable) => tablesCanMerge(byId.get(a.id)!, byId.get(b.id)!, linkSet);
+  return { toCheck, canJoin };
+}
+
+/** Table count and largest party for every area that has active tables. */
+export async function areaLimits(): Promise<Map<string, { tables: number; maxParty: number }>> {
+  await ready();
+  const all = await listTables({ archived: 'exclude' });
+  const { toCheck, canJoin } = await joinRule(all);
+  const out = new Map<string, { tables: number; maxParty: number }>();
+  for (const areaId of new Set(all.map((t) => t.areaId))) {
+    const mine = all.filter((t) => t.areaId === areaId);
+    out.set(areaId, { tables: mine.length, maxParty: maxPartyFor(mine.map(toCheck), canJoin) });
+  }
+  return out;
+}
+
+/** Every live area for the admin tab: its tables, largest party, and whether
+ *  guests are offered it. */
+export async function checkinAreaSummary() {
+  await ready();
+  const limits = await areaLimits();
+  const rows = await db.select({
+    id: schema.reservationAreas.id, name: schema.reservationAreas.name, floor: schema.reservationAreas.floor,
+    offered: schema.reservationAreas.checkinEnabled,
+  })
+    .from(schema.reservationAreas)
+    .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationAreas.locationId))
+    .where(and(isNull(schema.reservationAreas.archivedAt), isNull(schema.reservationLocations.archivedAt)))
+    .orderBy(asc(schema.reservationAreas.createdDate), asc(schema.reservationAreas.name));
+  return rows.map((a) => ({ ...a, tables: limits.get(a.id)?.tables ?? 0, maxParty: limits.get(a.id)?.maxParty ?? 0 }));
 }
 
 /** Today's picture of one area, then checkAvailability on it. `now` is for tests. */
@@ -103,7 +172,6 @@ export async function checkArea(areaId: string, partySize: number, now = new Dat
 
   const all = await listTables({ areaId, archived: 'exclude' });
   const tableIds = all.map((t) => t.id);
-  const tables: CheckTable[] = all.map((t) => ({ id: t.id, capacity: t.capacity }));
 
   // Who is on each table now. A physically merged unit is occupied as a whole.
   const occupiedUntil = new Map<string, number>();
@@ -132,9 +200,8 @@ export async function checkArea(areaId: string, partySize: number, now = new Dat
     }
   }
 
-  const linkSet = await loadLinkSet(tableIds);
-  const byId = new Map(all.map((t) => [t.id, t]));
-  const canJoin = (a: CheckTable, b: CheckTable) => tablesCanMerge(byId.get(a.id)!, byId.get(b.id)!, linkSet);
+  const { toCheck, canJoin } = await joinRule(all);
+  const tables = all.map(toCheck);
 
   // People already waiting for this area today.
   const { gte, lt } = istDayBounds(today);

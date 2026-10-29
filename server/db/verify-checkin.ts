@@ -14,7 +14,7 @@ process.env.PGLITE_DATA_DIR = dir;
 const { ready, db, schema } = await import('./client.ts');
 const R = await import('./reservations.ts');
 const S = await import('./checkinSettings.ts');
-const { checkAvailability, checkArea } = await import('./tableCheck.ts');
+const { checkAvailability, checkArea, maxPartyFor, areaLimits, checkinAreaSummary } = await import('./tableCheck.ts');
 const P = await import('./publicCheckin.ts');
 const M = await import('./menu.ts');
 const { SlidingWindow } = await import('../middleware/rateLimit.ts');
@@ -25,7 +25,7 @@ await ready();
 
 // ── Pure engine ──────────────────────────────────────────────────────────
 const NOW = 15 * 60 + 30; // 15:30
-const t = (id: string, capacity: number) => ({ id, capacity });
+const t = (id: string, seats: number) => ({ id, seats });
 const base = {
   partySize: 2, tables: [t('a', 2)], canJoin: () => false,
   occupiedUntil: new Map<string, number>(), bookings: new Map<string, { start: number; end: number }[]>(),
@@ -33,7 +33,7 @@ const base = {
 };
 const run = (over: Partial<typeof base>) => checkAvailability({ ...base, ...over });
 
-assert.deepEqual(run({}), { status: 'available', minutes: 0, joined: false, partiesAhead: 0, tablesFree: 1, tablesTotal: 1 });
+assert.deepEqual(run({}), { status: 'available', minutes: 0, joined: false, tablesUsed: 1, partiesAhead: 0, tablesFree: 1, tablesTotal: 1 });
 
 // Occupied until 16:00: a 30 minute wait. Overdue occupants count as 5 minutes.
 assert.equal(run({ occupiedUntil: new Map([['a', 16 * 60]]) }).minutes, 30);
@@ -60,12 +60,31 @@ assert.equal(run({ bookings: new Map([['a', [{ start: NOW - 10, end: 24 * 60 }]]
 
 // Two joined tables, only when the rule allows.
 const pair = { partySize: 4, tables: [t('a', 2), t('b', 2)] };
-assert.deepEqual(run({ ...pair, canJoin: () => true }), { status: 'available', minutes: 0, joined: true, partiesAhead: 0, tablesFree: 2, tablesTotal: 2 });
+assert.deepEqual(run({ ...pair, canJoin: () => true }), { status: 'available', minutes: 0, joined: true, tablesUsed: 2, partiesAhead: 0, tablesFree: 2, tablesTotal: 2 });
 assert.equal(run({ ...pair }).status, 'too_large', 'unlinked tables are not offered together');
 const pairWait = run({ ...pair, canJoin: () => true, occupiedUntil: new Map([['a', 16 * 60], ['b', 16 * 60 + 20]]) });
 assert.equal(pairWait.minutes, 50, 'a joined pair is ready when both are');
 // A single table beats a pair on a tie.
 assert.equal(run({ partySize: 3, tables: [t('a', 2), t('b', 2), t('c', 4)], canJoin: () => true }).joined, false);
+
+// Groups of more than two, and the cap that goes with them. Overflow seats are
+// part of `seats`, so a 4-top with 2 extra is a 6.
+const clique = (ids: string[]) => (a: { id: string }, b: { id: string }) => ids.includes(a.id) && ids.includes(b.id);
+const trio = { tables: [t('a', 4), t('b', 4), t('c', 4)], canJoin: () => true };
+assert.equal(maxPartyFor(trio.tables, trio.canJoin), 12, 'three joinable 4-tops seat twelve');
+assert.equal(maxPartyFor(trio.tables, () => false), 4, 'nothing joinable: the biggest single table');
+assert.equal(maxPartyFor([t('a', 6)], () => false), 6, 'overflow seats are counted');
+assert.equal(maxPartyFor([], () => true), 0);
+// A chain a-b, b-c is not a group of three: every pair must be allowed.
+const chain = (x: { id: string }, y: { id: string }) => [x.id, y.id].sort().join() === 'a,b' || [x.id, y.id].sort().join() === 'b,c';
+assert.equal(maxPartyFor(trio.tables, chain), 8, 'a-b and b-c, but a and c cannot join, so at most a pair');
+assert.equal(maxPartyFor(trio.tables, clique(['a', 'b'])), 8);
+const ten = run({ ...trio, partySize: 10 });
+assert.deepEqual([ten.status, ten.joined, ten.tablesUsed], ['available', true, 3], 'three tables for ten');
+assert.equal(run({ ...trio, partySize: 12 }).tablesUsed, 3);
+assert.equal(run({ ...trio, partySize: 13 }).status, 'too_large');
+assert.equal(run({ ...trio, partySize: 8 }).tablesUsed, 2, 'no more tables than needed');
+assert.equal(run({ tables: [t('a', 6)], partySize: 6 }).tablesUsed, 1, 'a single table with overflow seats');
 
 // People ahead add time per party, and make "available" a wait.
 assert.deepEqual([run({ partiesAhead: 2 }).status, run({ partiesAhead: 2 }).minutes], ['wait', 30]);
@@ -94,7 +113,6 @@ assert.equal(await S.checkinTokenValid(rotated.token), true);
 
 await assert.rejects(() => S.updateCheckinSettings({ bookingBufferMinutes: -1 }), S.CheckinError);
 await assert.rejects(() => S.updateCheckinSettings({ bookingBufferMinutes: 1.5 }), S.CheckinError);
-await assert.rejects(() => S.updateCheckinSettings({ maxPartySize: 0 }), S.CheckinError);
 await assert.rejects(() => S.updateCheckinSettings({ shopUrl: 'javascript:alert(1)' }), S.CheckinError);
 await assert.rejects(() => S.updateCheckinSettings({ shopUrl: 'not a url' }), S.CheckinError);
 await assert.rejects(() => S.updateCheckinSettings({ venueWhatsapp: '12345' }), S.CheckinError);
@@ -111,12 +129,12 @@ assert.equal(S.normalisePhone(null), null);
 const areas = await R.listAreas();
 const cafe = areas.find((a) => a.name === 'Cafe')!;
 const bar = areas.find((a) => a.name === 'Bar')!;
-assert.ok(areas.every((a) => a.checkinEnabled === false));
-await S.setCheckinAreas([cafe.id, bar.id]);
-assert.deepEqual((await R.listAreas()).filter((a) => a.checkinEnabled).map((a) => a.name).sort(), ['Bar', 'Cafe']);
-await S.setCheckinAreas([cafe.id]);
-assert.deepEqual((await R.listAreas()).filter((a) => a.checkinEnabled).map((a) => a.name), ['Cafe']);
-await assert.rejects(() => S.setCheckinAreas(['missing']), S.CheckinError);
+assert.ok(areas.every((a) => a.checkinEnabled === true), 'areas are offered to guests by default');
+await S.setAreaOffered(bar.id, false);
+assert.deepEqual((await R.listAreas()).filter((a) => !a.checkinEnabled).map((a) => a.name), ['Bar']);
+await S.setAreaOffered(bar.id, true);
+await assert.rejects(() => S.setAreaOffered('missing', true), S.CheckinError);
+await assert.rejects(() => S.setAreaOffered(bar.id, 'yes'), S.CheckinError);
 
 // ── Against the real floor ───────────────────────────────────────────────
 // 2026-10-22 15:30 IST.
@@ -171,13 +189,26 @@ r = await checkArea(cafe.id, 2, NOW_DATE);
 assert.deepEqual([r.status, r.partiesAhead, r.minutes], ['wait', 2, 30]);
 assert.equal((await checkArea(bar.id, 2, NOW_DATE)).partiesAhead, 1);
 
+// Overflow seats count towards what an area can seat, and a booked-out table still counts (the cap is about the floor, not the moment).
+await R.createTable({ areaId: bar.id, name: 'B4', capacity: 4, maxExtraCapacity: 2 });
+assert.equal((await areaLimits()).get(bar.id)!.maxParty, 6, 'a 4-top with two extra seats takes six');
+const six = await checkArea(bar.id, 6, NOW_DATE);
+assert.deepEqual([six.status, six.tablesUsed], ['wait', 1], 'the engine seats six on it (a wait only because a party is already queued)');
+
 // ── Public page: join, spot, leave, menu ─────────────────────────────────
 await db.delete(schema.guestSignIns); // fresh queue and floor
 await db.delete(schema.reservations);
-assert.deepEqual((await P.publicConfig()).areas.map((a) => a.name), ['Cafe'], 'only areas switched on are offered');
-await assert.rejects(() => P.publicCheck(bar.id, 2, NOW_DATE), P.PublicCheckinError, 'an area that is off is refused');
+// Only areas with tables are listed, each with the largest party it can seat.
+const cfg = await P.publicConfig();
+assert.deepEqual(cfg.areas.map((a) => [a.name, a.maxPartySize]), [['Cafe', 4], ['Bar', 6]], 'areas with tables, in creation order; empty ones skipped');
+const summary = await checkinAreaSummary();
+assert.deepEqual(summary.filter((a) => a.tables > 0).map((a) => [a.name, a.tables, a.maxParty, a.offered]), [['Cafe', 3, 4, true], ['Bar', 2, 6, true]]);
+assert.equal(summary.find((a) => a.name === 'Restaurant')!.maxParty, 0, 'an area with no tables is listed for admin with a cap of 0');
+await S.setAreaOffered(bar.id, false);
+assert.deepEqual((await P.publicConfig()).areas.map((a) => a.name), ['Cafe'], 'a hidden area is not offered');
+await assert.rejects(() => P.publicCheck(bar.id, 2, NOW_DATE), P.PublicCheckinError, 'a hidden area is refused');
 await assert.rejects(() => P.publicCheck(cafe.id, 0, NOW_DATE), /Party size/);
-await assert.rejects(() => P.publicCheck(cafe.id, 11, NOW_DATE), /Party size/);
+await assert.rejects(() => P.publicCheck(cafe.id, 5, NOW_DATE), /from 1 to 4/, 'the cap is the area\'s largest group');
 await assert.rejects(() => P.publicCheck('nope', 2, NOW_DATE), P.PublicCheckinError);
 assert.equal((await P.publicCheck(cafe.id, 2, NOW_DATE)).status, 'available');
 
@@ -201,7 +232,7 @@ assert.equal(j2.spot.quotedWaitMinutes, 15);
 assert.equal((await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, j2.spot.id)))[0].guestName, 'Guest ...2222', 'no name given');
 
 // Refused: too big, bad number, and a staff entry's id is never exposed.
-await assert.rejects(() => P.joinWaitingList({ areaId: cafe.id, partySize: 10, phone: '9222233333' }, NOW_DATE), (e: unknown) => e instanceof P.PublicCheckinError && e.code === 'too_large');
+await assert.rejects(() => P.joinWaitingList({ areaId: cafe.id, partySize: 5, phone: '9222233333' }, NOW_DATE), /Party size/);
 await assert.rejects(() => P.joinWaitingList({ areaId: cafe.id, partySize: 2, phone: '123' }, NOW_DATE), /WhatsApp/);
 const staffRow = await walkIn(null, cafe.id, null);
 await assert.rejects(() => P.spotStatus(staffRow, NOW_DATE), (e: unknown) => e instanceof P.PublicCheckinError && e.status === 404);

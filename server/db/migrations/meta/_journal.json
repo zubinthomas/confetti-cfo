@@ -379,6 +379,13 @@
       "when": 1793251947972,
       "tag": "0053_guest_checkin",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793253561733,
+      "tag": "0054_checkin_areas_default",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,7 @@ import { and, asc, eq, isNull, or } from 'drizzle-orm';
 import { db, ready, schema } from './client.ts';
 import { istNow, istDayBounds } from './reservations.ts';
 import { nextSortOrder } from './guestSignIns.ts';
-import { checkArea, type CheckResult } from './tableCheck.ts';
+import { checkArea, areaLimits, type CheckResult } from './tableCheck.ts';
 import { getCheckinSettings, normalisePhone } from './checkinSettings.ts';
 
 export class PublicCheckinError extends Error {
@@ -20,17 +20,36 @@ export class PublicCheckinError extends Error {
   }
 }
 
+/** Areas guests can pick: offered (not hidden by staff), not archived, in a live
+ *  location, with at least one active table. Each knows its largest party. */
+async function offeredAreas() {
+  const rows = await db.select({
+    id: schema.reservationAreas.id, name: schema.reservationAreas.name, floor: schema.reservationAreas.floor,
+  })
+    .from(schema.reservationAreas)
+    .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationAreas.locationId))
+    .where(and(
+      eq(schema.reservationAreas.checkinEnabled, true),
+      isNull(schema.reservationAreas.archivedAt), isNull(schema.reservationLocations.archivedAt),
+    ))
+    .orderBy(asc(schema.reservationAreas.createdDate), asc(schema.reservationAreas.name));
+  const limits = await areaLimits();
+  return rows.flatMap((a) => {
+    const l = limits.get(a.id);
+    return l && l.maxParty > 0 ? [{ ...a, maxPartySize: l.maxParty }] : [];
+  });
+}
+
 async function offeredArea(areaId: unknown) {
   if (typeof areaId !== 'string') throw new PublicCheckinError('Choose where you would like to sit');
-  const [area] = await db.select().from(schema.reservationAreas).where(eq(schema.reservationAreas.id, areaId));
-  if (!area || area.archivedAt || !area.checkinEnabled) throw new PublicCheckinError('That area is not available for check-in');
+  const area = (await offeredAreas()).find((a) => a.id === areaId);
+  if (!area) throw new PublicCheckinError('That area is not available for check-in');
   return area;
 }
 
-async function validParty(partySize: unknown) {
-  const { maxPartySize } = await getCheckinSettings();
-  if (typeof partySize !== 'number' || !Number.isInteger(partySize) || partySize < 1 || partySize > maxPartySize) {
-    throw new PublicCheckinError(`Party size must be from 1 to ${maxPartySize}`);
+function validParty(partySize: unknown, max: number) {
+  if (typeof partySize !== 'number' || !Number.isInteger(partySize) || partySize < 1 || partySize > max) {
+    throw new PublicCheckinError(`Party size must be from 1 to ${max} here`);
   }
   return partySize;
 }
@@ -38,17 +57,13 @@ async function validParty(partySize: unknown) {
 export async function publicConfig() {
   await ready();
   const s = await getCheckinSettings();
-  const areas = await db.select({ id: schema.reservationAreas.id, name: schema.reservationAreas.name, floor: schema.reservationAreas.floor })
-    .from(schema.reservationAreas)
-    .where(and(eq(schema.reservationAreas.checkinEnabled, true), isNull(schema.reservationAreas.archivedAt)))
-    .orderBy(asc(schema.reservationAreas.createdDate), asc(schema.reservationAreas.name));
-  return { areas, maxPartySize: s.maxPartySize, venueWhatsapp: s.venueWhatsapp, shopUrl: s.shopUrl };
+  return { areas: await offeredAreas(), venueWhatsapp: s.venueWhatsapp, shopUrl: s.shopUrl };
 }
 
 export async function publicCheck(areaId: unknown, partySize: unknown, now = new Date()): Promise<CheckResult> {
   await ready();
   const area = await offeredArea(areaId);
-  return checkArea(area.id, await validParty(partySize), now);
+  return checkArea(area.id, validParty(partySize, area.maxPartySize), now);
 }
 
 export type SpotState = 'waiting' | 'ready' | 'seated' | 'left';
@@ -101,7 +116,7 @@ export async function joinWaitingList(
 ): Promise<JoinResult> {
   await ready();
   const area = await offeredArea(input.areaId);
-  const partySize = await validParty(input.partySize);
+  const partySize = validParty(input.partySize, area.maxPartySize);
   const digits = normalisePhone(typeof input.phone === 'string' ? input.phone : '');
   if (!digits) throw new PublicCheckinError('Enter a valid WhatsApp number');
   const phone = `+${digits}`;
