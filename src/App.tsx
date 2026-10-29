@@ -15,6 +15,7 @@ import Login from '@/pages/Login';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AcceptInvite from '@/pages/AcceptInvite';
+import CheckATable from '@/pages/CheckATable';
 import { useReferenceData } from '@/hooks/useReferenceData';
 import { SpotlightSearchProvider } from '@/lib/SpotlightSearchContext';
 
@@ -69,7 +70,7 @@ const ReferenceDataGate = () => {
 // Routes reachable while logged out - the auth_required redirect below must
 // never fire on these, or visiting /login while logged out would redirect to
 // /login, re-run the same failed auth check, and redirect again forever.
-const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password'];
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/check-a-table'];
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -98,6 +99,7 @@ const AuthenticatedApp = () => {
         <Route path="/login" element={<Login />} />
         {/* No open registration - accounts are CLI-created or invite-only (see README) */}
         <Route path="/invite/:token" element={<AcceptInvite />} />
+        <Route path="/check-a-table" element={<CheckATable />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
