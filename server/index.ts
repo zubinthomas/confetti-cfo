@@ -31,6 +31,7 @@ import costCentreRoutes from './routes/costCentres.ts';
 import purchaseOrdersRoutes from './routes/purchaseOrders.ts';
 import reservationsRoutes from './routes/reservations.ts';
 import checkinAdminRoutes from './routes/checkinAdmin.ts';
+import publicCheckinRoutes from './routes/publicCheckin.ts';
 import guestSignInsRoutes from './routes/guestSignIns.ts';
 import recruitmentHireRoutes from './routes/recruitmentHire.ts';
 import offboardingRoutes from './routes/offboarding.ts';
@@ -49,6 +50,9 @@ config()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// nginx on the same box passes the real client address in X-Forwarded-For; trusting
+// only loopback keeps a client from spoofing it. The public check-in rate limits key on req.ip.
+app.set('trust proxy', 'loopback');
 const PORT = process.env.PORT || 3001;
 
 console.log(process.env.CLIENT_URL)
@@ -90,6 +94,7 @@ app.use('/api/exceptions', exceptionsRoutes);
 app.use('/api/time-log', timeLogRoutes);
 app.use('/api/cost-centres', costCentreRoutes);
 app.use('/api/purchase-orders', purchaseOrdersRoutes);
+app.use('/api/public/check-a-table', publicCheckinRoutes);
 app.use('/api/restaurant', checkinAdminRoutes);
 app.use('/api/restaurant', reservationsRoutes);
 app.use('/api/guest-sign-ins', guestSignInsRoutes);

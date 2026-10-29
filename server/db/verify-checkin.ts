@@ -15,6 +15,9 @@ const { ready, db, schema } = await import('./client.ts');
 const R = await import('./reservations.ts');
 const S = await import('./checkinSettings.ts');
 const { checkAvailability, checkArea } = await import('./tableCheck.ts');
+const P = await import('./publicCheckin.ts');
+const { SlidingWindow } = await import('../middleware/rateLimit.ts');
+const { eq } = await import('drizzle-orm');
 const { randomUUID } = await import('node:crypto');
 
 await ready();
@@ -166,6 +169,94 @@ await walkIn(null, cafe.id, null, '2026-10-20T10:00:00Z'); // stale, from anothe
 r = await checkArea(cafe.id, 2, NOW_DATE);
 assert.deepEqual([r.status, r.partiesAhead, r.minutes], ['wait', 2, 30]);
 assert.equal((await checkArea(bar.id, 2, NOW_DATE)).partiesAhead, 1);
+
+// ── Public page: join, spot, leave, menu ─────────────────────────────────
+await db.delete(schema.guestSignIns); // fresh queue and floor
+await db.delete(schema.reservations);
+assert.deepEqual((await P.publicConfig()).areas.map((a) => a.name), ['Cafe'], 'only areas switched on are offered');
+await assert.rejects(() => P.publicCheck(bar.id, 2, NOW_DATE), P.PublicCheckinError, 'an area that is off is refused');
+await assert.rejects(() => P.publicCheck(cafe.id, 0, NOW_DATE), /Party size/);
+await assert.rejects(() => P.publicCheck(cafe.id, 11, NOW_DATE), /Party size/);
+await assert.rejects(() => P.publicCheck('nope', 2, NOW_DATE), P.PublicCheckinError);
+assert.equal((await P.publicCheck(cafe.id, 2, NOW_DATE)).status, 'available');
+
+// A free table: joining makes a self entry with a zero quote.
+const j1 = await P.joinWaitingList({ areaId: cafe.id, partySize: 2, phone: '98765 43210', name: '  Asha   Rao ' }, NOW_DATE);
+assert.equal(j1.existing, false);
+assert.equal(j1.check?.status, 'available');
+assert.deepEqual([j1.spot.state, j1.spot.position, j1.spot.quotedWaitMinutes, j1.spot.areaName], ['waiting', 1, 0, 'Cafe']);
+const row1 = (await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, j1.spot.id)))[0];
+assert.deepEqual([row1.source, row1.guestName, row1.guestPhone, row1.tableId, row1.createdByUserId], ['self', 'Asha Rao', '+919876543210', null, null]);
+
+// The same number again returns the same spot, however it is typed.
+const dup = await P.joinWaitingList({ areaId: cafe.id, partySize: 4, phone: '+91 98765-43210' }, NOW_DATE);
+assert.deepEqual([dup.existing, dup.spot.id], [true, j1.spot.id]);
+
+// A second guest queues behind the first and the quote follows the people ahead.
+const j2 = await P.joinWaitingList({ areaId: cafe.id, partySize: 2, phone: '9111122222' }, NOW_DATE);
+assert.equal(j2.spot.position, 2);
+assert.equal(j2.check?.status, 'wait', 'with one party ahead it is a wait, not a free table');
+assert.equal(j2.spot.quotedWaitMinutes, 15);
+assert.equal((await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, j2.spot.id)))[0].guestName, 'Guest ...2222', 'no name given');
+
+// Refused: too big, bad number, and a staff entry's id is never exposed.
+await assert.rejects(() => P.joinWaitingList({ areaId: cafe.id, partySize: 10, phone: '9222233333' }, NOW_DATE), (e: unknown) => e instanceof P.PublicCheckinError && e.code === 'too_large');
+await assert.rejects(() => P.joinWaitingList({ areaId: cafe.id, partySize: 2, phone: '123' }, NOW_DATE), /WhatsApp/);
+const staffRow = await walkIn(null, cafe.id, null);
+await assert.rejects(() => P.spotStatus(staffRow, NOW_DATE), (e: unknown) => e instanceof P.PublicCheckinError && e.status === 404);
+await assert.rejects(() => P.leaveWaitingList(staffRow, NOW_DATE), (e: unknown) => e instanceof P.PublicCheckinError && e.status === 404);
+await assert.rejects(() => P.spotStatus('nope', NOW_DATE), P.PublicCheckinError);
+
+// The long-wait cap refuses to queue.
+await S.updateCheckinSettings({ maxWaitMinutes: 10 });
+await assert.rejects(() => P.joinWaitingList({ areaId: cafe.id, partySize: 2, phone: '9333344444' }, NOW_DATE), (e: unknown) => e instanceof P.PublicCheckinError && e.code === 'long_wait');
+await S.updateCheckinSettings({ maxWaitMinutes: 180 });
+
+// A host notifies, then seats: the guest's state follows; leaving is refused once seated.
+await db.update(schema.guestSignIns).set({ notifiedAt: NOW_DATE.toISOString() }).where(eq(schema.guestSignIns.id, j1.spot.id));
+assert.equal((await P.spotStatus(j1.spot.id, NOW_DATE)).state, 'ready');
+await db.update(schema.guestSignIns).set({ tableId: c4.id }).where(eq(schema.guestSignIns.id, j1.spot.id));
+assert.equal((await P.spotStatus(j1.spot.id, NOW_DATE)).state, 'seated');
+await assert.rejects(() => P.leaveWaitingList(j1.spot.id, NOW_DATE), /already seated/);
+
+// Leaving frees the spot, and the queue closes up.
+const left = await P.leaveWaitingList(j2.spot.id, NOW_DATE);
+assert.deepEqual([left.state, left.position], ['left', null]);
+assert.equal((await P.leaveWaitingList(j2.spot.id, NOW_DATE)).state, 'left', 'leaving twice is harmless');
+const again = await P.joinWaitingList({ areaId: cafe.id, partySize: 2, phone: '9111122222' }, NOW_DATE);
+assert.equal(again.existing, false, 'a number that left can join again');
+
+// Menu: shown per area plus the shared sections, hidden items and archived sections left out.
+const sec = async (name: string, areaId: string | null, order: number, archived = false) => {
+  const id = randomUUID();
+  await db.insert(schema.menuSections).values({ id, createdDate: NOW_DATE.toISOString(), areaId, name, sortOrder: order, archivedAt: archived ? NOW_DATE.toISOString() : null });
+  return id;
+};
+const item = (sectionId: string, name: string, price: number, order: number, available = true) =>
+  db.insert(schema.menuItems).values({ id: randomUUID(), createdDate: NOW_DATE.toISOString(), sectionId, name, description: null, priceInr: price, sortOrder: order, available });
+const hot = await sec('Hot drinks', cafe.id, 1);
+const barSec = await sec('Cocktails', bar.id, 2);
+const shared = await sec('Desserts', null, 3);
+const gone = await sec('Old', cafe.id, 4, true);
+const empty = await sec('Empty', cafe.id, 5);
+void empty;
+await item(hot, 'Cappuccino', 160, 2);
+await item(hot, 'Filter coffee', 90, 1);
+await item(hot, 'Sold out', 100, 3, false);
+await item(barSec, 'Mojito', 380, 1);
+await item(shared, 'Brownie', 180, 1);
+await item(gone, 'Archived item', 1, 1);
+const cafeMenu = await P.publicMenu(cafe.id);
+assert.deepEqual(cafeMenu.map((m) => m.name), ['Hot drinks', 'Desserts']);
+assert.deepEqual(cafeMenu[0].items.map((i) => i.name), ['Filter coffee', 'Cappuccino'], 'sorted, and the unavailable item is hidden');
+assert.deepEqual((await P.publicMenu(bar.id)).map((m) => m.name), ['Cocktails', 'Desserts']);
+assert.equal((await P.publicMenu()).length, 3, 'no area: every active section that has items');
+
+// Rate limiter.
+const w = new SlidingWindow(1000, 2);
+assert.deepEqual([w.hit('a', 0), w.hit('a', 100), w.hit('a', 200), w.hit('b', 200)], [true, true, false, true]);
+assert.equal(w.retryAfter('a', 200), 1);
+assert.equal(w.hit('a', 1001), true, 'the window slides');
 
 console.log('checkin checks passed');
 fs.rmSync(dir, { recursive: true, force: true });

@@ -204,7 +204,7 @@ async function getSignIn(id: string) {
 /** Next sortOrder for a new queue entry, scoped to parties still unseated and
  *  on premises at the same area (including unassigned, areaId null) -
  *  so a new walk-in joins at the back of its own area's line. */
-async function nextSortOrder(areaId: string | null): Promise<number> {
+export async function nextSortOrder(areaId: string | null): Promise<number> {
   const rows = await db
     .select({ sortOrder: schema.guestSignIns.sortOrder, areaId: schema.guestSignIns.areaId })
     .from(schema.guestSignIns)
