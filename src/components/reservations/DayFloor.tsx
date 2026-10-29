@@ -82,11 +82,15 @@ export default function DayFloor({
     onStatus, onRemove, onMoved, nowMin,
   });
 
-  // List shows the day's bookings, not its tables: a quiet day is just empty.
+  // List shows the day's bookings, not its tables.
   if (layout === "list") {
+    const rows = bookingRows(units);
+    if (rows.length === 0) {
+      return <p className="text-sm text-muted-foreground text-center py-8">No reservations for this day.</p>;
+    }
     return (
       <div className="space-y-2">
-        {bookingRows(units).map(({ booking, unit }) => (
+        {rows.map(({ booking, unit }) => (
           <div key={booking.id} className="border border-border rounded-lg p-3">
             <BookingRow
               booking={booking} unit={unit} showWhere
