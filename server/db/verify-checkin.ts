@@ -16,6 +16,7 @@ const R = await import('./reservations.ts');
 const S = await import('./checkinSettings.ts');
 const { checkAvailability, checkArea } = await import('./tableCheck.ts');
 const P = await import('./publicCheckin.ts');
+const M = await import('./menu.ts');
 const { SlidingWindow } = await import('../middleware/rateLimit.ts');
 const { eq } = await import('drizzle-orm');
 const { randomUUID } = await import('node:crypto');
@@ -251,6 +252,29 @@ assert.deepEqual(cafeMenu.map((m) => m.name), ['Hot drinks', 'Desserts']);
 assert.deepEqual(cafeMenu[0].items.map((i) => i.name), ['Filter coffee', 'Cappuccino'], 'sorted, and the unavailable item is hidden');
 assert.deepEqual((await P.publicMenu(bar.id)).map((m) => m.name), ['Cocktails', 'Desserts']);
 assert.equal((await P.publicMenu()).length, 3, 'no area: every active section that has items');
+
+// Menu admin: validation, ordering, archive and cascade delete.
+const ms = await M.createSection({ name: ' Mains ', areaId: cafe.id });
+assert.equal(ms.name, 'Mains', 'name is trimmed');
+await assert.rejects(() => M.createSection({ name: '' }), /required/);
+await assert.rejects(() => M.createSection({ name: 'X', areaId: 'nope' }), /Unknown area/);
+const m1 = await M.createItem(ms.id, { name: 'Pasta', priceInr: 320, description: ' Fresh ' });
+const m2 = await M.createItem(ms.id, { name: 'Soup', priceInr: 150 });
+assert.equal(m1.description, 'Fresh');
+assert.deepEqual([m1.sortOrder, m2.sortOrder], [0, 1]);
+await assert.rejects(() => M.createItem(ms.id, { name: 'Bad', priceInr: -1 }), /Price/);
+await assert.rejects(() => M.createItem(ms.id, { name: 'Bad', priceInr: 1.5 }), /Price/);
+await M.reorder('items', [m2.id, m1.id]);
+assert.deepEqual((await M.listMenu()).find((s) => s.id === ms.id)!.items.map((i) => i.name), ['Soup', 'Pasta']);
+await assert.rejects(() => M.reorder('items', [m1.id, m1.id]), /once/);
+await M.updateItem(m1.id, { available: false });
+assert.deepEqual((await P.publicMenu(cafe.id)).find((s) => s.id === ms.id)!.items.map((i) => i.name), ['Soup'], 'hidden item leaves the public menu');
+await M.updateSection(ms.id, { archived: true });
+assert.equal((await P.publicMenu(cafe.id)).some((s) => s.id === ms.id), false, 'archived section leaves the public menu');
+await M.updateSection(ms.id, { archived: false });
+await M.deleteSection(ms.id);
+assert.equal((await db.select().from(schema.menuItems).where(eq(schema.menuItems.sectionId, ms.id))).length, 0, 'delete cascades');
+await assert.rejects(() => M.deleteItem(m1.id), /not found/);
 
 // Rate limiter.
 const w = new SlidingWindow(1000, 2);
