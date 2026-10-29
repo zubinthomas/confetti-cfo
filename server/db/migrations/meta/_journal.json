@@ -372,6 +372,13 @@
       "when": 1792659665622,
       "tag": "0052_restaurant_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793251947972,
+      "tag": "0053_guest_checkin",
+      "breakpoints": true
     }
   ]
 }

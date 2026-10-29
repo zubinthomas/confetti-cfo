@@ -13,7 +13,7 @@ import { db, ready, schema } from './client.ts';
 // scoped role out of the whole dashboard shell. It's open to any
 // authenticated user instead, so it isn't part of this catalog.
 export const RESOURCES = [
-  'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister',
+  'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'GuestCheckIn', 'Menu',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
   'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout',
@@ -32,7 +32,7 @@ export class PermissionGrantError extends Error {}
 // The Restaurant module is three resources: Restaurant (opening the module and
 // the Locations & Tables catalog), Reservation (bookings) and GuestRegister
 // (sign-ins), so deleting guest activity can be granted apart from the rest.
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'Menu', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
 // OutstandingBills: sync-sourced from Tally's bill-wise reports, same as
 // FinancialRecord - no manual-entry/dispute UI is in scope (a future
 // "mark disputed" workflow would be its own separate item).
@@ -48,11 +48,13 @@ const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRec
 // CostCentre: assigning, excluding and returning a unit to "undecided" are all
 // `write` - there is no destructive delete of a cost centre or its history to
 // guard separately, and the seven centres themselves aren't editable here.
+// GuestCheckIn: the public self check-in page's settings and QR token (read/write, no
+// delete). Menu: the guest-facing menu items and sections.
 // Layout: authoring the nav/tab/widget layouts attached to a permission or a
 // role. Presentation only (hiding an item never denies access), so it needs no
 // grant-clamping like Role does. A user editing their own layout needs no
 // permission at all, and clearing a layout is a `write`.
-const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout'];
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout', 'GuestCheckIn'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
   ...FULL_CRUD.flatMap((resource) => ACTIONS.map((action) => ({ resource, action }))),

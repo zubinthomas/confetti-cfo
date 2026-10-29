@@ -899,6 +899,8 @@ export const reservationAreas = pgTable('reservation_areas', {
   floor: text('floor'),
   type: text('type'),
   archivedAt: text('archived_at'), // ISO-8601, null = active
+  // Offered as a venue button on the public self check-in page (see checkin_settings).
+  checkinEnabled: boolean('checkin_enabled').notNull().default(false),
 }, (t) => [
   uniqueIndex('reservation_areas_location_name').on(t.locationId, t.name).where(sql`${t.archivedAt} is null`),
 ]);
@@ -1025,7 +1027,50 @@ export const guestSignIns = pgTable('guest_sign_ins', {
   quotedWaitMinutes: integer('quoted_wait_minutes'),
   notifiedAt: text('notified_at'),             // ISO-8601, staff called/texted to come to the table
   notifiedVia: text('notified_via'),
+  // 'staff' = typed in at the host stand, 'self' = the guest used the public
+  // check-in page (server/routes/publicCheckin.ts).
+  source: text('source').notNull().default('staff'),
   createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+});
+
+// ── Guest self check-in ("Check a Table") ─────────────────────────────────
+// One row of config for the public page: on/off, the on-site QR token, how far
+// ahead a booking stops a table counting as free, and the numbers behind the
+// wait quote. Separate from the read-only `settings` table, which doesn't
+// drive runtime config.
+export const checkinSettings = pgTable('checkin_settings', {
+  id: integer('id').primaryKey().default(1),
+  enabled: boolean('enabled').notNull().default(false),
+  token: text('token').notNull(),
+  bookingBufferMinutes: integer('booking_buffer_minutes').notNull().default(90),
+  minutesPerParty: integer('minutes_per_party').notNull().default(15),
+  maxPartySize: integer('max_party_size').notNull().default(10),
+  maxWaitMinutes: integer('max_wait_minutes').notNull().default(180),
+  venueWhatsapp: text('venue_whatsapp'),
+  shopUrl: text('shop_url'),
+  updatedAt: text('updated_at').notNull(),
+});
+
+// The guest-facing menu, editable in the Restaurant module. A section with no
+// area shows under every venue.
+export const menuSections = pgTable('menu_sections', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  areaId: text('area_id').references(() => reservationAreas.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  archivedAt: text('archived_at'), // ISO-8601, null = active
+});
+
+export const menuItems = pgTable('menu_items', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  sectionId: text('section_id').notNull().references(() => menuSections.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  priceInr: integer('price_inr').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  available: boolean('available').notNull().default(true),
 });
 
 // ── Ad-hoc table merges (Sienna front-of-house) ───────────────────────────
