@@ -188,6 +188,20 @@ export function floorSummary(floors: Pick<FloorInfo, "state">[]): string {
     .join(" · ");
 }
 
+/** Every booking on the day, earliest first, each paired with the table (or
+ *  merged unit) it sits on. Same start time falls back to the table name, in
+ *  natural order so F2 comes before F10. Tables with no bookings contribute nothing. */
+export function bookingRows<U extends { table: { name: string }; merge?: { tableNames: string[] }; bookings: Reservation[] }>(
+  units: U[],
+): { booking: Reservation; unit: U }[] {
+  const label = (u: U) => (u.merge ? u.merge.tableNames.join(" ") : u.table.name);
+  return units
+    .flatMap((unit) => unit.bookings.map((booking) => ({ booking, unit })))
+    .sort((x, y) => x.booking.time.localeCompare(y.booking.time)
+      || label(x.unit).localeCompare(label(y.unit), undefined, { numeric: true, sensitivity: "base" })
+      || x.booking.id.localeCompare(y.booking.id));
+}
+
 export const isIdList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 
 export type MergeKind = "free" | "linked" | "none";

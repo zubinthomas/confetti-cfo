@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Reservation } from "@/api/reservationsApi";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
-import { addDays, allCollapsed, collapseAreas, endTime, expandAreas, floorInfoFor, floorSummary, isIdList, isLateBooking, mergeSummary, scopeRange, seatsLabel, tileNote, tileStatus, toggleId } from "./reservationUi";
+import { addDays, allCollapsed, bookingRows, collapseAreas, endTime, expandAreas, floorInfoFor, floorSummary, isIdList, isLateBooking, mergeSummary, scopeRange, seatsLabel, tileNote, tileStatus, toggleId } from "./reservationUi";
 
 const TODAY = "2026-10-22";
 
@@ -191,6 +191,33 @@ describe("floorInfoFor", () => {
       occupancy: { parties: 1, until: "20:15" },
     });
     expect(info.state).toBe("free");
+  });
+});
+
+describe("bookingRows", () => {
+  const unit = (name: string, bookings: Reservation[], merge?: { tableNames: string[] }) => ({ table: { name }, merge, bookings });
+
+  it("lists bookings across tables, earliest first, and skips tables with none", () => {
+    const rows = bookingRows([
+      unit("A1", [booking({ id: "a", time: "20:00" })]),
+      unit("A2", []),
+      unit("A3", [booking({ id: "b", time: "18:30" }), booking({ id: "c", time: "21:00", status: "cancelled" })]),
+    ]);
+    expect(rows.map((r) => r.booking.id)).toEqual(["b", "a", "c"]);
+    expect(rows[0].unit.table.name).toBe("A3");
+  });
+
+  it("breaks ties on table name in natural order", () => {
+    const rows = bookingRows([
+      unit("F10", [booking({ id: "x", time: "19:00" })]),
+      unit("F2", [booking({ id: "y", time: "19:00" })]),
+    ]);
+    expect(rows.map((r) => r.booking.id)).toEqual(["y", "x"]);
+  });
+
+  it("is empty when nothing is booked", () => {
+    expect(bookingRows([unit("A1", []), unit("A2", [])])).toEqual([]);
+    expect(bookingRows([])).toEqual([]);
   });
 });
 

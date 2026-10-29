@@ -630,7 +630,7 @@ export default function ReservationsTab() {
                     />
                     <DayFloorControls
                       layout={dayLayout} onLayout={setDayLayout}
-                      everyAreaCollapsed={dayAreaIds.length > 0 ? allCollapsed(dayAreaIds, dayCollapsed) : null}
+                      everyAreaCollapsed={dayLayout === "grid" && dayAreaIds.length > 0 ? allCollapsed(dayAreaIds, dayCollapsed) : null}
                       onToggleAll={() => setDayCollapsed((ids) => (allCollapsed(dayAreaIds, ids) ? expandAreas(dayAreaIds, ids) : collapseAreas(dayAreaIds, ids)))}
                     />
                   </>

@@ -188,6 +188,8 @@ booking (`GET /api/restaurant/all`, paged 25 at a time): Upcoming (default,
 soonest first), Past or All, with guest/phone/email search, status, area and
 From / To filters, and the same status buttons as the day view.
 
+The Day view also has a Grid | List switch. Grid is the floor map (a tile per table, grouped by area, with Extend / Free table / Split in each table's dialog). List is the day's bookings, earliest first with the table and area on each row, and is empty when nothing is booked.
+
 For staff who only work the restaurant, `npm run db:seed-restaurant-role` (same
 rules: in `server/`, server stopped, safe to re-run) adds a "Restaurant" role
 with read, write and delete on Restaurant, Reservation and GuestRegister and nothing else. With one nav item the

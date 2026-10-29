@@ -4,7 +4,8 @@ import { areaLabel, type ReservationArea, type ReservationLocation, type Reserva
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import FloorTile from "@/components/reservations/FloorTile";
 import TableCard, { FLOOR_DOT, type TableUnit } from "@/components/reservations/TableCard";
-import { floorSummary, type FloorInfo } from "@/components/reservations/reservationUi";
+import BookingRow from "@/components/reservations/BookingRow";
+import { bookingRows, floorSummary, type FloorInfo } from "@/components/reservations/reservationUi";
 
 export type DayLayout = "grid" | "list";
 export const isDayLayout = (v: unknown): v is DayLayout => v === "grid" || v === "list";
@@ -81,17 +82,32 @@ export default function DayFloor({
     onStatus, onRemove, onMoved, nowMin,
   });
 
+  // List shows the day's bookings, not its tables: a quiet day is just empty.
+  if (layout === "list") {
+    return (
+      <div className="space-y-2">
+        {bookingRows(units).map(({ booking, unit }) => (
+          <div key={booking.id} className="border border-border rounded-lg p-3">
+            <BookingRow
+              booking={booking} unit={unit} showWhere
+              bookWrite={bookWrite} bookDelete={bookDelete} nowMin={nowMin}
+              onStatus={onStatus} onRemove={onRemove} onMoved={onMoved}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      {layout === "grid" && (
-        <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground" aria-label="Legend">
-          {LEGEND.map(([state, label]) => (
-            <span key={state} className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: FLOOR_DOT[state] }} /> {label}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground" aria-label="Legend">
+        {LEGEND.map(([state, label]) => (
+          <span key={state} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: FLOOR_DOT[state] }} /> {label}
+          </span>
+        ))}
+      </div>
       {areas.map((area) => {
         const areaUnits = units.filter((u) => u.table.areaId === area.id);
         if (areaUnits.length === 0) return null;
@@ -112,15 +128,9 @@ export default function DayFloor({
             </button>
             {open && (
               <div id={bodyId}>
-                {layout === "grid" ? (
-                  <div className={GRID}>
-                    {areaUnits.map((u) => <FloorTile key={u.key} unit={u} onOpen={() => setOpenKey(u.key)} />)}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {areaUnits.map((u) => <TableCard key={u.key} {...cardProps(u, true)} />)}
-                  </div>
-                )}
+                <div className={GRID}>
+                  {areaUnits.map((u) => <FloorTile key={u.key} unit={u} onOpen={() => setOpenKey(u.key)} />)}
+                </div>
               </div>
             )}
           </div>
