@@ -687,7 +687,7 @@ export default function ReservationsTab() {
           canWrite={regWrite} canDelete={regDelete} canWriteBookings={bookWrite}
         />
       ) : view === "checkin" ? (
-        <GuestCheckInSettings areas={areas} canWrite={checkinWrite} onAreasChanged={loadCatalog} />
+        <GuestCheckInSettings canWrite={checkinWrite} />
       ) : view === "menu" ? (
         <MenuManager areas={areas} canWrite={menuWrite} canDelete={menuDelete} />
       ) : (

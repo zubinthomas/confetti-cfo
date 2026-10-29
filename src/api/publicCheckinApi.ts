@@ -20,11 +20,12 @@ export const saveSpotId = (id: string | null) => {
   try { id ? sessionStorage.setItem(SPOT_KEY, id) : sessionStorage.removeItem(SPOT_KEY); } catch { /* private mode */ }
 };
 
-export interface PublicArea { id: string; name: string; floor: string | null }
-export interface PublicConfig { areas: PublicArea[]; maxPartySize: number; venueWhatsapp: string | null; shopUrl: string }
+/** `maxPartySize` is the most the area's tables can seat, merged groups included. */
+export interface PublicArea { id: string; name: string; floor: string | null; maxPartySize: number }
+export interface PublicConfig { areas: PublicArea[]; venueWhatsapp: string | null; shopUrl: string }
 export type CheckStatus = "available" | "wait" | "long_wait" | "too_large";
 export interface CheckResult {
-  status: CheckStatus; minutes: number; joined: boolean;
+  status: CheckStatus; minutes: number; joined: boolean; tablesUsed: number;
   partiesAhead: number; tablesFree: number; tablesTotal: number;
 }
 export interface Spot {

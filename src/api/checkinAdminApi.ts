@@ -7,7 +7,6 @@ export interface CheckinSettings {
   token: string;
   bookingBufferMinutes: number;
   minutesPerParty: number;
-  maxPartySize: number;
   maxWaitMinutes: number;
   venueWhatsapp: string | null;
   shopUrl: string;
@@ -18,7 +17,16 @@ export type CheckinPatch = Partial<Omit<CheckinSettings, "token" | "updatedAt">>
 export const getCheckinSettings = () => get<CheckinSettings>("/restaurant/checkin-settings");
 export const updateCheckinSettings = (b: CheckinPatch) => patch<CheckinSettings>("/restaurant/checkin-settings", b);
 export const rotateCheckinToken = () => post<CheckinSettings>("/restaurant/checkin-settings/rotate-token");
-export const setCheckinAreas = (areaIds: string[]) => put<{ message: string }>("/restaurant/checkin-settings/areas", { areaIds });
+export interface CheckinArea {
+  id: string; name: string; floor: string | null;
+  /** Shown to guests (staff can hide an area). */
+  offered: boolean;
+  tables: number;
+  /** Largest party the area's tables can seat, merged groups included. 0 with no tables. */
+  maxParty: number;
+}
+export const getCheckinAreas = () => get<CheckinArea[]>("/restaurant/checkin-settings/areas");
+export const setAreaOffered = (id: string, offered: boolean) => put<{ message: string }>(`/restaurant/checkin-settings/areas/${id}`, { offered });
 
 export interface MenuItem {
   id: string; sectionId: string; name: string; description: string | null; priceInr: number; sortOrder: number; available: boolean;

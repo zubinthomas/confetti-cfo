@@ -207,10 +207,15 @@ notified via `whatsapp`). Automatic WhatsApp messages need the Business API and
 are not built.
 
 Staff set it up under Restaurant -> Guest check-in (`GuestCheckIn:read/write`):
-on/off, which areas guests can pick, the booking buffer (a table stops counting
-as free this many minutes before a booking, default 90), minutes added per party
-ahead (15), largest party (10), longest wait quoted (180, past it the page says
-to speak to the host), the venue WhatsApp number and the shop link. The same
+on/off, the booking buffer (a table stops counting as free this many minutes
+before a booking, default 90), minutes added per party ahead (15), longest wait
+quoted (180, past it the page says to speak to the host), the venue WhatsApp
+number and the shop link. The "Where would you like to sit?" buttons are every
+active area that has tables, picked up automatically (untick one in the same tab
+to hide it). The party picker for an area goes up to the most its tables can
+seat: the biggest group whose tables may all be merged with each other (linked,
+or both free-merge, up to six tables), counting overflow seats. The picker is a
+grid up to 12 and a stepper above that. The same
 tab shows the QR code with Print, Download and Rotate. The code carries a random
 token and every public call must send it (`X-Checkin-Token`). A wrong, rotated
 or switched-off token gets a 403 and the page asks the guest to scan the code.
@@ -223,8 +228,8 @@ with reorder, hide and archive. "Shop" is a plain link to the shop URL.
 How the wait is worked out (`server/db/tableCheck.ts`): for each table, the first
 moment nobody is on it and no pending or confirmed booking starts within the
 buffer. A party past its expected finish counts as five more minutes. A party
-that fits no single table can use two tables joined, only where the Locations &
-Tables merge rules allow it. The best option is the shortest wait, then fewest
+that fits no single table can use a group of joined tables, only where every
+pair in the group is allowed to merge in Locations & Tables. The best option is the shortest wait, then fewest
 tables, then least waste. The quote is that wait plus the minutes per party for
 each unseated party already waiting in the area, rounded up to five minutes, and
 it is recomputed on the server when the guest joins.

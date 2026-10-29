@@ -5,9 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   rememberToken, savedSpotId, saveSpotId, getConfig, checkTable, joinList, getSpot, leaveList, getMenu,
-  type CheckResult, type Spot,
+  type CheckResult, type Spot, type PublicArea,
 } from "@/api/publicCheckinApi";
 import { localDigits, formatLocal, waLink, venueMessage, rupees } from "@/lib/checkin";
+
+/** Up to this many people the picker is a grid of numbers, above it a stepper. */
+const GRID_MAX = 12;
 
 const STYLES = `
 .cat{--bg:hsl(var(--background));--card:hsl(var(--card));--ink:hsl(var(--foreground));--mut:hsl(var(--muted-foreground));--acc:hsl(var(--primary));--acc2:hsl(var(--primary-foreground));--bd:hsl(var(--border));
@@ -25,6 +28,12 @@ background:var(--bg);color:var(--ink);font-family:var(--font-body);min-height:10
 .cat button.opt{font-weight:600;font-size:16px;padding:14px 4px;border:1.5px solid var(--bd);background:var(--card);color:var(--ink);border-radius:12px;cursor:pointer}
 .cat button.opt[aria-pressed="true"]{border-color:var(--acc);background:var(--acc);color:var(--acc2)}
 .cat .venues button.opt{padding:18px 4px}
+.cat .venues button.opt small{display:block;margin-top:2px;font-size:12px;font-weight:400;opacity:.8}
+.cat .hint{margin:0;color:var(--mut);font-size:14px}
+.cat .stepper{display:flex;align-items:center;justify-content:center;gap:18px}
+.cat .stepper button{width:52px;height:52px;border:1.5px solid var(--bd);background:var(--card);color:var(--ink);border-radius:12px;font-size:24px;cursor:pointer}
+.cat .stepper button:disabled{opacity:.4;cursor:default}
+.cat .stepper output{min-width:56px;text-align:center;font:700 32px var(--font-heading)}
 .cat .wa{display:flex;border:1.5px solid var(--bd);border-radius:12px;background:var(--card);overflow:hidden}
 .cat .wa span{padding:14px 12px;font-weight:600;font-size:16px;color:var(--mut);border-right:1px solid var(--bd)}
 .cat input.txt,.cat .wa input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-weight:400;font-size:16px;padding:14px 12px;outline:none}
@@ -137,6 +146,11 @@ export default function CheckATable() {
   const area = cfg.data?.areas.find((a) => a.id === areaId) ?? null;
   const venueWa = cfg.data?.venueWhatsapp ?? null;
 
+  // One area on offer: nothing to choose.
+  useEffect(() => {
+    if (cfg.data?.areas.length === 1 && areaId === null) setAreaId(cfg.data.areas[0].id);
+  }, [cfg.data, areaId]);
+
   const reset = useCallback(() => {
     saveSpotId(null);
     setSpot(null);
@@ -144,6 +158,14 @@ export default function CheckATable() {
     setPhase("form");
     setError("");
   }, []);
+
+  const chooseArea = (a: PublicArea) => {
+    setAreaId(a.id);
+    setSize((cur) => (cur !== null && cur > a.maxPartySize ? null : cur));
+    setPhase("form");
+    setResult(null);
+  };
+  const chooseSize = (n: number) => { setSize(n); setPhase("form"); setResult(null); };
 
   if (!token || (cfg.error as { status?: number } | null)?.status === 403) {
     return (
@@ -259,20 +281,30 @@ export default function CheckATable() {
         <p className="sub">Tell us where and how many. We'll check availability right away.</p>
 
         <label className="t">Where would you like to sit?</label>
-        <div className="row venues" style={{ gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, config.areas.length))},1fr)` }}>
+        <div className="row venues" style={{ gridTemplateColumns: `repeat(${config.areas.length > 3 ? 2 : Math.max(1, config.areas.length)},1fr)` }}>
           {config.areas.map((a) => (
-            <button key={a.id} type="button" className="opt" aria-pressed={a.id === areaId}
-              onClick={() => { setAreaId(a.id); setPhase("form"); setResult(null); }}>{a.name}</button>
+            <button key={a.id} type="button" className="opt" aria-pressed={a.id === areaId} onClick={() => chooseArea(a)}>
+              {a.name}{a.floor && <small>{a.floor}</small>}
+            </button>
           ))}
         </div>
 
         <label className="t">Number of people</label>
-        <div className="row sizes">
-          {Array.from({ length: config.maxPartySize }, (_, i) => i + 1).map((n) => (
-            <button key={n} type="button" className="opt" aria-pressed={n === size}
-              onClick={() => { setSize(n); setPhase("form"); setResult(null); }}>{n < 10 ? `0${n}` : n}</button>
-          ))}
-        </div>
+        {!area && <p className="hint">Choose where you'd like to sit first.</p>}
+        {area && area.maxPartySize <= GRID_MAX && (
+          <div className="row sizes">
+            {Array.from({ length: area.maxPartySize }, (_, i) => i + 1).map((n) => (
+              <button key={n} type="button" className="opt" aria-pressed={n === size} onClick={() => chooseSize(n)}>{n < 10 ? `0${n}` : n}</button>
+            ))}
+          </div>
+        )}
+        {area && area.maxPartySize > GRID_MAX && (
+          <div className="stepper">
+            <button type="button" aria-label="Fewer people" disabled={(size ?? 2) <= 1} onClick={() => chooseSize((size ?? 2) - 1)}>{"\u2212"}</button>
+            <output aria-live="polite">{size ?? 2}</output>
+            <button type="button" aria-label="More people" disabled={(size ?? 2) >= area.maxPartySize} onClick={() => chooseSize((size ?? 2) + 1)}>+</button>
+          </div>
+        )}
 
         <button className="go" type="button" disabled={busy} onClick={runCheck}>Check availability</button>
         {phase === "form" && <div className="err">{error}</div>}
@@ -289,7 +321,7 @@ export default function CheckATable() {
             )}
             {result.status === "available" && (
               <div className="res ok"><b>Good news</b><div className="big">Table available {"✓"}</div>
-                <p>A table for {size}{result.joined ? " (two tables joined)" : ""} is ready in the {title}. Tell us you're coming and walk in.</p></div>
+                <p>A table for {size}{result.joined ? ` (${result.tablesUsed} tables joined)` : ""} is ready in the {title}. Tell us you're coming and walk in.</p></div>
             )}
             {result.status === "wait" && (
               <div className="res wait"><b>Estimated wait</b><div className="big">~ {result.minutes} min</div>

@@ -6,25 +6,24 @@ import { Loader2, Printer, Download, RefreshCw } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
-  getCheckinSettings, updateCheckinSettings, rotateCheckinToken, setCheckinAreas, type CheckinSettings,
+  getCheckinSettings, updateCheckinSettings, rotateCheckinToken, getCheckinAreas, setAreaOffered,
+  type CheckinSettings, type CheckinArea,
 } from "@/api/checkinAdminApi";
-import { areaLabel, type ReservationArea } from "@/api/reservationsApi";
+import { areaLabel } from "@/api/reservationsApi";
 
 const field = "w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground";
 
-type NumKey = "bookingBufferMinutes" | "minutesPerParty" | "maxPartySize" | "maxWaitMinutes";
+type NumKey = "bookingBufferMinutes" | "minutesPerParty" | "maxWaitMinutes";
 const NUMBERS: { key: NumKey; label: string; hint: string }[] = [
   { key: "bookingBufferMinutes", label: "Booking buffer (min)", hint: "A table counts as taken this long before a booking starts." },
   { key: "minutesPerParty", label: "Minutes per party ahead", hint: "Added to the wait for each party already waiting." },
-  { key: "maxPartySize", label: "Largest party", hint: "The page offers 1 up to this." },
   { key: "maxWaitMinutes", label: "Longest wait quoted (min)", hint: "Past this the page says to speak to the host." },
 ];
 
-export default function GuestCheckInSettings({ areas, canWrite, onAreasChanged }: {
-  areas: ReservationArea[]; canWrite: boolean; onAreasChanged: () => void;
-}) {
+export default function GuestCheckInSettings({ canWrite }: { canWrite: boolean }) {
+  const [areas, setAreas] = useState<CheckinArea[]>([]);
   const [s, setS] = useState<CheckinSettings | null>(null);
-  const [form, setForm] = useState<Record<NumKey, string>>({ bookingBufferMinutes: "", minutesPerParty: "", maxPartySize: "", maxWaitMinutes: "" });
+  const [form, setForm] = useState<Record<NumKey, string>>({ bookingBufferMinutes: "", minutesPerParty: "", maxWaitMinutes: "" });
   const [whatsapp, setWhatsapp] = useState("");
   const [shopUrl, setShopUrl] = useState("");
   const [qr, setQr] = useState("");
@@ -37,12 +36,14 @@ export default function GuestCheckInSettings({ areas, canWrite, onAreasChanged }
     setS(row);
     setForm({
       bookingBufferMinutes: String(row.bookingBufferMinutes), minutesPerParty: String(row.minutesPerParty),
-      maxPartySize: String(row.maxPartySize), maxWaitMinutes: String(row.maxWaitMinutes),
+      maxWaitMinutes: String(row.maxWaitMinutes),
     });
     setWhatsapp(row.venueWhatsapp ?? "");
     setShopUrl(row.shopUrl);
   };
+  const loadAreas = () => getCheckinAreas().then(setAreas).catch((e) => setError(e instanceof Error ? e.message : "Failed to load areas"));
   useEffect(() => {
+    loadAreas();
     getCheckinSettings().then(load).catch((e) => setError(e instanceof Error ? e.message : "Failed to load settings"));
   }, []);
 
@@ -60,18 +61,16 @@ export default function GuestCheckInSettings({ areas, canWrite, onAreasChanged }
   const save = () => run(async () => {
     load(await updateCheckinSettings({
       bookingBufferMinutes: Number(form.bookingBufferMinutes), minutesPerParty: Number(form.minutesPerParty),
-      maxPartySize: Number(form.maxPartySize), maxWaitMinutes: Number(form.maxWaitMinutes),
+      maxWaitMinutes: Number(form.maxWaitMinutes),
       venueWhatsapp: whatsapp.trim() || null, shopUrl: shopUrl.trim(),
     }));
   }, "Saved");
 
   const toggleEnabled = () => run(async () => { load(await updateCheckinSettings({ enabled: !s!.enabled })); }, s?.enabled ? "Check-in is off" : "Check-in is on");
 
-  const toggleArea = (id: string) => run(async () => {
-    const on = new Set(areas.filter((a) => a.checkinEnabled).map((a) => a.id));
-    on.has(id) ? on.delete(id) : on.add(id);
-    await setCheckinAreas([...on]);
-    onAreasChanged();
+  const toggleArea = (a: CheckinArea) => run(async () => {
+    await setAreaOffered(a.id, !a.offered);
+    await loadAreas();
   }, "Saved");
 
   const rotate = () => run(async () => { load(await rotateCheckinToken()); setConfirmRotate(false); }, "New code created. Reprint it, the old one no longer works.");
@@ -88,7 +87,6 @@ export default function GuestCheckInSettings({ areas, canWrite, onAreasChanged }
   };
 
   if (!s) return error ? <p className="text-sm text-destructive">{error}</p> : <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />;
-  const active = areas.filter((a) => !a.archivedAt);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -105,13 +103,17 @@ export default function GuestCheckInSettings({ areas, canWrite, onAreasChanged }
         </DashCard>
 
         <DashCard title="Areas guests can pick">
-          <p className="text-xs text-muted-foreground mb-3">Each becomes a button on the page. Only areas with tables work.</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            Every area with tables is offered automatically. Untick one to hide it. The largest party comes from the tables:
+            the biggest group that may be merged, overflow seats included. Set that up under Locations &amp; Tables.
+          </p>
           <div className="space-y-2">
-            {active.length === 0 && <p className="text-sm text-muted-foreground">No areas yet. Add them under Locations &amp; Tables.</p>}
-            {active.map((a) => (
-              <label key={a.id} className="flex items-center gap-2 text-sm text-foreground">
-                <input type="checkbox" checked={a.checkinEnabled} disabled={!canWrite || saving} onChange={() => toggleArea(a.id)} />
+            {areas.length === 0 && <p className="text-sm text-muted-foreground">No areas yet. Add them under Locations &amp; Tables.</p>}
+            {areas.map((a) => (
+              <label key={a.id} className={`flex items-center gap-2 text-sm ${a.tables === 0 ? "text-muted-foreground" : "text-foreground"}`}>
+                <input type="checkbox" checked={a.offered && a.tables > 0} disabled={!canWrite || saving || a.tables === 0} onChange={() => toggleArea(a)} />
                 {areaLabel(a)}
+                <span className="text-xs text-muted-foreground">{a.tables === 0 ? "no tables" : `up to ${a.maxParty} ${a.maxParty === 1 ? "guest" : "guests"}`}</span>
               </label>
             ))}
           </div>
