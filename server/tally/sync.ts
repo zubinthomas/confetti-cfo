@@ -313,6 +313,10 @@ export async function syncTallyBillsPush(source: TallySource, bills: ParsedBillR
       shiftRosterRecords: [],
       orderRecords: [],
       billRecords: bills,
+      compliancePaymentRecords: [],
+      complianceDocumentRecords: [],
+      complianceTrademarkRecords: [],
+      complianceDirectorRecords: [],
       issues: [],
     };
 

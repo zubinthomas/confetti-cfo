@@ -11,6 +11,7 @@ import { parseFnbWeekly, findFnbWeeklySheets } from './parseFnbWeekly.ts';
 import { parseProduction, findProductionSheets } from './parseProduction.ts';
 import { parseRoster, findRosterSheet } from './parseRoster.ts';
 import { parseOrders, findOrdersSheet } from './parseOrders.ts';
+import { parseCompliance, findComplianceSheets } from './parseCompliance.ts';
 import type { ParsedWorkbook } from './types.ts';
 
 // 'bills' is excluded: it's a real ParsedWorkbook kind (server/tally/sync.ts
@@ -46,6 +47,8 @@ export function detectKind(wb: ExcelJS.Workbook): WorkbookKind | null {
   if (findProductionSheets(wb)) return 'potteryProduction';
   if (findRosterSheet(wb)) return 'shiftRoster';
   if (findOrdersSheet(wb)) return 'orders';
+  const compliance = findComplianceSheets(wb);
+  if (compliance.paymentSheets.length || compliance.trademarkSheets.length || compliance.documentSheets.length || compliance.directorSheets.length) return 'compliance';
   if (looksLikeHrMastersheet(wb)) return 'hr';
   return null;
 }
@@ -61,4 +64,5 @@ export const PARSERS: Record<WorkbookKind, (wb: ExcelJS.Workbook) => ParsedWorkb
   potteryProduction: parseProduction,
   shiftRoster: parseRoster,
   orders: parseOrders,
+  compliance: parseCompliance,
 };

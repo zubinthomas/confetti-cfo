@@ -10,6 +10,7 @@ const TABLE_ORDER = [
   "businesses", "businessUnits", "periods", "lineItems",
   "categories", "channels", "vendors",
   "financialRecords", "salesRecords", "consignmentRecords",
+  "compliancePayments", "complianceDocuments", "complianceTrademarks", "complianceDirectors",
 ];
 
 const PAGE_SIZE = 50;

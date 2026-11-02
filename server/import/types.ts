@@ -212,8 +212,89 @@ export interface ParsedBillRecord {
   voucherAmount: number | null;
 }
 
+// One row from the HP/JP/Daranda licence-tax sheets, or the Insurance
+// sheet, of the Compliance Payment Tracker workbook
+// (server/import/parseCompliance.ts). `paidOn` is set ONLY from an
+// explicit source "Date Of Payment" column - never inferred from
+// scheduledFollowUp or paymentStatus (see parseCompliance.ts's structural
+// validator, which skips a whole sheet rather than guess at this). Matched
+// against existing `compliance_payments` rows by policyNumber (Insurance)
+// or (location, itemName, detail, dueDate) (licence_tax) - see
+// server/import/mergeCompliance.ts's compliancePaymentMatchKey.
+export interface ParsedCompliancePaymentRecord {
+  category: 'licence_tax' | 'insurance';
+  location: string; // 'HP' | 'JP' | 'Daranda'
+  itemName: string;
+  detail: string | null;
+  policyNumber: string | null;
+  dueDateRaw: string | null;
+  dueDate: string | null; // YYYY-MM-DD
+  amount: number | null;
+  paymentStatus: string | null;
+  paidOn: string | null; // YYYY-MM-DD
+  scheduledFollowUpRaw: string | null;
+  scheduledFollowUp: string | null; // YYYY-MM-DD
+  remarks: string | null;
+  sourceSheet: string;
+  sourceRow: number;
+}
+
+// One row from the Company Docs sheet - a statutory document register, not
+// a recurring payment (no amount/due-date/payment-status concept). Matched
+// against existing `compliance_documents` rows by (documentName,
+// documentType) - see server/import/mergeCompliance.ts.
+export interface ParsedComplianceDocumentRecord {
+  documentName: string;
+  documentType: string | null;
+  documentNumber: string | null;
+  issueDateRaw: string | null;
+  issueDate: string | null;
+  filingDateRaw: string | null;
+  filingDate: string | null;
+  expiryDateRaw: string | null;
+  expiryDate: string | null;
+  status: string | null;
+  remarks: string | null;
+}
+
+// One row from the TM sheet - a trademark application/filing-status
+// pipeline. Matched against existing `compliance_trademarks` rows by
+// applicationNo (government-assigned, strong key) - see
+// server/import/mergeCompliance.ts. Intentionally not cross-referenced
+// against compliance_documents even though one real trademark
+// (application 3160344) appears in both sheets - the source maintainer
+// duplicates it on purpose (live filing-status pipeline vs. permanent
+// document register).
+export interface ParsedComplianceTrademarkRecord {
+  applicationNo: string;
+  niceClass: number | null;
+  dateOfApplicationRaw: string | null;
+  dateOfApplication: string | null;
+  markName: string | null;
+  tmType: string | null;
+  status: string | null;
+  remarks: string | null;
+}
+
+// One row from the DIR KYC sheet. Matched against existing
+// `compliance_directors` rows by din (government-assigned, strong key) -
+// see server/import/mergeCompliance.ts. Gated server-side by its own
+// 'DirectorKyc' permission resource, not the broad 'Licence' resource the
+// other three compliance record types use - see server/db/permissions.ts.
+export interface ParsedComplianceDirectorRecord {
+  din: string;
+  name: string | null;
+  designation: string | null;
+  dateOfAppointmentRaw: string | null;
+  dateOfAppointment: string | null;
+  aadhaarNumber: string | null;
+  panNumber: string | null;
+  email: string | null;
+  contactNumber: string | null;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders' | 'bills';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders' | 'bills' | 'compliance';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
@@ -225,6 +306,10 @@ export interface ParsedWorkbook {
   shiftRosterRecords: ParsedShiftRosterRecord[];
   orderRecords: ParsedOrderRecord[];
   billRecords: ParsedBillRecord[];
+  compliancePaymentRecords: ParsedCompliancePaymentRecord[];
+  complianceDocumentRecords: ParsedComplianceDocumentRecord[];
+  complianceTrademarkRecords: ParsedComplianceTrademarkRecord[];
+  complianceDirectorRecords: ParsedComplianceDirectorRecord[];
   issues: Issue[];
 }
 

@@ -9,6 +9,7 @@ import {
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
   CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2, LayoutTemplate, QrCode,
+  Stamp,
 } from 'lucide-react';
 import type { Gate, NavItemBase, TabBase, WidgetBase } from './types';
 
@@ -98,11 +99,12 @@ export interface TabItem extends TabBase {
   icon?: LucideIcon;
 }
 
-export type PageId = 'hr' | 'users' | 'restaurant' | 'store' | 'fnb-view' | 'fnb-detail';
+export type PageId = 'hr' | 'users' | 'restaurant' | 'store' | 'fnb-view' | 'fnb-detail' | 'compliance';
 
 /** Names for the layout editor's page list. */
 export const PAGE_LABELS: Record<PageId, string> = {
   hr: 'HR',
+  compliance: 'Compliance',
   users: 'Users and roles',
   restaurant: 'Restaurant',
   store: 'Store P&L',
@@ -124,6 +126,13 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'roster', label: 'Roster', icon: CalendarDays, gate: needs('Employee') },
     { id: 'recruitment', label: 'Recruitment', icon: UserSearch, gate: needs('Recruitment') },
     { id: 'documents', label: 'Documents', icon: FileCheck, gate: needs('Employee') },
+  ],
+  compliance: [
+    { id: 'licences', label: 'Licences & Permits', icon: ShieldCheck, gate: needs('Licence') },
+    { id: 'payments', label: 'Payments', icon: Banknote, gate: needs('Licence') },
+    { id: 'documents', label: 'Company Documents', icon: FileCheck, gate: needs('Licence') },
+    { id: 'trademarks', label: 'Trademarks', icon: Stamp, gate: needs('Licence') },
+    { id: 'directors', label: 'Director KYC', icon: IdCard, gate: needs('DirectorKyc') },
   ],
   users: [
     { id: 'users', label: 'Users', icon: Users, gate: needs('User') },

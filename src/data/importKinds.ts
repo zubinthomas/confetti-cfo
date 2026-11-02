@@ -12,4 +12,5 @@ export const IMPORT_KIND_LABELS: Record<ImportBatch["kind"], string> = {
   potteryProduction: "Pottery Production Log",
   shiftRoster: "Weekly Shift Roster",
   orders: "Orders & Dispatch Log",
+  compliance: "Compliance Payment Tracker",
 };

@@ -23,7 +23,7 @@
     "costcentres:verify": "node db/verify-cost-centres.ts",
     "layouts:verify": "node db/verify-layouts.ts",
     "db:generate": "drizzle-kit generate",
-    "import:verify": "node import/verify-parsers.ts && node import/verify-import.ts && node import/verify-financial-aggregation.ts",
+    "import:verify": "node import/verify-parsers.ts && node import/verify-import.ts && node import/verify-financial-aggregation.ts && node import/verify-compliance.ts",
     "sheets:verify": "node sheets/verify-sheets.ts",
     "user:create": "node db/users.ts create",
     "user:list": "node db/users.ts list",

@@ -235,7 +235,7 @@ export function parseCafe(wb: ExcelJS.Workbook): ParsedWorkbook {
     periods: [...periods.values()],
     financialRecords: records,
     salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
-    productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [],
+    productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [],
     issues,
   };
 }

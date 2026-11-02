@@ -696,6 +696,114 @@ export const licences = pgTable('licences', {
   documentUrl: text('document_url'),
 });
 
+// ── Compliance payment tracker import (server/import/parseCompliance.ts) ────
+// A client-maintained Excel workbook, imported via the generic batch/commit
+// pipeline like every other data source (kind: 'compliance',
+// server/import/mergeCompliance.ts). Complementary to `licences` above, not
+// a replacement: `licences` is one row per licence currently held (master
+// status/expiry record); these four tables are the payment-cycle/filing
+// history behind them. All date fields are plain nullable text, not a SQL
+// date type, because several source values genuinely can't be parsed as
+// dates (a quarter label, a recurring-cadence description) and must be
+// preserved verbatim rather than dropped - each gets a `xRaw` (always
+// populated when the source cell had anything) + `x` (populated only when
+// parsing succeeds) pair, same convention as ParsedProductionLogRecord's
+// qty/qtyRaw (server/import/types.ts).
+export const compliancePaymentCategoryEnum = pgEnum('compliance_payment_category', ['licence_tax', 'insurance']);
+
+export const compliancePayments = pgTable('compliance_payments', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  category: compliancePaymentCategoryEnum('category').notNull(),
+  location: text('location').notNull(), // 'HP' | 'JP' | 'Daranda' - free text, same precedent as licences.location
+  itemName: text('item_name').notNull(), // "Licenses/Taxes" name, or Insurance "Policy Name"
+  detail: text('detail'), // "Other Details" sub-location/department; null for Insurance rows
+  policyNumber: text('policy_number'), // Insurance "Policy No." only; null for licence_tax rows
+  dueDateRaw: text('due_date_raw'),
+  dueDate: text('due_date'),
+  amount: doublePrecision('amount'),
+  paymentStatus: text('payment_status'), // raw "Paid", or null (pending/future - Insurance has no such column, so always null for category='insurance')
+  // The ACTUAL payment date - set ONLY from an explicit source "Date Of
+  // Payment" column (JP/Daranda). Never inferred from scheduledFollowUp or
+  // paymentStatus - stays null for every HP/Insurance row by construction,
+  // since neither sheet has such a column (see parseCompliance.ts's
+  // structural validator, which skips a whole sheet rather than guess here).
+  paidOn: text('paid_on'),
+  scheduledFollowUpRaw: text('scheduled_follow_up_raw'), // "Date of Payment Scheduled" - next renewal/reminder date
+  scheduledFollowUp: text('scheduled_follow_up'),
+  remarks: text('remarks'),
+  sourceSheet: text('source_sheet').notNull(),
+  sourceRow: integer('source_row').notNull(),
+  // Weakest natural key in this design for category='licence_tax' rows (no
+  // stable per-line id exists in the source) - see mergeCompliance.ts's
+  // compliancePaymentMatchKey. Insurance rows use policyNumber instead,
+  // which is a clean government/insurer-assigned identifier.
+  matchKey: text('match_key').notNull(),
+}, (t) => [
+  uniqueIndex('compliance_payments_match_key').on(t.matchKey),
+]);
+
+export const complianceDocuments = pgTable('compliance_documents', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  documentName: text('document_name').notNull(),
+  documentType: text('document_type'), // free text: "ROC", "Compliance", "TAX", "Proof of Business", ...
+  documentNumber: text('document_number'), // raw - source mixes real numbers, "N/A", and blanks
+  issueDateRaw: text('issue_date_raw'),
+  issueDate: text('issue_date'),
+  filingDateRaw: text('filing_date_raw'),
+  filingDate: text('filing_date'),
+  expiryDateRaw: text('expiry_date_raw'),
+  expiryDate: text('expiry_date'),
+  status: text('status'), // "Active" | "Expired" | null (pending annual filings with nothing else tracked yet)
+  remarks: text('remarks'),
+  // Also flagged as fragile - no document-number equivalent is reliably
+  // present (several are blank or "N/A") - see mergeCompliance.ts.
+  matchKey: text('match_key').notNull(),
+}, (t) => [
+  uniqueIndex('compliance_documents_match_key').on(t.matchKey),
+]);
+
+export const complianceTrademarks = pgTable('compliance_trademarks', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  // Text, not numeric - avoids float-precision issues on 7-8 digit
+  // government-assigned ids, and keeps exact-string matching against
+  // compliance_documents' intentional cross-reference of the same mark.
+  applicationNo: text('application_no').notNull(),
+  niceClass: integer('nice_class'),
+  dateOfApplicationRaw: text('date_of_application_raw'),
+  dateOfApplication: text('date_of_application'),
+  markName: text('mark_name'), // "TM Applied for"
+  tmType: text('tm_type'),
+  status: text('status'), // "Formalities Chk Pass", "Registered", ...
+  remarks: text('remarks'),
+}, (t) => [
+  uniqueIndex('compliance_trademarks_application_no').on(t.applicationNo),
+]);
+
+// Director KYC register - gated by its own 'DirectorKyc' permission
+// resource (server/db/permissions.ts), not the broad 'Licence' resource the
+// three tables above use, because Aadhaar/PAN are sensitive government ID
+// numbers and the built-in Viewer role reads every other resource by
+// default. No field-level permission mechanism exists in this codebase, so
+// this gates the whole row (name/DIN included), not just the two ID fields.
+export const complianceDirectors = pgTable('compliance_directors', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  din: text('din').notNull(), // Director Identification Number - government-assigned, the natural key
+  name: text('name'),
+  designation: text('designation'),
+  dateOfAppointmentRaw: text('date_of_appointment_raw'),
+  dateOfAppointment: text('date_of_appointment'),
+  aadhaarNumber: text('aadhaar_number'),
+  panNumber: text('pan_number'),
+  email: text('email'),
+  contactNumber: text('contact_number'),
+}, (t) => [
+  uniqueIndex('compliance_directors_din').on(t.din),
+]);
+
 export const recruitments = pgTable('recruitments', {
   id: text('id').primaryKey(),
   createdDate: text('created_date').notNull(),

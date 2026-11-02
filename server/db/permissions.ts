@@ -16,7 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'GuestCheckIn', 'Menu',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
-  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout',
+  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout', 'DirectorKyc',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -54,7 +54,19 @@ const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRec
 // role. Presentation only (hiding an item never denies access), so it needs no
 // grant-clamping like Role does. A user editing their own layout needs no
 // permission at all, and clearing a layout is a `write`.
-const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout', 'GuestCheckIn'];
+// DirectorKyc: the director register imported from the Compliance Payment
+// Tracker workbook (server/import/mergeCompliance.ts) - corrected via
+// re-import or edit, never deleted, same posture as BankAccount/Period.
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout', 'GuestCheckIn', 'DirectorKyc'];
+
+// Resources the built-in Viewer role does NOT get for free, unlike every
+// other resource (which Viewer reads by default - see the seeding loop
+// below). DirectorKyc holds Aadhaar/PAN numbers - sensitive government ID
+// data - so it stays Admin-only until an Admin explicitly grants it to
+// another role via the Roles UI. No field-level permission mechanism exists
+// in this codebase, so this excludes the whole resource, not just the two
+// ID fields within it.
+const VIEWER_EXCLUDED: Resource[] = ['DirectorKyc'];
 
 export const PERMISSIONS_CATALOG: { resource: Resource; action: Action }[] = [
   ...FULL_CRUD.flatMap((resource) => ACTIONS.map((action) => ({ resource, action }))),
@@ -99,7 +111,7 @@ export async function seedPermissionsCatalog() {
         set: { effect: 'allow' },
       });
   }
-  for (const p of allPerms.filter((p) => p.action === 'read')) {
+  for (const p of allPerms.filter((p) => p.action === 'read' && !VIEWER_EXCLUDED.includes(p.resource as Resource))) {
     await db.insert(schema.rolePermissions)
       .values({ roleId: viewer.id, permissionId: p.id, effect: 'allow' })
       .onConflictDoUpdate({

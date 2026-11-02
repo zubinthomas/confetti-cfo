@@ -17,6 +17,7 @@ import { buildProductionLogMergePlan } from './mergeProductionLog.ts';
 import { buildShiftRosterMergePlan } from './mergeShiftRoster.ts';
 import { buildOrdersMergePlan } from './mergeOrders.ts';
 import { buildBillsMergePlan } from './mergeBills.ts';
+import { buildComplianceMergePlan } from './mergeCompliance.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -66,6 +67,17 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   // exist in the generic graph below, so they get their own matcher too.
   if (parsed.kind === 'bills') {
     const plan = await buildBillsMergePlan(parsed.billRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // The Compliance Payment Tracker workbook is company-wide (no business/
+  // unit/period dimension) and spans four unrelated tables under one
+  // kind - same reasoning as the branches above, own matcher instead of
+  // the generic financial graph below.
+  if (parsed.kind === 'compliance') {
+    const plan = await buildComplianceMergePlan(
+      parsed.compliancePaymentRecords, parsed.complianceDocumentRecords,
+      parsed.complianceTrademarkRecords, parsed.complianceDirectorRecords,
+    );
     return { stats: plan.stats, details: plan.details, ops: plan.ops };
   }
   const stats: Record<string, TableStats> = {

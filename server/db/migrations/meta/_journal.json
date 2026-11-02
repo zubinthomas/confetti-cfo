@@ -386,6 +386,13 @@
       "when": 1793253561733,
       "tag": "0054_checkin_areas_default",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793603324419,
+      "tag": "0056_strange_karma",
+      "breakpoints": true
     }
   ]
 }
