@@ -9,7 +9,7 @@ import {
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
   CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2, LayoutTemplate, QrCode,
-  Stamp,
+  Fingerprint, Stamp,
 } from 'lucide-react';
 import type { Gate, NavItemBase, TabBase, WidgetBase } from './types';
 
@@ -124,6 +124,7 @@ export const PAGE_TABS: Record<PageId, TabItem[]> = {
     { id: 'headcount', label: 'Headcount & Payroll', icon: Users, gate: needs('Employee') },
     { id: 'leave', label: 'Leave & Attendance', icon: CalendarOff, gate: needs('LeaveRequest') },
     { id: 'roster', label: 'Roster', icon: CalendarDays, gate: needs('Employee') },
+    { id: 'attendance', label: 'Attendance', icon: Fingerprint, gate: needs('Employee') },
     { id: 'recruitment', label: 'Recruitment', icon: UserSearch, gate: needs('Recruitment') },
     { id: 'documents', label: 'Documents', icon: FileCheck, gate: needs('Employee') },
   ],

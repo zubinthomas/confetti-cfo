@@ -40,6 +40,7 @@ import offboardingRoutes from './routes/offboarding.ts';
 import onboardingRoutes from './routes/onboarding.ts';
 import opsDataRoutes from './routes/opsData.ts';
 import rosterRoutes from './routes/roster.ts';
+import attendanceRoutes from './routes/attendance.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { startCalendarScheduler } from './calendar/scheduler.ts';
 import { startReservationNoShowScheduler } from './reservations/scheduler.ts';
@@ -107,6 +108,7 @@ app.use('/api/employees', offboardingRoutes);
 app.use('/api/employees', onboardingRoutes);
 app.use('/api/ops', opsDataRoutes);
 app.use('/api/roster', rosterRoutes);
+app.use('/api/attendance', attendanceRoutes);
 app.use('/api/backups', backupsRoutes);
 
 // Health check

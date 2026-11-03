@@ -1296,6 +1296,46 @@ export const shiftRoster = pgTable('shift_roster', {
   uniqueIndex('shift_roster_natural_key').on(t.employeeName, t.date),
 ]);
 
+// ── Attendance records (actual, biometric-verified attendance - see
+// server/db/importEsslAttendance.ts) ───────────────────────────────────────
+// One row per employee per day, imported from the client's eSSL
+// eTimeTrackLite biometric terminal. Distinct from shiftRoster above (the
+// PLANNED schedule) - this is what actually happened, taken from
+// eTimeTrackLite's own AttendanceLogs table, which is already resolved
+// against shifts/leave/holidays by eTimeTrackLite itself (the exact
+// half-day/late thresholds it uses aren't known here, so this mirrors its
+// resolution rather than re-deriving one). statusCode/statusLabel are kept
+// as the raw source values (e.g. 'P'/'Present', 'WOP'/'WeeklyOff Present')
+// rather than an enum, since the source vocabulary isn't fully known and a
+// closed enum would reject an unseen combination outright. Same
+// employeeName+best-effort employeeId+natural-key(employeeName, date)
+// pattern as shiftRoster. Currently populated by a one-off/manually-rerun
+// import script (the mdb backup file is copied in by hand), not a live
+// sync - eSSL's own "Online Downloader" pull step is itself manual, so
+// even a future live agent couldn't make the device-to-database leg
+// real-time on its own.
+export const attendanceRecords = pgTable('attendance_records', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  employeeName: text('employee_name').notNull(),
+  employeeId: text('employee_id').references(() => employees.id, { onDelete: 'set null' }),
+  date: text('date').notNull(), // 'YYYY-MM-DD'
+  statusCode: text('status_code').notNull(), // raw source code, e.g. 'P', 'A', 'WO', 'WOP', '½P'
+  statusLabel: text('status_label').notNull(), // cleaned display text, e.g. 'Present', 'WeeklyOff Present'
+  inTime: text('in_time'), // 'HH:MM', null when there's no valid in-punch for the day
+  outTime: text('out_time'),
+  durationMinutes: integer('duration_minutes'),
+  lateByMinutes: integer('late_by_minutes'),
+  earlyByMinutes: integer('early_by_minutes'),
+  overtimeMinutes: integer('overtime_minutes'),
+  missedInPunch: boolean('missed_in_punch').notNull().default(false),
+  missedOutPunch: boolean('missed_out_punch').notNull().default(false),
+  punchRecords: text('punch_records'), // raw "HH:MM:in(Device)," trail, straight from the source
+  source: text('source').notNull().default('essl'), // room for a non-eSSL source later
+}, (t) => [
+  uniqueIndex('attendance_records_natural_key').on(t.employeeName, t.date),
+]);
+
 // ── Order lines (client order/dispatch status - see
 // server/import/parseOrders.ts) ─────────────────────────────────────────────
 // Current-state snapshot, not a time series: one row per SKU per client,

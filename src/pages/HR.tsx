@@ -11,12 +11,14 @@ import LeaveTab from "@/components/hr/LeaveTab";
 import RecruitmentTab from "@/components/hr/RecruitmentTab";
 import DocumentsTab from "@/components/hr/DocumentsTab";
 import RosterTab from "@/components/hr/RosterTab";
+import AttendanceTab from "@/components/hr/AttendanceTab";
 import { useTabs } from "@/lib/layout/useTabs";
 
 const tabContent: Record<string, React.ComponentType> = {
   headcount: HeadcountTab,
   leave: LeaveTab,
   roster: RosterTab,
+  attendance: AttendanceTab,
   recruitment: RecruitmentTab,
   documents: DocumentsTab,
 };
