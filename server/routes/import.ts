@@ -29,7 +29,7 @@ const hasErrors = (issues: Issue[]) => issues.some((i) => i.level === 'error');
 // columns through Drizzle just to discard them here.
 type BatchSummaryInput = Pick<typeof schema.importBatches.$inferSelect,
   'id' | 'filename' | 'kind' | 'status' | 'uploadedAt' | 'committedAt' | 'issues' | 'stats'
-  | 'sourceType' | 'sheetSourceId' | 'tallySourceId' | 'contentHash' | 'decisionSource'>;
+  | 'sourceType' | 'sheetSourceId' | 'tallySourceId' | 'petpoojaSourceId' | 'contentHash' | 'decisionSource'>;
 
 // also used by routes/sheets.ts and tallyAgent.ts - keeps the heavy parsed
 // payload out of responses. sourceStale is only ever computed by GET
@@ -42,6 +42,7 @@ export const batchSummary = (b: BatchSummaryInput, decidedByEmail: string | null
   uploadedAt: b.uploadedAt, committedAt: b.committedAt,
   issues: b.issues, stats: b.stats,
   sourceType: b.sourceType, sheetSourceId: b.sheetSourceId, tallySourceId: b.tallySourceId,
+  petpoojaSourceId: b.petpoojaSourceId,
   contentHash: b.contentHash, decisionSource: b.decisionSource, decidedByEmail, sourceStale,
 });
 
@@ -86,7 +87,7 @@ router.post('/upload', requirePermission('Import', 'write'), upload.single('file
     const contentHash = computeContentHash(plan.details);
     const noChanges = Object.values(plan.stats).every((s) => s.creates + s.updates === 0);
     const rejectedBefore = !noChanges && await findManuallyRejectedPrecedent(db, {
-      kind, sourceType: 'upload', sheetSourceId: null, tallySourceId: null, contentHash,
+      kind, sourceType: 'upload', sheetSourceId: null, tallySourceId: null, petpoojaSourceId: null, contentHash,
     });
     const [batch] = await db.insert(schema.importBatches).values({
       filename: req.file.originalname,
@@ -128,6 +129,7 @@ router.get('/batches', requirePermission('Import', 'read'), async (_req, res) =>
     sourceType: schema.importBatches.sourceType,
     sheetSourceId: schema.importBatches.sheetSourceId,
     tallySourceId: schema.importBatches.tallySourceId,
+    petpoojaSourceId: schema.importBatches.petpoojaSourceId,
     contentHash: schema.importBatches.contentHash,
     decisionSource: schema.importBatches.decisionSource,
     decidedByEmail: schema.users.email,

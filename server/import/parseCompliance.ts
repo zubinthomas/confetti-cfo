@@ -481,7 +481,7 @@ export function parseCompliance(wb: ExcelJS.Workbook): ParsedWorkbook {
   const result = (): ParsedWorkbook => ({
     kind: 'compliance', businessName: '', periods: [], financialRecords: [], salesRecords: [],
     consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [],
-    shiftRosterRecords: [], orderRecords: [], billRecords: [],
+    shiftRosterRecords: [], orderRecords: [], billRecords: [], petpoojaSalesRecords: [], petpoojaMenuPayload: null, petpoojaStockPayload: null, petpoojaOrderCallbackPayload: null,
     compliancePaymentRecords: paymentRecords, complianceDocumentRecords: documentRecords,
     complianceTrademarkRecords: trademarkRecords, complianceDirectorRecords: directorRecords,
     issues,

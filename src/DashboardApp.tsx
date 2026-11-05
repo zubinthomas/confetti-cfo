@@ -42,6 +42,7 @@ import RannaghorPage from '@/components/fnb/RannaghorPage';
 const AIQueriesTab = lazy(() => import('@/components/dashboard/AIQueriesTab'));
 const ImportPage = lazy(() => import('@/components/dashboard/ImportPage'));
 const TallyPage = lazy(() => import('@/components/dashboard/TallyPage'));
+const PetpoojaPage = lazy(() => import('@/components/dashboard/PetpoojaPage'));
 const CostCentresPanel = lazy(() => import('@/components/dashboard/CostCentresPanel'));
 
 export default function DashboardApp() {
@@ -50,6 +51,7 @@ export default function DashboardApp() {
       import('@/components/dashboard/AIQueriesTab');
       import('@/components/dashboard/ImportPage');
       import('@/components/dashboard/TallyPage');
+      import('@/components/dashboard/PetpoojaPage');
     };
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(prefetch);
@@ -100,6 +102,10 @@ export default function DashboardApp() {
 
         <Route element={<RequirePermission {...GATES.tally} />}>
           <Route path="data/tally" element={<TallyPage />} />
+        </Route>
+
+        <Route element={<RequirePermission {...GATES.petpooja} />}>
+          <Route path="data/petpooja" element={<PetpoojaPage />} />
         </Route>
 
         <Route element={<RequirePermission {...GATES.settings} />}>

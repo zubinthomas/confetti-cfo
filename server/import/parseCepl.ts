@@ -211,7 +211,7 @@ export function parseCepl(wb: ExcelJS.Workbook): ParsedWorkbook {
     periods: [...periods.values()],
     financialRecords: records,
     salesRecords: [], consignmentRecords: [], employeeRecords: [], targetRecords: [],
-    productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [],
+    productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], petpoojaSalesRecords: [], petpoojaMenuPayload: null, petpoojaStockPayload: null, petpoojaOrderCallbackPayload: null, compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [],
     issues,
   };
 }

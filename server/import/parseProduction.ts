@@ -209,7 +209,7 @@ export function parseProduction(wb: ExcelJS.Workbook): ParsedWorkbook {
     issues.push({ level: 'error', sheet: wb.worksheets[0]?.name ?? '(none)', message: 'expected sheets "Kiln Firing ", "Glaze Application" and "Green Production" not all found' });
     return {
       kind: 'potteryProduction', businessName: '', periods: [], financialRecords: [], salesRecords: [],
-      consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [], issues,
+      consignmentRecords: [], employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], orderRecords: [], billRecords: [], petpoojaSalesRecords: [], petpoojaMenuPayload: null, petpoojaStockPayload: null, petpoojaOrderCallbackPayload: null, compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [], issues,
     };
   }
 
@@ -227,7 +227,7 @@ export function parseProduction(wb: ExcelJS.Workbook): ParsedWorkbook {
     employeeRecords: [],
     targetRecords: [],
     productionLogRecords: [...greenRecords, ...glazeRecords, ...kilnRecords],
-    shiftRosterRecords: [], orderRecords: [], billRecords: [], compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [],
+    shiftRosterRecords: [], orderRecords: [], billRecords: [], petpoojaSalesRecords: [], petpoojaMenuPayload: null, petpoojaStockPayload: null, petpoojaOrderCallbackPayload: null, compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [], complianceDirectorRecords: [],
     issues,
   };
 }

@@ -12,6 +12,7 @@ interface PrecedentQuery {
   sourceType: string;
   sheetSourceId: number | null;
   tallySourceId: number | null;
+  petpoojaSourceId: number | null;
   contentHash: string;
 }
 
@@ -26,6 +27,7 @@ export async function findManuallyRejectedPrecedent(db: Db, q: PrecedentQuery): 
       eq(schema.importBatches.sourceType, q.sourceType),
       q.sheetSourceId == null ? isNull(schema.importBatches.sheetSourceId) : eq(schema.importBatches.sheetSourceId, q.sheetSourceId),
       q.tallySourceId == null ? isNull(schema.importBatches.tallySourceId) : eq(schema.importBatches.tallySourceId, q.tallySourceId),
+      q.petpoojaSourceId == null ? isNull(schema.importBatches.petpoojaSourceId) : eq(schema.importBatches.petpoojaSourceId, q.petpoojaSourceId),
       eq(schema.importBatches.contentHash, q.contentHash),
       eq(schema.importBatches.status, 'discarded'),
       eq(schema.importBatches.decisionSource, 'manual'),
@@ -36,7 +38,8 @@ export async function findManuallyRejectedPrecedent(db: Db, q: PrecedentQuery): 
 
 type SourceRef =
   | { sourceType: 'sheet'; sheetSourceId: number; kind: string }
-  | { sourceType: 'tally'; tallySourceId: number; kind: string };
+  | { sourceType: 'tally'; tallySourceId: number; kind: string }
+  | { sourceType: 'petpooja'; petpoojaSourceId: number; kind: string };
 
 /** Discards any other still-pending preview of the same kind from the same
  *  sheet/Tally source, so a source never has more than one open preview of
@@ -52,7 +55,9 @@ type SourceRef =
 export async function supersedePendingForSource(db: Db, ref: SourceRef, excludeIds: number[]): Promise<void> {
   const sourceCondition = ref.sourceType === 'sheet'
     ? eq(schema.importBatches.sheetSourceId, ref.sheetSourceId)
-    : eq(schema.importBatches.tallySourceId, ref.tallySourceId);
+    : ref.sourceType === 'tally'
+      ? eq(schema.importBatches.tallySourceId, ref.tallySourceId)
+      : eq(schema.importBatches.petpoojaSourceId, ref.petpoojaSourceId);
   await db.update(schema.importBatches)
     .set({ status: 'discarded', decisionSource: 'auto_discard_superseded' })
     .where(and(

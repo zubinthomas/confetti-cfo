@@ -17,6 +17,10 @@ import { buildProductionLogMergePlan } from './mergeProductionLog.ts';
 import { buildShiftRosterMergePlan } from './mergeShiftRoster.ts';
 import { buildOrdersMergePlan } from './mergeOrders.ts';
 import { buildBillsMergePlan } from './mergeBills.ts';
+import { buildPetpoojaSalesMergePlan } from './mergePetpoojaSales.ts';
+import { buildPetpoojaMenuMergePlan } from './mergeMenu.ts';
+import { buildPetpoojaStockMergePlan } from './mergeStock.ts';
+import { buildPetpoojaOrderCallbackMergePlan } from './mergeOrderCallback.ts';
 import { buildComplianceMergePlan } from './mergeCompliance.ts';
 
 export interface TableStats { creates: number; updates: number; unchanged: number }
@@ -67,6 +71,35 @@ export async function buildMergePlan(parsed: ParsedWorkbook): Promise<MergePlan>
   // exist in the generic graph below, so they get their own matcher too.
   if (parsed.kind === 'bills') {
     const plan = await buildBillsMergePlan(parsed.billRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // PetPooja Sales API orders are company-wide too (no business/unit/period)
+  // and, like bills, need their own matcher rather than the generic graph -
+  // but unlike bills, never a resolve-on-drop sweep (see
+  // mergePetpoojaSales.ts's header comment for why).
+  if (parsed.kind === 'petpoojaSales') {
+    const plan = await buildPetpoojaSalesMergePlan(parsed.petpoojaSalesRecords);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // PetPooja's menu catalog is also company-wide, but unlike Sales DOES need
+  // a resolve-sweep - every push/fetch is the merchant's entire current
+  // catalog, not one event (see mergeMenu.ts's header comment).
+  if (parsed.kind === 'petpoojaMenu') {
+    const plan = await buildPetpoojaMenuMergePlan(parsed.petpoojaMenuPayload!);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // Item Stock On/Off targets a specific itemID list against the catalog
+  // Menu Push already populated - no creates, no resolve-sweep (see
+  // mergeStock.ts's header comment).
+  if (parsed.kind === 'petpoojaStock') {
+    const plan = await buildPetpoojaStockMergePlan(parsed.petpoojaStockPayload!);
+    return { stats: plan.stats, details: plan.details, ops: plan.ops };
+  }
+  // Order Callback updates one petpoojaOutboundOrders row by our own
+  // clientOrderId - no creates, no sweep (see mergeOrderCallback.ts's
+  // header comment).
+  if (parsed.kind === 'petpoojaOrderCallback') {
+    const plan = await buildPetpoojaOrderCallbackMergePlan(parsed.petpoojaOrderCallbackPayload!);
     return { stats: plan.stats, details: plan.details, ops: plan.ops };
   }
   // The Compliance Payment Tracker workbook is company-wide (no business/

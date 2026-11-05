@@ -404,14 +404,15 @@ export const importBatches = pgTable('import_batches', {
   stats: jsonb('stats').notNull(),             // per-table creates/updates/unchanged
   details: jsonb('details').$type<Record<string, RecordChange[]> | null>(), // row-level detail behind stats; null for pre-feature batches
   payload: jsonb('payload').$type<ParsedWorkbook | null>(), // the ParsedWorkbook, so commit needn't re-parse; null for auto-discarded batches that can never be committed
-  sourceType: text('source_type').notNull().default('upload'), // upload | sheet | tally
+  sourceType: text('source_type').notNull().default('upload'), // upload | sheet | tally | petpooja
   sheetSourceId: integer('sheet_source_id').references(() => sheetSources.id, { onDelete: 'set null' }),
   tallySourceId: integer('tally_source_id').references(() => tallySources.id, { onDelete: 'set null' }),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
   contentHash: text('content_hash'), // sha256 of canonicalized `details`, for grouping identical changes; null for pre-feature batches
   decisionSource: importDecisionSourceEnum('decision_source'), // null while status is still 'preview'
   decidedByUserId: integer('decided_by_user_id').references(() => users.id, { onDelete: 'set null' }), // set only when decisionSource is 'manual'
 }, (t) => [
-  index('import_batches_dedup').on(t.kind, t.sourceType, t.sheetSourceId, t.tallySourceId, t.contentHash),
+  index('import_batches_dedup').on(t.kind, t.sourceType, t.sheetSourceId, t.tallySourceId, t.petpoojaSourceId, t.contentHash),
 ]);
 
 // ── Tally integration (a Rust agent installed on the client's machine pushes
@@ -524,6 +525,319 @@ export const tallyBills = pgTable('tally_bills', {
 }, (t) => [
   uniqueIndex('tally_bills_source_match_key').on(t.tallySourceId, t.matchKey),
 ]);
+
+// ── PetPooja integration (HP's POS - inbound webhooks for sales/menu/stock,
+// outbound calls to place orders). One row per (outlet, environment) pair, so
+// a sandbox source can stay around for testing after a production source goes
+// live, rather than overwriting it. Two different trust directions, two
+// different storage needs: appKey/appSecret/accessToken are credentials *we*
+// send *to* PetPooja on outbound calls, so they're stored plain (masked only
+// at the route layer, same convention as settings.value/isSecret in
+// server/db/settings.ts - this codebase has no encryption-at-rest anywhere,
+// see server/routes/backups.ts's own comment, so plain + access-control is
+// the established posture, not a gap). inboundWebhookSecretHash is a secret
+// *we* mint and give to PetPooja to echo back on their inbound webhooks, so
+// it only ever needs comparison - bcrypt hash only, same as
+// tallySources.apiKeyHash, verified in server/middleware/petpoojaWebhookAuth.ts.
+export const petpoojaSyncModeEnum = pgEnum('petpooja_sync_mode', ['auto', 'manual', 'paused']);
+export const petpoojaEnvironmentEnum = pgEnum('petpooja_environment', ['sandbox', 'production']);
+
+export const petpoojaSources = pgTable('petpooja_sources', {
+  id: serial('id').primaryKey(),
+  label: text('label').notNull(),
+  environment: petpoojaEnvironmentEnum('environment').notNull(),
+  restId: text('rest_id').notNull(),           // PetPooja's outlet mapping id
+  appKey: text('app_key').notNull(),
+  appSecret: text('app_secret').notNull(),
+  accessToken: text('access_token').notNull(),
+  inboundWebhookSecretHash: text('inbound_webhook_secret_hash').notNull(),
+  syncMode: petpoojaSyncModeEnum('sync_mode').notNull().default('manual'),
+  createdAt: text('created_at').notNull(),     // ISO-8601
+  lastSeenAt: text('last_seen_at'),            // ISO-8601, bumped on every verified inbound webhook call
+  lastSyncAt: text('last_sync_at'),
+  lastSyncStatus: text('last_sync_status'),    // preview_created | auto_committed | no_changes | error
+  lastSyncError: text('last_sync_error'),
+  lastSyncIssues: jsonb('last_sync_issues'),   // Issue[] when the sync had warnings/errors, else null
+  // Menu Push/Fetch (step 4) outcome tracking - its own 4 columns, not the
+  // Sales ones above, since a menu sync and a sales sync are independent
+  // cycles on the same source row (see syncMenu.ts's header comment).
+  lastMenuSyncAt: text('last_menu_sync_at'),
+  lastMenuSyncStatus: text('last_menu_sync_status'),
+  lastMenuSyncError: text('last_menu_sync_error'),
+  lastMenuSyncIssues: jsonb('last_menu_sync_issues'),
+  // Item Stock On/Off (step 5) outcome tracking - its own 4 columns, same
+  // reason as lastMenuSync* above: an independent cycle on the same source row.
+  lastStockSyncAt: text('last_stock_sync_at'),
+  lastStockSyncStatus: text('last_stock_sync_status'),
+  lastStockSyncError: text('last_stock_sync_error'),
+  lastStockSyncIssues: jsonb('last_stock_sync_issues'),
+  // Order Callback (step 6) outcome tracking - its own 4 columns, same
+  // collision-avoidance reasoning as lastMenuSync*/lastStockSync* above.
+  lastOrderCallbackSyncAt: text('last_order_callback_sync_at'),
+  lastOrderCallbackSyncStatus: text('last_order_callback_sync_status'),
+  lastOrderCallbackSyncError: text('last_order_callback_sync_error'),
+  lastOrderCallbackSyncIssues: jsonb('last_order_callback_sync_issues'),
+  // Store Status pair (step 7) - a property of the source itself, not a
+  // sync cycle, so no lastXSync* 4-column block like the steps above.
+  // storeOpen stays null (not defaulted to true) until PetPooja actually
+  // calls Update Store Status - see storeStatus.ts's header comment for
+  // why the Get Store Status *response* still reads null as open.
+  storeOpen: boolean('store_open'),
+  storeClosedReason: text('store_closed_reason'),
+  storeReopenAt: text('store_reopen_at'),
+  storeStatusUpdatedAt: text('store_status_updated_at'),
+});
+
+// One restaurant bill/order pushed by PetPooja's Sales API webhook on every
+// "SAVE AND PRINT" at the POS - one webhook call = one order, not a batch, so
+// this is create/update-only (never resolved/deleted, see mergePetpoojaSales.ts):
+// a cancelled bill arrives as a normal re-push of the same orderID with
+// status flipped to 'Cancelled', not a separate delete notice. Matched by
+// (petpoojaSourceId, matchKey=normalized orderId) - own matchKey column/index,
+// same convention as tallyBills/orderLines. Item/tax/discount/part-payment
+// detail is stored as JSONB rather than normalized into child tables: step 4
+// (Menu Push) hasn't yet decided how PetPooja's item catalog maps onto this
+// app's own menu model, so normalizing order line items now would mean
+// redoing the item-identity model twice.
+export const petpoojaSalesOrders = pgTable('petpooja_sales_orders', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(), // ISO-8601, our own row-creation timestamp
+  // Nullable + set null on delete, not cascade: this is historical ingested
+  // data, same posture as import_batches.tallySourceId - removing a source
+  // keeps its already-ingested orders (see routes/petpooja.ts's delete),
+  // it just orphans them instead of deleting the whole config+credentials
+  // the way deleting a Tally source cascades its ledger mappings (config,
+  // not history).
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  orderId: text('order_id').notNull(),         // PetPooja's own orderID
+  customerInvoiceId: text('customer_invoice_id'),
+  restId: text('rest_id'),                     // PetPooja's restID as sent on this order; may drift from the source's own restId
+  orderType: text('order_type'),               // Dine In | Pick Up | Delivery
+  paymentType: text('payment_type'),           // Cash | Card | Online | Other | Part Payment
+  orderFrom: text('order_from'),               // POS, or an aggregator name - open-ended, not a fixed enum
+  orderFromId: text('order_from_id'),
+  subOrderType: text('sub_order_type'),        // AC | Non-AC | Dine-In | Terrace | an aggregator name
+  status: text('status'),                      // Success | Cancelled
+  tableNo: text('table_no'),
+  noOfPersons: integer('no_of_persons'),
+  billerName: text('biller_name'),
+  assignee: text('assignee'),
+  comment: text('comment'),
+  tokenNo: text('token_no'),
+  deliveryCharges: doublePrecision('delivery_charges'),
+  packagingCharge: doublePrecision('packaging_charge'),
+  serviceCharge: doublePrecision('service_charge'),
+  discountTotal: doublePrecision('discount_total'),
+  taxTotal: doublePrecision('tax_total'),
+  roundOff: doublePrecision('round_off'),       // PetPooja sends this as a string ("0.40"); parsed to a number on ingest
+  coreTotal: doublePrecision('core_total'),
+  total: doublePrecision('total'),
+  orderCreatedAt: text('order_created_at'),     // UTC instant, converted from PetPooja's naive-IST created_on
+  customerName: text('customer_name'),
+  customerAddress: text('customer_address'),
+  customerPhone: text('customer_phone'),
+  customerGstin: text('customer_gstin'),
+  items: jsonb('items'),                        // OrderItem[], incl. nested addons, as PetPooja sent them
+  taxBreakup: jsonb('tax_breakup'),              // Tax[]
+  discountBreakup: jsonb('discount_breakup'),    // Discount[]
+  partPayments: jsonb('part_payments'),          // only present when paymentType is 'Part Payment'
+  matchKey: text('match_key').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),    // bumped on every re-push of this orderID, incl. unchanged-field pushes
+}, (t) => [
+  uniqueIndex('petpooja_sales_orders_source_match_key').on(t.petpoojaSourceId, t.matchKey),
+]);
+
+// Step 4: PetPooja's full item catalog, pushed wholesale on every menu edit
+// (Menu Push webhook) or pulled on demand (Fetch Menu) - every call is the
+// merchant's *entire* current catalog, not an incremental diff, so unlike
+// petpoojaSalesOrders above these 5 tables use mergeMenu.ts's resolve-sweep
+// (mergeBills.ts's precedent, not mergeOrders.ts's create/update-only - see
+// that file's header comment). `active` does double duty as PetPooja's own
+// flag and the sweep's deactivation target: a row missing from the latest
+// push gets `active` flipped false, never deleted, same audit-trail posture
+// as tallyBills.status. Natural key is each entity's own PetPooja id,
+// scoped by source - stored as `matchKey` for a uniform merge helper
+// (mergeSnapshotEntities) rather than five separate composite indexes.
+// petpoojaSourceId is nullable + set-null-on-delete from the start (the
+// Step 3 bug: NOT NULL with no onDelete crashed the whole dev server on a
+// source delete, since this codebase has no global Express error handler) -
+// these are id-mapping data steps 5/6 depend on, so they survive a source
+// deletion exactly like petpoojaSalesOrders does.
+export const petpoojaMenuCategories = pgTable('petpooja_menu_categories', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  categoryId: text('category_id').notNull(),       // PetPooja's own id
+  parentCategoryId: text('parent_category_id'),
+  name: text('name').notNull(),
+  rank: integer('rank'),
+  timings: text('timings'),
+  imageUrl: text('image_url'),
+  active: boolean('active').notNull().default(true),
+  matchKey: text('match_key').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+}, (t) => [
+  uniqueIndex('petpooja_menu_categories_source_match_key').on(t.petpoojaSourceId, t.matchKey),
+]);
+
+export const petpoojaMenuItems = pgTable('petpooja_menu_items', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  itemId: text('item_id').notNull(),                // PetPooja's own id
+  // Raw PetPooja category id, not a real FK - natural-key lookup against
+  // petpoojaMenuCategories.categoryId scoped by source, same convention as
+  // tallyBills.ledgerName (a name/id the source owns, not this app's PK).
+  categoryId: text('category_id'),
+  name: text('name').notNull(),
+  description: text('description'),
+  price: doublePrecision('price'),
+  markupPrice: doublePrecision('markup_price'),
+  rank: integer('rank'),
+  attributeId: text('attribute_id'),                // 1=Veg,2=NonVeg,5=Other,24=Egg
+  allowVariation: boolean('allow_variation').notNull().default(false),
+  allowAddon: boolean('allow_addon').notNull().default(false),
+  addonBasedOnVariation: boolean('addon_based_on_variation').notNull().default(false),
+  orderTypeRaw: text('order_type_raw'),
+  gstType: text('gst_type'),                        // "services" | "goods"
+  taxInclusive: boolean('tax_inclusive').notNull().default(false),
+  ignoreTaxes: boolean('ignore_taxes').notNull().default(false),
+  ignoreDiscounts: boolean('ignore_discounts').notNull().default(false),
+  packingCharges: doublePrecision('packing_charges'),
+  isRecommended: boolean('is_recommended').notNull().default(false),
+  isFavorite: boolean('is_favorite').notNull().default(false),
+  isCombo: boolean('is_combo').notNull().default(false),
+  imageUrl: text('image_url'),
+  minimumPreparationTime: text('minimum_preparation_time'),
+  spiceLevel: text('spice_level'),
+  // JSONB passthrough - item_tax is a real id list, the rest are either
+  // undocumented-shape vendor fields (variation/addon - PetPooja's own docs
+  // type both as plain "string" despite describing nested structures; store
+  // verbatim, confirm the real shape against one actual payload before
+  // writing field-access code) or fields with no consumer anywhere in this
+  // app yet (comboDetails/nutrition/cuisine/tags).
+  itemTax: jsonb('item_tax'),
+  variations: jsonb('variations'),
+  addon: jsonb('addon'),
+  comboDetails: jsonb('combo_details'),
+  nutrition: jsonb('nutrition'),
+  cuisine: jsonb('cuisine'),
+  tags: jsonb('tags'),
+  active: boolean('active').notNull().default(true),
+  // Item Stock On/Off (step 5) - a toggle independent of `active` (an item
+  // can be on the menu but temporarily out of stock). autoTurnOnTime/
+  // customTurnOnTime are recorded verbatim from PetPooja's stock-off call,
+  // never acted on - this codebase has no job scheduler to flip them back.
+  inStock: boolean('in_stock').notNull().default(true),
+  autoTurnOnTime: text('auto_turn_on_time'),
+  customTurnOnTime: text('custom_turn_on_time'),
+  matchKey: text('match_key').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+}, (t) => [
+  uniqueIndex('petpooja_menu_items_source_match_key').on(t.petpoojaSourceId, t.matchKey),
+]);
+
+export const petpoojaMenuAddonGroups = pgTable('petpooja_menu_addon_groups', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  addonGroupId: text('addon_group_id').notNull(),   // PetPooja's own id
+  name: text('name').notNull(),
+  rank: integer('rank'),
+  active: boolean('active').notNull().default(true),
+  matchKey: text('match_key').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+}, (t) => [
+  uniqueIndex('petpooja_menu_addon_groups_source_match_key').on(t.petpoojaSourceId, t.matchKey),
+]);
+
+// Flat master list - PetPooja's addongroupitems carry no addonGroupId of
+// their own; the item↔group↔addon-item association lives only in each
+// item's own `addon` field (confirmed against the vendor's live docs, not a
+// doc gap this time).
+export const petpoojaMenuAddonItems = pgTable('petpooja_menu_addon_items', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  addonItemId: text('addon_item_id').notNull(),     // PetPooja's own id
+  name: text('name').notNull(),
+  price: doublePrecision('price'),
+  attributeId: text('attribute_id'),
+  rank: integer('rank'),
+  active: boolean('active').notNull().default(true),
+  // Item Stock On/Off (step 5) - see petpoojaMenuItems' own fields of the
+  // same name for the full rationale.
+  inStock: boolean('in_stock').notNull().default(true),
+  autoTurnOnTime: text('auto_turn_on_time'),
+  customTurnOnTime: text('custom_turn_on_time'),
+  matchKey: text('match_key').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+}, (t) => [
+  uniqueIndex('petpooja_menu_addon_items_source_match_key').on(t.petpoojaSourceId, t.matchKey),
+]);
+
+export const petpoojaMenuTaxes = pgTable('petpooja_menu_taxes', {
+  id: text('id').primaryKey(),
+  createdDate: text('created_date').notNull(),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  taxId: text('tax_id').notNull(),                  // PetPooja's own id
+  name: text('name').notNull(),
+  rate: doublePrecision('rate'),
+  taxType: text('tax_type'),
+  orderTypeRaw: text('order_type_raw'),
+  coreOrTotal: text('core_or_total'),
+  forwardOrBackward: text('forward_or_backward'),
+  description: text('description'),
+  rank: integer('rank'),
+  active: boolean('active').notNull().default(true),
+  matchKey: text('match_key').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+}, (t) => [
+  uniqueIndex('petpooja_menu_taxes_source_match_key').on(t.petpoojaSourceId, t.matchKey),
+]);
+
+// One row per source: everything PetPooja sends with no consumer anywhere in
+// this app yet (restaurant-level delivery/packaging/service-charge config,
+// ordertypes, parentcategories, group_categories, attributes, discounts),
+// stored verbatim rather than normalized. Overwritten wholesale each sync,
+// no field-level diffing. Unlike the 5 catalog tables above, this uses
+// onDelete: 'cascade' - it's pure derived cache with zero independent value
+// once its source is gone, not historical/id-mapping data.
+export const petpoojaMenuConfig = pgTable('petpooja_menu_config', {
+  petpoojaSourceId: integer('petpooja_source_id').primaryKey()
+    .references(() => petpoojaSources.id, { onDelete: 'cascade' }),
+  raw: jsonb('raw').notNull(),
+  sourceKind: text('source_kind').notNull(), // 'push' | 'fetch'
+  updatedAt: text('updated_at').notNull(),
+});
+
+// Step 6 (Order placement) - plumbing only, no caller wired up yet (see
+// server/petpooja/saveOrder.ts's header comment). One row per order *this
+// app* places on PetPooja's POS via Save Order - the opposite direction
+// from petpoojaSalesOrders (PetPooja's own inbound bill data pushed on
+// "SAVE AND PRINT"). `id` is our own generated clientOrderId, not a
+// separate UUID + natural-key pair like the catalog tables: PetPooja's
+// Save Order/Update Order Status/Order Callback docs all key off *our*
+// id (Order Callback's own doc text: "Unique client order id"), so there's
+// no PetPooja-side id to track alongside it.
+export const petpoojaOutboundOrders = pgTable('petpooja_outbound_orders', {
+  id: text('id').primaryKey(),
+  petpoojaSourceId: integer('petpooja_source_id').references(() => petpoojaSources.id, { onDelete: 'set null' }),
+  status: text('status').notNull(), // placed | accepted | dispatched | food_ready | delivered | cancelled | error
+  orderPayload: jsonb('order_payload').notNull(), // the OrderInfo we sent, verbatim
+  lastCallbackStatus: text('last_callback_status'), // raw PetPooja status code, even if unmapped
+  lastCallbackAt: text('last_callback_at'),
+  lastCallbackPayload: jsonb('last_callback_payload'),
+  cancelReason: text('cancel_reason'),
+  createdAt: text('created_at').notNull(),
+  // Rider Info (step 8, outbound, compatibility only) - mirrors how
+  // cancelReason above already flips onto this same row on success; see
+  // riderInfo.ts's header comment for why there's no separate table.
+  lastRiderStatus: text('last_rider_status'), // rider-assigned | rider-arrived | pickedup | delivered
+  lastRiderName: text('last_rider_name'),
+  lastRiderPhoneNumber: text('last_rider_phone_number'),
+  lastRiderUpdatedAt: text('last_rider_updated_at'),
+});
 
 // ── App entities (HR & compliance forms) ─────────────────────────────────────
 export const employees = pgTable('employees', {

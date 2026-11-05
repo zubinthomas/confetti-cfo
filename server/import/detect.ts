@@ -14,10 +14,15 @@ import { parseOrders, findOrdersSheet } from './parseOrders.ts';
 import { parseCompliance, findComplianceSheets } from './parseCompliance.ts';
 import type { ParsedWorkbook } from './types.ts';
 
-// 'bills' is excluded: it's a real ParsedWorkbook kind (server/tally/sync.ts
-// builds one, merge.ts dispatches on it), but no upload ever produces one -
-// bills only arrive via the agent sync route, never a workbook detection.
-export type WorkbookKind = Exclude<ParsedWorkbook['kind'], 'bills'>;
+// 'bills', 'petpoojaSales', 'petpoojaMenu', 'petpoojaStock' and
+// 'petpoojaOrderCallback' are excluded: all five are real ParsedWorkbook
+// kinds (server/tally/sync.ts, server/petpooja/syncSales.ts,
+// server/petpooja/syncMenu.ts, server/petpooja/syncStock.ts and
+// server/petpooja/syncOrderCallback.ts each build one, merge.ts dispatches
+// on them), but no upload ever produces any of them - bills arrive via the
+// Tally agent sync route, the four petpooja* kinds via PetPooja's webhook
+// or resync routes, never a workbook detection.
+export type WorkbookKind = Exclude<ParsedWorkbook['kind'], 'bills' | 'petpoojaSales' | 'petpoojaMenu' | 'petpoojaStock' | 'petpoojaOrderCallback'>;
 
 // The HR Mastersheet's sheet is just "Sheet1" (ExcelJS's default) - no
 // usable sheet-name signal like the other three kinds have, so this

@@ -104,7 +104,7 @@ export async function syncSource(source: SheetSource, prefetchedBuffer?: Buffer)
     }
 
     const rejectedBefore = await findManuallyRejectedPrecedent(db, {
-      kind, sourceType: 'sheet', sheetSourceId: source.id, tallySourceId: null, contentHash,
+      kind, sourceType: 'sheet', sheetSourceId: source.id, tallySourceId: null, petpoojaSourceId: null, contentHash,
     });
     if (rejectedBefore) {
       const [batch] = await db.insert(schema.importBatches).values({

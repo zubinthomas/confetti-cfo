@@ -77,17 +77,17 @@ function baseBatch(overrides: Partial<typeof schema.importBatches.$inferInsert>)
   }));
 
   const matches = await findManuallyRejectedPrecedent(db, {
-    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id, contentHash: hash,
+    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id, petpoojaSourceId: null, contentHash: hash,
   });
   assert.equal(matches, true, 'an identical manually-discarded batch must count as precedent');
 
   const differentHash = await findManuallyRejectedPrecedent(db, {
-    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id, contentHash: 'other-hash',
+    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id, petpoojaSourceId: null, contentHash: 'other-hash',
   });
   assert.equal(differentHash, false, 'a different content hash must not match');
 
   const differentSource = await findManuallyRejectedPrecedent(db, {
-    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source2.id, contentHash: hash,
+    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source2.id, petpoojaSourceId: null, contentHash: hash,
   });
   assert.equal(differentSource, false, 'a different tally source must not match');
 
@@ -95,7 +95,7 @@ function baseBatch(overrides: Partial<typeof schema.importBatches.$inferInsert>)
     status: 'discarded', decisionSource: 'auto_discard_noop', contentHash: 'auto-only-hash',
   }));
   const autoOnly = await findManuallyRejectedPrecedent(db, {
-    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id, contentHash: 'auto-only-hash',
+    kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source1.id, petpoojaSourceId: null, contentHash: 'auto-only-hash',
   });
   assert.equal(autoOnly, false, 'an auto-discarded (not manually-discarded) batch must not count as precedent');
 }

@@ -15,7 +15,7 @@ import { db, ready, schema } from './client.ts';
 export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'GuestCheckIn', 'Menu',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
-  'Import', 'SheetSource', 'TallySource', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
+  'Import', 'SheetSource', 'TallySource', 'PetPooja', 'PetpoojaSales', 'PetpoojaMenu', 'PetpoojaOrders', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
   'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout', 'DirectorKyc',
 ] as const;
 export type Resource = typeof RESOURCES[number];
@@ -32,11 +32,25 @@ export class PermissionGrantError extends Error {}
 // The Restaurant module is three resources: Restaurant (opening the module and
 // the Locations & Tables catalog), Reservation (bookings) and GuestRegister
 // (sign-ins), so deleting guest activity can be granted apart from the rest.
-const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'Menu', 'Import', 'SheetSource', 'TallySource', 'Invite', 'User', 'Role', 'TimeLog'];
+const FULL_CRUD: Resource[] = ['Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'Menu', 'Import', 'SheetSource', 'TallySource', 'PetPooja', 'Invite', 'User', 'Role', 'TimeLog'];
 // OutstandingBills: sync-sourced from Tally's bill-wise reports, same as
 // FinancialRecord - no manual-entry/dispute UI is in scope (a future
 // "mark disputed" workflow would be its own separate item).
-const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings', 'OutstandingBills'];
+// PetpoojaSales: ingested PetPooja Sales API order data, same read-only
+// posture as OutstandingBills, deliberately separate from 'PetPooja' (the
+// FULL_CRUD resource gating source credentials/config) - a restaurant
+// manager/viewer may reasonably want to see sales data without holding
+// integration-credential rights.
+// PetpoojaMenu: the synced item/category/addon/tax catalog mirror (step 4) -
+// same read-only split as PetpoojaSales. Triggering a resync still needs
+// 'PetPooja' write (it's an outbound call using stored credentials, same
+// trust level as source CRUD), so this resource only ever needs read.
+// PetpoojaOrders: orders this app has placed via Save Order (step 6,
+// plumbing only - nothing writes this table yet, see saveOrder.ts). Same
+// read-only split as PetpoojaSales/PetpoojaMenu; placing/cancelling an
+// order is reached by calling the outbound client functions directly, not
+// through any route gated by a write permission - there is no such route.
+const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations', 'Settings', 'OutstandingBills', 'PetpoojaSales', 'PetpoojaMenu', 'PetpoojaOrders'];
 // BankAccount: bank accounts aren't deletable, only deactivated (isActive on
 // the schema row) - no delete action is ever granted, same as Backup/Integration.
 // Period: a period is marked/unmarked reconciled, never deleted either.

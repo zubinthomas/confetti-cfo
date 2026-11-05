@@ -212,6 +212,51 @@ export interface ParsedBillRecord {
   voucherAmount: number | null;
 }
 
+// One restaurant bill/order pushed by PetPooja's Sales API webhook
+// (server/petpooja/parseSalesPayload.ts) - one webhook call = one order, a
+// real-time push on "SAVE AND PRINT" at the POS, not a resync of a current-
+// state snapshot. A cancelled bill is a normal re-push of the same orderID
+// with status flipped to 'Cancelled', not a separate notice - so unlike
+// ParsedBillRecord (whose source "missing from latest sync -> resolved"
+// policy doesn't transfer here), this is create/update-only: see
+// server/import/mergePetpoojaSales.ts. Matched by (petpoojaSourceId,
+// normalized orderId).
+export interface ParsedPetpoojaSalesRecord {
+  petpoojaSourceId: number;
+  orderId: string;
+  customerInvoiceId: string | null;
+  restId: string | null;
+  orderType: string | null;
+  paymentType: string | null;
+  orderFrom: string | null;
+  orderFromId: string | null;
+  subOrderType: string | null;
+  status: string | null;
+  tableNo: string | null;
+  noOfPersons: number | null;
+  billerName: string | null;
+  assignee: string | null;
+  comment: string | null;
+  tokenNo: string | null;
+  deliveryCharges: number | null;
+  packagingCharge: number | null;
+  serviceCharge: number | null;
+  discountTotal: number | null;
+  taxTotal: number | null;
+  roundOff: number | null;
+  coreTotal: number | null;
+  total: number | null;
+  orderCreatedAt: string | null; // UTC instant, converted from PetPooja's naive-IST created_on
+  customerName: string | null;
+  customerAddress: string | null;
+  customerPhone: string | null;
+  customerGstin: string | null;
+  items: unknown; // OrderItem[], incl. nested addons, kept as PetPooja sent them
+  taxBreakup: unknown; // Tax[]
+  discountBreakup: unknown; // Discount[]
+  partPayments: unknown; // only present when paymentType is 'Part Payment'
+}
+
 // One row from the HP/JP/Daranda licence-tax sheets, or the Insurance
 // sheet, of the Compliance Payment Tracker workbook
 // (server/import/parseCompliance.ts). `paidOn` is set ONLY from an
@@ -293,8 +338,100 @@ export interface ParsedComplianceDirectorRecord {
   contactNumber: string | null;
 }
 
+// PetPooja's full item catalog, pushed wholesale on every Menu Push webhook
+// call or pulled on demand via Fetch Menu (server/petpooja/parseMenuPayload.ts)
+// - every call is the merchant's *entire* current catalog, not an
+// incremental diff, unlike ParsedPetpoojaSalesRecord above. A single object,
+// not an array like every other kind's own `xRecords: T[]` field: all 5
+// entity sets + the restaurant-level config blob must be validated and
+// swept atomically against one source's existing state (see
+// server/import/mergeMenu.ts's resolve-sweep), not processed as independent
+// record pushes.
+export interface ParsedPetpoojaMenuCategory {
+  categoryId: string; parentCategoryId: string | null; name: string;
+  rank: number | null; timings: string | null; imageUrl: string | null; active: boolean;
+}
+
+export interface ParsedPetpoojaMenuItem {
+  itemId: string;
+  categoryId: string | null; // raw PetPooja category id, natural-key only (see schema.ts)
+  name: string; description: string | null;
+  price: number | null; markupPrice: number | null; rank: number | null;
+  attributeId: string | null; // 1=Veg,2=NonVeg,5=Other,24=Egg
+  allowVariation: boolean; allowAddon: boolean; addonBasedOnVariation: boolean;
+  orderTypeRaw: string | null; gstType: string | null; taxInclusive: boolean;
+  ignoreTaxes: boolean; ignoreDiscounts: boolean; packingCharges: number | null;
+  isRecommended: boolean; isFavorite: boolean; isCombo: boolean; imageUrl: string | null;
+  minimumPreparationTime: string | null; spiceLevel: string | null;
+  itemTax: unknown; // id list
+  variations: unknown; // vendor doc types this "string" but describes an array - stored verbatim
+  addon: unknown; // same vendor doc gap - the only place an item's add-on-group association exists
+  comboDetails: unknown; nutrition: unknown; cuisine: unknown; tags: unknown;
+  active: boolean;
+}
+
+export interface ParsedPetpoojaMenuAddonGroup {
+  addonGroupId: string; name: string; rank: number | null; active: boolean;
+}
+
+// Flat master list - no addonGroupId of its own (confirmed against
+// PetPooja's live docs: the item↔group↔addon-item link lives only on each
+// item's own `addon` field).
+export interface ParsedPetpoojaMenuAddonItem {
+  addonItemId: string; name: string; price: number | null;
+  attributeId: string | null; rank: number | null; active: boolean;
+}
+
+export interface ParsedPetpoojaMenuTax {
+  taxId: string; name: string; rate: number | null; taxType: string | null;
+  orderTypeRaw: string | null; coreOrTotal: string | null; forwardOrBackward: string | null;
+  description: string | null; rank: number | null; active: boolean;
+}
+
+export interface ParsedPetpoojaMenuPayload {
+  petpoojaSourceId: number;
+  categories: ParsedPetpoojaMenuCategory[];
+  items: ParsedPetpoojaMenuItem[];
+  addonGroups: ParsedPetpoojaMenuAddonGroup[];
+  addonItems: ParsedPetpoojaMenuAddonItem[];
+  taxes: ParsedPetpoojaMenuTax[];
+  configRaw: unknown; // restaurant-level config + the entity kinds with no consumer yet, verbatim
+  sourceKind: 'push' | 'fetch';
+}
+
+// Item Stock On/Off (step 5) - a targeted list of ids to flip, not a
+// snapshot (contrast ParsedPetpoojaMenuPayload above). autoTurnOnTime/
+// customTurnOnTime are recorded, never acted on - see petpoojaMenuItems'
+// schema comment.
+export interface ParsedPetpoojaStockPayload {
+  petpoojaSourceId: number;
+  type: 'item' | 'addon';
+  inStock: boolean;
+  itemIds: string[];
+  autoTurnOnTime: string | null;
+  customTurnOnTime: string | null;
+}
+
+// Order Callback (step 6) - PetPooja notifying us of a status change on an
+// order *we* placed via Save Order. orderId is OUR own clientOrderId (see
+// petpoojaOutboundOrders' schema comment) - PetPooja's doc text for this
+// field: "Unique client order id which is used to update order status at
+// client side", despite the same field name meaning PetPooja's own
+// (optional, deprecated) id elsewhere in this API family.
+export interface ParsedPetpoojaOrderCallbackPayload {
+  petpoojaSourceId: number;
+  orderId: string;
+  status: string | null; // raw PetPooja status code, mapping happens in mergeOrderCallback.ts
+  cancelReason: string | null;
+  minimumPrepTime: string | null;
+  minimumDeliveryTime: string | null;
+  riderName: string | null;
+  riderPhoneNumber: string | null;
+  isModified: boolean;
+}
+
 export interface ParsedWorkbook {
-  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders' | 'bills' | 'compliance';
+  kind: 'cepl' | 'cafe' | 'sienna' | 'hr' | 'target' | 'fnbMonthly' | 'fnbWeekly' | 'potteryProduction' | 'shiftRoster' | 'orders' | 'bills' | 'compliance' | 'petpoojaSales' | 'petpoojaMenu' | 'petpoojaStock' | 'petpoojaOrderCallback';
   businessName: string;
   periods: ParsedPeriod[];
   financialRecords: ParsedFinancialRecord[];
@@ -306,6 +443,10 @@ export interface ParsedWorkbook {
   shiftRosterRecords: ParsedShiftRosterRecord[];
   orderRecords: ParsedOrderRecord[];
   billRecords: ParsedBillRecord[];
+  petpoojaSalesRecords: ParsedPetpoojaSalesRecord[];
+  petpoojaMenuPayload: ParsedPetpoojaMenuPayload | null;
+  petpoojaStockPayload: ParsedPetpoojaStockPayload | null;
+  petpoojaOrderCallbackPayload: ParsedPetpoojaOrderCallbackPayload | null;
   compliancePaymentRecords: ParsedCompliancePaymentRecord[];
   complianceDocumentRecords: ParsedComplianceDocumentRecord[];
   complianceTrademarkRecords: ParsedComplianceTrademarkRecord[];

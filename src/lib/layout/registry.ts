@@ -9,7 +9,7 @@ import {
   ClipboardList, ShieldAlert, Flame, HardHat, Truck, Users, ShieldCheck, Boxes, CalendarDays,
   FileBarChart, Scale, UserCog, Settings, FileSpreadsheet, Cable, IdCard, Map as MapIcon, Layers,
   CalendarOff, UserSearch, FileCheck, UserPlus, Shield, DoorOpen, Settings2, LayoutTemplate, QrCode,
-  Fingerprint, Stamp,
+  Fingerprint, Stamp, Receipt,
 } from 'lucide-react';
 import type { Gate, NavItemBase, TabBase, WidgetBase } from './types';
 
@@ -30,6 +30,10 @@ export const GATES = {
   restaurant: { mode: 'any', requires: [read('Restaurant'), read('Reservation'), read('GuestRegister')] },
   import: { mode: 'any', requires: [read('Import'), read('SheetSource')] },
   tally: { requires: [read('TallySource')] },
+  // Either half of the page (source management or the sales-orders list)
+  // is enough to open it - the page itself hides whichever card the
+  // viewer's permissions don't cover.
+  petpooja: { mode: 'any', requires: [read('PetPooja'), read('PetpoojaSales'), read('PetpoojaMenu'), read('PetpoojaOrders')] },
   settings: { requires: [read('Settings')] },
   users: { mode: 'any', requires: [read('User'), read('Invite'), read('Role'), read('Layout')] },
   costCentres: { requires: [read('CostCentre')] },
@@ -84,6 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'roadmap', label: 'Roadmap', to: '/roadmap', icon: MapIcon, group: 'Settings', defaultPlacement: 'userMenu' },
   { id: 'import', label: 'Import Workbooks', to: '/data/import', icon: FileSpreadsheet, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.import },
   { id: 'tally', label: 'Tally Integration', to: '/data/tally', icon: Cable, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.tally },
+  { id: 'petpooja', label: 'PetPooja Integration', to: '/data/petpooja', icon: Receipt, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.petpooja },
   { id: 'cost-centres', label: 'Cost Centres', to: '/settings/cost-centres', icon: Layers, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.costCentres },
   { id: 'users', label: 'Users and Permissions', to: '/settings/users', icon: Users, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.users },
 ];

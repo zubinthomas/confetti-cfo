@@ -400,6 +400,62 @@
       "when": 1793603862319,
       "tag": "0057_fair_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793799615170,
+      "tag": "0058_gifted_havok",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793847707122,
+      "tag": "0059_uneven_ultimates",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793849158945,
+      "tag": "0060_misty_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793853812995,
+      "tag": "0061_short_wong",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793856416115,
+      "tag": "0062_thin_sphinx",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793858375023,
+      "tag": "0063_open_randall",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1793865075314,
+      "tag": "0064_glossy_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1793865545581,
+      "tag": "0065_colorful_ravenous",
+      "breakpoints": true
     }
   ]
 }

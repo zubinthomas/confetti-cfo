@@ -141,7 +141,7 @@ type Parsed = Parameters<typeof buildMergePlan>[0];
 const parsedWith = (businessName: string, over: Partial<Parsed>): Parsed => ({
   kind: 'cafe', businessName, periods: [], financialRecords: [], salesRecords: [], consignmentRecords: [],
   employeeRecords: [], targetRecords: [], productionLogRecords: [], shiftRosterRecords: [], orderRecords: [],
-  billRecords: [], compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [],
+  billRecords: [], petpoojaSalesRecords: [], petpoojaMenuPayload: null, petpoojaStockPayload: null, petpoojaOrderCallbackPayload: null, compliancePaymentRecords: [], complianceDocumentRecords: [], complianceTrademarkRecords: [],
   complianceDirectorRecords: [], issues: [], ...over,
 });
 const week = { periodType: 'week' as const, startDate: '2026-01-05', endDate: '2026-01-11', label: 'W1', fiscalYear: '2025-2026', isSpecialEvent: false };

@@ -194,7 +194,7 @@ export async function syncTallyPush(source: TallySource, records: TallyRecordInp
       }
 
       const rejectedBefore = await findManuallyRejectedPrecedent(db, {
-        kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source.id, contentHash,
+        kind: 'tally', sourceType: 'tally', sheetSourceId: null, tallySourceId: source.id, petpoojaSourceId: null, contentHash,
       });
       if (rejectedBefore) {
         const [batch] = await db.insert(schema.importBatches).values({
@@ -313,6 +313,8 @@ export async function syncTallyBillsPush(source: TallySource, bills: ParsedBillR
       shiftRosterRecords: [],
       orderRecords: [],
       billRecords: bills,
+      petpoojaSalesRecords: [],
+      petpoojaMenuPayload: null, petpoojaStockPayload: null, petpoojaOrderCallbackPayload: null,
       compliancePaymentRecords: [],
       complianceDocumentRecords: [],
       complianceTrademarkRecords: [],
@@ -344,7 +346,7 @@ export async function syncTallyBillsPush(source: TallySource, bills: ParsedBillR
     }
 
     const rejectedBefore = await findManuallyRejectedPrecedent(db, {
-      kind: 'bills', sourceType: 'tally', sheetSourceId: null, tallySourceId: source.id, contentHash,
+      kind: 'bills', sourceType: 'tally', sheetSourceId: null, tallySourceId: source.id, petpoojaSourceId: null, contentHash,
     });
     if (rejectedBefore) {
       const [batch] = await db.insert(schema.importBatches).values({
