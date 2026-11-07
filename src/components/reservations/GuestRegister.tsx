@@ -317,7 +317,8 @@ export function SignInModal({
 // ── Assign / change table ────────────────────────────────────────────────
 
 export function AssignTableModal({
-  signIn, tables, merges, occupiedTableIds, allSignIns, canWriteBookings = false, onClose, onSaved,
+  signIn, tables, merges, occupiedTableIds, allSignIns, canWriteBookings = false,
+  nextWaiting, onClose, onSaved, onSeatNext,
 }: {
   signIn: GuestSignIn;
   tables: ReservationTable[];
@@ -329,8 +330,17 @@ export function AssignTableModal({
   allSignIns: GuestSignIn[];
   /** Reservation:write - moving the clashing booking is a reservation edit. */
   canWriteBookings?: boolean;
+  /** The next party waiting in the queue, if any - offered as a shortcut so
+   *  seating several walk-ins in a row doesn't mean reopening the Waiting
+   *  drawer every time. Only offered for signIn itself being seated from the
+   *  queue (no table yet) - leave unset for "change table" on an already-
+   *  seated guest, where "seat next" doesn't make sense. */
+  nextWaiting?: GuestSignIn;
   onClose: () => void;
   onSaved: () => void;
+  /** Called (instead of onSaved) once this party is seated, when the host
+   *  chose to seat nextWaiting right away. */
+  onSeatNext?: (next: GuestSignIn) => void;
 }) {
   const mergedTableIds = useMemo(() => new Set(merges.flatMap((m) => m.tableIds)), [merges]);
 
@@ -395,7 +405,7 @@ export function AssignTableModal({
   const toggleMergeWith = (id: string) => setMergeWithIds((cur) =>
     cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
 
-  const submit = async () => {
+  const submit = async (onDone: () => void = onSaved) => {
     setError(""); setBranch(null);
     if (!tableId) { setError("Pick a table"); return; }
     setSaving(true);
@@ -404,7 +414,7 @@ export function AssignTableModal({
         tableId,
         expectedUntil: until ? isoFromTimeToday(until) : undefined,
       });
-      onSaved();
+      onDone();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.data && typeof err.data === "object") {
         const d = err.data as { code: string; detail?: Record<string, unknown>; message: string };
@@ -467,6 +477,13 @@ export function AssignTableModal({
     if (!baseTable || !canMergeTables(baseTable, t)) return false;
     return selectedTables.every((s) => s.id === t.id || canMergeTables(s, t));
   });
+
+  // Whether some other table would still be free once this one is taken -
+  // not a full re-run of the area/capacity math above, just enough to decide
+  // whether offering "seat next" is worth showing at all.
+  const anotherTableFreeAfterThis = tables.some((t) =>
+    t.id !== tableId && !mergedTableIds.has(t.id) && !occupiedTableIds.has(t.id));
+  const canSeatNext = !signIn.tableId && !!nextWaiting && anotherTableFreeAfterThis;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -579,6 +596,14 @@ export function AssignTableModal({
             : <span />}
           <div className="flex gap-3">
             <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
+            {canSeatNext && (
+              <button
+                onClick={() => submit(() => onSeatNext!(nextWaiting!))} disabled={saving}
+                className="text-sm px-4 py-2 rounded-lg border border-primary text-primary hover:bg-primary/10 disabled:opacity-50 flex items-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Seat &amp; next
+              </button>
+            )}
             <button onClick={() => submit()} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />} Seat
             </button>

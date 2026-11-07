@@ -279,11 +279,18 @@ export default function RestaurantFloorView() {
 
       {seatingSignIn && (
         <AssignTableModal
+          // Keyed on the signIn being seated, so switching straight to the
+          // next queue entry via onSeatNext remounts with fresh state
+          // (table choice, expected-until, etc.) instead of reusing stale
+          // state left over from the party just seated.
+          key={seatingSignIn.id}
           signIn={seatingSignIn} tables={tables} merges={merges} occupiedTableIds={occupiedTableIds}
           allSignIns={queue.onPremises ?? []}
           canWriteBookings={bookWrite}
+          nextWaiting={queue.waiting.find((w) => w.id !== seatingSignIn.id)}
           onClose={() => setSeatingSignIn(null)}
           onSaved={() => { setSeatingSignIn(null); loadReservations(today); queue.load(); }}
+          onSeatNext={(next) => { setSeatingSignIn(next); loadReservations(today); queue.load(); }}
         />
       )}
 
