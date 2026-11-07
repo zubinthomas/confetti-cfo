@@ -6,6 +6,7 @@ import FloorTile from "@/components/reservations/FloorTile";
 import TableCard, { FLOOR_DOT, type TableUnit } from "@/components/reservations/TableCard";
 import BookingRow from "@/components/reservations/BookingRow";
 import { bookingRows, floorSummary, type FloorInfo } from "@/components/reservations/reservationUi";
+import type { GuestSignIn } from "@/api/guestSignInsApi";
 
 export type DayLayout = "grid" | "list";
 export const isDayLayout = (v: unknown): v is DayLayout => v === "grid" || v === "list";
@@ -47,7 +48,10 @@ export function DayFloorControls({ layout, onLayout, everyAreaCollapsed, onToggl
 export default function DayFloor({
   areas, locations, units, layout, collapsed, onToggleArea,
   bookWrite, bookDelete, mergeWrite, floorWritable,
+  regWrite, regDelete,
   onSplit, onExtend, onFree, onStatus, onRemove, onMoved, nowMin,
+  onExtendGuest, onSignOutGuest, onEditGuest, onAssignGuest, onDeleteGuest,
+  detailDialogSuspended,
 }: {
   areas: ReservationArea[];
   locations: ReservationLocation[];
@@ -58,6 +62,8 @@ export default function DayFloor({
   onToggleArea: (areaId: string) => void;
   bookWrite: boolean; bookDelete: boolean; mergeWrite: boolean;
   floorWritable: (floor: FloorInfo) => boolean;
+  /** GuestRegister:write/delete, for each tile's per-guest walk-in rows. */
+  regWrite: boolean; regDelete: boolean;
   onSplit: (merge: TableMerge) => void;
   onExtend: (floor: FloorInfo, minutes: number) => void;
   onFree: (unit: TableUnit) => void;
@@ -67,6 +73,14 @@ export default function DayFloor({
   onMoved: () => void;
   /** Minutes past midnight in IST, so a card can tell which bookings are running now. */
   nowMin: number;
+  onExtendGuest: (id: string, minutes: number) => void;
+  onSignOutGuest: (guest: GuestSignIn) => void;
+  onEditGuest: (guest: GuestSignIn) => void;
+  onAssignGuest: (guest: GuestSignIn) => void;
+  onDeleteGuest: (guest: GuestSignIn) => void;
+  /** A child modal the caller opened from inside our table dialog (edit/sign-out/
+   *  delete) is up - suspend our own dialog instead of stacking a second overlay. */
+  detailDialogSuspended: boolean;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Read live every render, so the dialog follows status changes and closes by
@@ -76,10 +90,24 @@ export default function DayFloor({
   const cardProps = (unit: TableUnit, bordered: boolean) => ({
     unit, bordered, bookWrite, bookDelete, mergeWrite,
     floorWritable: floorWritable(unit.floor),
+    regWrite, regDelete,
     onSplit: () => unit.merge && onSplit(unit.merge),
     onExtend: (m: number) => onExtend(unit.floor, m),
     onFree: () => onFree(unit),
     onStatus, onRemove, onMoved, nowMin,
+    onExtendGuest,
+    onSignOutGuest: (id: string) => {
+      const g = unit.floor.guests.find((x) => x.id === id);
+      if (g) onSignOutGuest(g);
+    },
+    onEditGuest,
+    // Assign leaves this dialog behind for the assign-table flow, unlike edit/
+    // sign-out/delete which return here - so close our own local dialog state.
+    onAssignGuest: (g: GuestSignIn) => { onAssignGuest(g); setOpenKey(null); },
+    onDeleteGuest: (id: string) => {
+      const g = unit.floor.guests.find((x) => x.id === id);
+      if (g) onDeleteGuest(g);
+    },
   });
 
   // List shows the day's bookings, not its tables.
@@ -141,7 +169,9 @@ export default function DayFloor({
         );
       })}
 
-      <Dialog open={openUnit !== null} onOpenChange={(o) => { if (!o) setOpenKey(null); }}>
+      {/* Suspended (not closed) while an edit/sign-out/delete modal launched from
+          inside it is up, so the two overlays never stack. */}
+      <Dialog open={openUnit !== null && !detailDialogSuspended} onOpenChange={(o) => { if (!o) setOpenKey(null); }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           {openUnit && (
             <>

@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { Clock, Link2, Link2Off } from "lucide-react";
 import type { ReservationStatus, ReservationTable, Reservation, TableMerge } from "@/api/reservationsApi";
+import type { GuestSignIn } from "@/api/guestSignInsApi";
 import { ArchivedBadge } from "@/components/reservations/CatalogParts";
 import BookingRow from "@/components/reservations/BookingRow";
+import SignInRow from "@/components/reservations/SignInRow";
 import { type FloorInfo } from "@/components/reservations/reservationUi";
 
 export const FLOOR_DOT: Record<FloorInfo["state"], string> = {
@@ -56,13 +58,17 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
  *  The List layout renders it inline and the floor map opens it in a dialog. */
 export default function TableCard({
   unit, bordered = true, bookWrite, bookDelete, mergeWrite, floorWritable,
+  regWrite, regDelete,
   onSplit, onExtend, onFree, onStatus, onRemove, onMoved, nowMin,
+  onExtendGuest, onSignOutGuest, onEditGuest, onAssignGuest, onDeleteGuest,
 }: {
   unit: TableUnit;
   bordered?: boolean;
   bookWrite: boolean; bookDelete: boolean; mergeWrite: boolean;
   /** Free table / Extend need write on every part the table has (booking, guests). */
   floorWritable: boolean;
+  /** GuestRegister:write/delete, for the per-guest walk-in rows below. */
+  regWrite: boolean; regDelete: boolean;
   onSplit: () => void;
   onExtend: (minutes: number) => void;
   onFree: () => void;
@@ -70,6 +76,13 @@ export default function TableCard({
   onRemove: (id: string) => void;
   onMoved: () => void;
   nowMin: number;
+  /** Per-guest actions for each named walk-in on `floor.guests` - distinct
+   *  from onExtend/onFree above, which act on the whole table/merged unit. */
+  onExtendGuest: (id: string, minutes: number) => void;
+  onSignOutGuest: (id: string) => void;
+  onEditGuest: (guest: GuestSignIn) => void;
+  onAssignGuest: (guest: GuestSignIn) => void;
+  onDeleteGuest: (id: string) => void;
 }) {
   const { table: t, merge, bookings, floor } = unit;
   return (
@@ -90,6 +103,20 @@ export default function TableCard({
         </span>
       </div>
       <TableFloorLine floor={floor} canWrite={floorWritable} onExtend={onExtend} onFree={onFree} />
+      {floor.guests.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {floor.guests.map((g) => (
+            <SignInRow
+              key={g.id} s={g} canWrite={regWrite} canDelete={regDelete}
+              onAssign={() => onAssignGuest(g)}
+              onEdit={() => onEditGuest(g)}
+              onSignOut={() => onSignOutGuest(g.id)}
+              onDelete={() => onDeleteGuest(g.id)}
+              onExtend={(m) => onExtendGuest(g.id, m)}
+            />
+          ))}
+        </div>
+      )}
       {bookings.length === 0 ? (
         <p className="text-xs text-muted-foreground">No bookings today</p>
       ) : (

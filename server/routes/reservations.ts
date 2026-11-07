@@ -319,11 +319,16 @@ router.get('/all', requirePermission('Reservation', 'read'), async (req: AuthedR
 
 router.post('/', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { tableId, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes } = req.body ?? {};
-    if (typeof tableId !== 'string') return res.status(400).json({ message: 'tableId is required' });
+    const { tableId, tableIds, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes } = req.body ?? {};
+    // tableIds (plural, for a party spanning more than one merged table) is
+    // the current shape; tableId (singular) still works for one table.
+    const ids = Array.isArray(tableIds) ? tableIds : typeof tableId === 'string' ? [tableId] : null;
+    if (!ids || ids.some((x) => typeof x !== 'string') || ids.length === 0) {
+      return res.status(400).json({ message: 'tableId or tableIds is required' });
+    }
     if (typeof partySize !== 'number') return res.status(400).json({ message: 'partySize must be a number' });
     const row = await createReservation(req.user!.id, {
-      tableId, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes,
+      tableIds: ids, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes,
     });
     await pushReservationEvent(row);
     res.status(201).json(row);

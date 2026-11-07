@@ -1,27 +1,27 @@
 import React, { useState, useEffect, useMemo } from "react";
 import AreaSelect from "@/components/reservations/AreaSelect";
-import { Plus, X, Loader2, Trash2, Phone, ArrowUp, ArrowDown, AlertTriangle, Armchair } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
+import SearchableSelect from "@/components/SearchableSelect";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import SignInRow, { VISIT_LABELS } from "@/components/reservations/SignInRow";
+import WaitingRow from "@/components/reservations/WaitingRow";
 import AllSignIns from "@/components/reservations/AllSignIns";
 import ReservationRescheduleModal from "@/components/reservations/ReservationRescheduleModal";
 import { ApiError } from "@/api/http";
 import {
-  listSignIns, createSignIn, updateSignIn, assignTable, extendSignIn, signOutGuest, deleteSignIn, estimateWait,
-  notifyGuest, reorderSignIn,
+  listSignIns, createSignIn, updateSignIn, assignTable, estimateWait,
   type GuestSignIn, type GuestVisitType,
 } from "@/api/guestSignInsApi";
 import {
-  listReservations, listTableMerges, createTableMerge, canMergeTables,
+  listReservations, createTableMerge, canMergeTables,
   type Reservation, type ReservationLocation, type ReservationArea, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
-import { checkWaitlistMatch } from "@/lib/waitlistMatch";
-import { waPhone, waLink, tableReadyMessage } from "@/lib/checkin";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
 import { useDraftPersistence } from "@/hooks/useDraftPersistence";
+import { useGuestQueue } from "@/hooks/useGuestQueue";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 
@@ -38,21 +38,6 @@ const suggestCombined = (ts: ReservationTable[], kind: MergeKind) => {
   const sum = ts.reduce((n, t) => n + seatCap(t), 0);
   return kind === "end_to_end" ? Math.max(1, sum - END_TO_END_SEAT_LOSS) : sum;
 };
-
-// A host stops seeing this as "the system still has it handled" after this
-// long without a seat - an advisory flag only, staff still decide what to do.
-const GRACE_MINUTES = 12;
-const isAtRisk = (s: GuestSignIn) =>
-  s.notifiedAt != null && (Date.now() - new Date(s.notifiedAt).getTime()) / 60_000 > GRACE_MINUTES;
-
-function elapsed(iso: string): string {
-  const totalSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 function formatDuration(ms: number): string {
   const totalMin = Math.floor(ms / 60_000);
@@ -79,7 +64,9 @@ export function SignInModal({
   areas: ReservationArea[];
   existing: GuestSignIn | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Receives the created/updated sign-in, so a caller can chain straight into
+   *  seating it (see RestaurantFloorView.tsx) without a second round trip. */
+  onSaved: (signIn: GuestSignIn) => void;
 }) {
   const { draft, save: saveDraft, clear: clearDraft } = useDraftPersistence<typeof EMPTY>("guest-signin");
   const blankSignIn = () => ({ ...EMPTY, areaId: areas[0]?.id ?? "" });
@@ -95,7 +82,12 @@ export function SignInModal({
     host: existing.host ?? "",
     notes: existing.notes ?? "",
   } : (draft ? { ...blankSignIn(), ...draft } : blankSignIn()));
-  const [todaysBookings, setTodaysBookings] = useState<Reservation[]>([]);
+  const [todaysReservations, setTodaysReservations] = useState<Reservation[]>([]);
+  const todaysBookings = useMemo(
+    () => todaysReservations.filter((r) => ["pending", "confirmed"].includes(r.status)),
+    [todaysReservations],
+  );
+  const [seatedSignIns, setSeatedSignIns] = useState<GuestSignIn[]>([]);
   const [suggestedWait, setSuggestedWait] = useState<number | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -107,7 +99,7 @@ export function SignInModal({
       title: "Restored unsaved changes",
       description: "From your last session.",
       action: (
-        <ToastAction onClick={() => { clearDraft(); setForm(blankSignIn()); }}>
+        <ToastAction altText="Discard the restored draft" onClick={() => { clearDraft(); setForm(blankSignIn()); }}>
           Discard
         </ToastAction>
       ),
@@ -125,12 +117,42 @@ export function SignInModal({
     if (!existing && JSON.stringify(form) !== JSON.stringify(blankSignIn())) saveDraft(form);
   }, [form, existing, saveDraft]);
 
+  // Fetched unconditionally (unlike the old !existing guard) - the host
+  // picker below needs today's seated reservations whether this modal is
+  // creating a new sign-in or editing one.
   useEffect(() => {
-    if (existing) return;
     listReservations({ date: todayStr() })
-      .then((rs) => setTodaysBookings(rs.filter((r) => ["pending", "confirmed"].includes(r.status))))
-      .catch(() => setTodaysBookings([]));
-  }, [existing]);
+      .then(setTodaysReservations)
+      .catch(() => setTodaysReservations([]));
+  }, []);
+
+  // Who's seated right now, for the "Here to see (host)" picker - mirrors
+  // useGuestQueue's own onPremisesOnly fetch, kept local here instead of
+  // threading a prop through this component's three call sites.
+  useEffect(() => {
+    listSignIns({ onPremisesOnly: true })
+      .then((rows) => setSeatedSignIns(rows.filter((s) => s.tableId)))
+      .catch(() => setSeatedSignIns([]));
+  }, []);
+
+  interface SeatedParty { key: string; name: string; label: string }
+  const seatedParties = useMemo<SeatedParty[]>(() => {
+    const fromWalkIns: SeatedParty[] = seatedSignIns
+      .filter((s) => s.id !== existing?.id)
+      .map((s) => ({ key: s.id, name: s.guestName, label: `${s.guestName} · ${s.tableName ?? "seated"} (party ${s.partySize})` }));
+    const fromBookings: SeatedParty[] = todaysReservations
+      .filter((r) => r.status === "seated")
+      .map((r) => ({ key: r.id, name: r.guestName, label: `${r.guestName} · ${r.tableName} (party ${r.partySize})` }));
+    const combined = [...fromWalkIns, ...fromBookings].sort((a, b) => a.name.localeCompare(b.name));
+    const list: SeatedParty[] = [{ key: "__none__", name: "", label: "No one / not applicable" }, ...combined];
+    // The stored host may no longer be seated (they left, or the value
+    // predates this picker) - keep it selectable so editing never looks
+    // like it silently cleared the field.
+    if (form.host && !combined.some((p) => p.name === form.host)) {
+      list.push({ key: "__stale__", name: form.host, label: `${form.host} (not currently seated)` });
+    }
+    return list;
+  }, [seatedSignIns, todaysReservations, existing?.id, form.host]);
 
   // SignInModal never sets a table at creation - every new sign-in starts
   // unseated, i.e. at the back of the physical queue - so a wait estimate is
@@ -167,8 +189,8 @@ export function SignInModal({
     if (!partySize || partySize <= 0) { setError("Enter a valid party size"); return; }
     setSaving(true);
     try {
-      if (existing) {
-        await updateSignIn(existing.id, {
+      const saved = existing
+        ? await updateSignIn(existing.id, {
           visitType: form.visitType,
           guestName: form.guestName.trim(),
           guestPhone: form.guestPhone.trim() || undefined,
@@ -178,9 +200,8 @@ export function SignInModal({
           purpose: form.purpose.trim() || undefined,
           host: form.host.trim() || undefined,
           notes: form.notes.trim() || undefined,
-        });
-      } else {
-        await createSignIn({
+        })
+        : await createSignIn({
           visitType: form.visitType,
           reservationId: form.reservationId || undefined,
           guestName: form.guestName.trim(),
@@ -194,9 +215,8 @@ export function SignInModal({
           signedInAt: form.timeIn !== nowTimeValue() ? isoFromTimeToday(form.timeIn) : undefined,
           quotedWaitMinutes: form.quotedWaitMinutes ? Number(form.quotedWaitMinutes) : undefined,
         });
-      }
       clearDraft();
-      onSaved();
+      onSaved(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -266,7 +286,19 @@ export function SignInModal({
               ) : null}
             </div>
           )}
-          <FormField label="Here to see (host)" name="host" value={form.host} onChange={update} />
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Here to see (host)</label>
+            <SearchableSelect
+              records={seatedParties}
+              value={form.host}
+              onChange={(v) => update("host", v)}
+              getValue={(p) => p.name}
+              getLabel={(p) => p.label}
+              placeholder="Select a seated party"
+              searchPlaceholder="Search seated parties…"
+              emptyMessage="No one else is seated right now"
+            />
+          </div>
           <div className="sm:col-span-2"><FormField label="Purpose" name="purpose" value={form.purpose} onChange={update} /></div>
           <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes} onChange={update} /></div>
         </div>
@@ -285,21 +317,64 @@ export function SignInModal({
 // ── Assign / change table ────────────────────────────────────────────────
 
 export function AssignTableModal({
-  signIn, tables, merges, occupiedTableIds, canWriteBookings = false, onClose, onSaved,
+  signIn, tables, merges, occupiedTableIds, allSignIns, canWriteBookings = false, onClose, onSaved,
 }: {
   signIn: GuestSignIn;
   tables: ReservationTable[];
   merges: TableMerge[];
   occupiedTableIds: Set<string>;
+  /** Everyone currently on premises (seated or waiting), used to work out
+   *  whether an occupied table could be joined - best-effort, same as every
+   *  other client-side check in this modal; the server call is authoritative. */
+  allSignIns: GuestSignIn[];
   /** Reservation:write - moving the clashing booking is a reservation edit. */
   canWriteBookings?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const mergedTableIds = useMemo(() => new Set(merges.flatMap((m) => m.tableIds)), [merges]);
+
+  // Who's already seated where, for the "join" math below - a booking-seated
+  // table never shows up here (checkTableAssignment always blocks joining a
+  // booking), so only walk-ins count.
+  const occupantsByTable = useMemo(() => {
+    const map = new Map<string, { partySize: number; names: string[] }>();
+    for (const s of allSignIns) {
+      if (!s.tableId || s.signedOutAt || s.id === signIn.id) continue;
+      const cur = map.get(s.tableId) ?? { partySize: 0, names: [] };
+      cur.partySize += s.partySize;
+      cur.names.push(s.guestName);
+      map.set(s.tableId, cur);
+    }
+    return map;
+  }, [allSignIns, signIn.id]);
+
+  const canJoin = (t: ReservationTable) => {
+    const occ = occupantsByTable.get(t.id);
+    if (!occ) return true; // not occupied at all - the ordinary empty-table case
+    if (occ.partySize + signIn.partySize <= seatCap(t)) return true; // overflow alone fits
+    // Otherwise joining still works if some free table nearby could be merged in.
+    return tables.some((other) =>
+      other.id !== t.id && !occupiedTableIds.has(other.id) && !mergedTableIds.has(other.id) &&
+      (!signIn.areaId || other.areaId === signIn.areaId) && canMergeTables(t, other));
+  };
+
   const areaTables = (signIn.areaId ? tables.filter((t) => t.areaId === signIn.areaId) : tables)
-    .filter((t) => !mergedTableIds.has(t.id) || t.id === signIn.tableId);
-  const [tableId, setTableId] = useState(signIn.tableId ?? areaTables[0]?.id ?? "");
+    .filter((t) => !mergedTableIds.has(t.id) || t.id === signIn.tableId)
+    .filter((t) => !occupiedTableIds.has(t.id) || canJoin(t));
+  // If this party named a host, default straight to the host's table instead
+  // of the area's first table - "here to see X" almost always means "seat us
+  // with X." Only resolves for a walk-in host (the only kind allSignIns can
+  // find here) and only when that table actually made it into areaTables
+  // above (it may not have, e.g. the host's table is already full) -
+  // otherwise this falls back to the ordinary default, same as before.
+  const hostWalkIn = signIn.host
+    ? allSignIns.find((s) => s.guestName === signIn.host && s.tableId && !s.signedOutAt && s.id !== signIn.id)
+    : undefined;
+  const defaultTableId = hostWalkIn && areaTables.some((t) => t.id === hostWalkIn.tableId)
+    ? hostWalkIn.tableId!
+    : areaTables[0]?.id ?? "";
+  const [tableId, setTableId] = useState(signIn.tableId ?? defaultTableId);
   const [until, setUntil] = useState(() => signIn.expectedUntil ? clockOf(signIn.expectedUntil) : "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -409,11 +484,16 @@ export function AssignTableModal({
               className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
             >
               {areaTables.length === 0 && <option value="">No tables in this area</option>}
-              {areaTables.map((t) => (
+              {areaTables.map((t) => {
+                const occ = occupantsByTable.get(t.id);
+                return (
                 <option key={t.id} value={t.id}>
-                  {t.name} (seats {t.capacity}{t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""})
+                  {occ
+                    ? `${t.name} - join ${occ.names.join(", ")} (${occ.partySize}/${seatCap(t)} seats)`
+                    : `${t.name} (seats ${t.capacity}${t.maxExtraCapacity ? ` +${t.maxExtraCapacity}` : ""})`}
                 </option>
-              ))}
+                );
+              })}
             </select>
           </div>
           <FormField label="Expected until" name="until" type="time" value={until} onChange={(_n, v) => setUntil(v)} />
@@ -518,77 +598,6 @@ export function AssignTableModal({
   );
 }
 
-// ── Rows ─────────────────────────────────────────────────────────────────
-
-function WaitingRow({
-  s, canWrite, canDelete, isFirst, isLast, atRisk, notifying, reordering,
-  onNotify, onAssign, onCancel, onDelete, onMoveUp, onMoveDown,
-}: {
-  s: GuestSignIn;
-  canWrite: boolean; canDelete: boolean;
-  isFirst: boolean; isLast: boolean; atRisk: boolean;
-  notifying: boolean; reordering: boolean;
-  onNotify: () => void; onAssign: () => void; onCancel: () => void; onDelete: () => void;
-  onMoveUp: () => void; onMoveDown: () => void;
-}) {
-  const notified = s.notifiedAt != null;
-  return (
-    <div className="border border-border rounded-lg p-3 flex flex-wrap items-start justify-between gap-2">
-      <div className="min-w-0 space-y-0.5">
-        <div className="text-sm flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-foreground">{s.guestName}</span>
-          <span className="text-muted-foreground">party of {s.partySize}</span>
-          {s.source === "self" && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">Self check-in</span>
-          )}
-          <span className="text-xs px-2 py-0.5 rounded-full"
-            style={notified ? { backgroundColor: "#3b82f620", color: "#3b82f6" } : { backgroundColor: "#f59e0b20", color: "#f59e0b" }}>
-            {notified ? "Notified" : "Waiting"}
-          </span>
-          {atRisk && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> At risk
-            </span>
-          )}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {s.areaName ?? "Any area"} · waiting {elapsed(s.signedInAt)}
-          {s.quotedWaitMinutes != null && ` · quoted ~${s.quotedWaitMinutes}m`}
-          {s.notifiedAt && ` · notified ${elapsed(s.notifiedAt)} ago`}
-        </div>
-        {s.guestPhone && (
-          <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" /> {s.guestPhone}</div>
-        )}
-        {s.notes && <div className="text-xs text-muted-foreground">{s.notes}</div>}
-      </div>
-      {canWrite && (
-        <div className="flex items-center gap-2 shrink-0 text-xs">
-          <div className="flex flex-col">
-            <button onClick={onMoveUp} disabled={isFirst || reordering} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
-              <ArrowUp className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={onMoveDown} disabled={isLast || reordering} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
-              <ArrowDown className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          {!notified && (
-            <button onClick={onNotify} disabled={notifying} className="flex items-center gap-1 text-primary hover:underline disabled:opacity-50">
-              {notifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} {waPhone(s.guestPhone) ? "Message on WhatsApp" : "Notify"}
-            </button>
-          )}
-          <button onClick={onAssign} className="flex items-center gap-1 text-primary hover:underline">
-            <Armchair className="w-3.5 h-3.5" /> Assign table
-          </button>
-          <button onClick={onCancel} className="text-muted-foreground hover:text-destructive">Cancel</button>
-          {canDelete && (
-            <button onClick={onDelete} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main ─────────────────────────────────────────────────────────────────
 
 export default function GuestRegister({
@@ -605,9 +614,10 @@ export default function GuestRegister({
   /** Reservation:write, for rescheduling a booking that clashes with a seating. */
   canWriteBookings?: boolean;
 }) {
-  const [onPremises, setOnPremises] = useState<GuestSignIn[] | null>(null);
+  const queue = useGuestQueue();
+  const { onPremises, waiting, seated, occupiedTableIds, merges } = queue;
+
   const [dayHistory, setDayHistory] = useState<GuestSignIn[] | null>(null);
-  const [merges, setMerges] = useState<TableMerge[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   // Signed out card: Day = one date, All = flat filterable list across every date.
   const [outMode, setOutMode] = useState<"day" | "all">("day");
@@ -619,23 +629,13 @@ export default function GuestRegister({
   const [assignTarget, setAssignTarget] = useState<GuestSignIn | null>(null);
   const [signOutTarget, setSignOutTarget] = useState<GuestSignIn | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GuestSignIn | null>(null);
-  const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
-  const [notifyingId, setNotifyingId] = useState<string | null>(null);
-  const [reorderingId, setReorderingId] = useState<string | null>(null);
 
-  const load = async () => {
+  const loadDayHistory = async () => {
     setError("");
     try {
-      const [live, day, ms] = await Promise.all([
-        listSignIns({ onPremisesOnly: true }),
-        listSignIns({ date: selectedDate }),
-        listTableMerges().catch(() => [] as TableMerge[]),
-      ]);
-      setOnPremises(live);
-      setDayHistory(day);
-      setMerges(ms);
+      setDayHistory(await listSignIns({ date: selectedDate }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load the register");
     }
@@ -644,8 +644,9 @@ export default function GuestRegister({
   // Re-created whenever selectedDate changes, so the 25s refresh always
   // closes over the current date rather than the one at mount time.
   useEffect(() => {
-    load();
-    const id = setInterval(load, 25_000);
+    loadDayHistory();
+    queue.load();
+    const id = setInterval(() => { loadDayHistory(); queue.load(); }, 25_000);
     return () => clearInterval(id);
   }, [selectedDate]);
 
@@ -662,64 +663,18 @@ export default function GuestRegister({
   );
   const coversOnPremises = (onPremises ?? []).reduce((n, s) => n + s.partySize, 0);
   const seatedNow = (onPremises ?? []).filter((s) => s.tableId).length;
-
-  // The physical queue at the door: on premises, no table yet. Sorted the
-  // same way the server does for unseatedOnly, so the up/down reorder
-  // buttons match what's on screen.
-  const waiting = useMemo(
-    () => (onPremises ?? [])
-      .filter((s) => !s.tableId)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.signedInAt.localeCompare(b.signedInAt)),
-    [onPremises],
-  );
-  const seated = useMemo(() => (onPremises ?? []).filter((s) => s.tableId), [onPremises]);
   const longestWaitMs = tick >= 0
     ? waiting.reduce((max, s) => Math.max(max, Date.now() - new Date(s.signedInAt).getTime()), 0)
     : 0;
 
-  // Tables with a walk-in sitting at them now, so the merge picker can skip
-  // them. Seated *bookings* aren't in this list (the register doesn't load
-  // reservations) but the server re-checks occupancy on merge-and-seat.
-  const occupiedTableIds = useMemo(
-    () => new Set((onPremises ?? []).filter((s) => s.tableId).map((s) => s.tableId as string)),
-    [onPremises],
-  );
-
   /** Reload the live register and, if it is showing, the All list. */
-  const refreshAll = () => { setListRefresh((n) => n + 1); return load(); };
-
-  const runAction = async (fn: () => Promise<unknown>) => {
-    setActionError("");
-    try { await fn(); await refreshAll(); return true; }
-    catch (err) { setActionError(err instanceof Error ? err.message : "Action failed"); return false; }
-  };
-
-  const doExtend = (s: GuestSignIn, minutes: number) =>
-    runAction(() => extendSignIn(s.id, minutes));
-
-  // With a usable number the host messages the guest on WhatsApp (a prefilled
-  // link, opened before any await so the browser lets the tab through), then
-  // the entry is marked notified. Without one it is the plain "staff called" mark.
-  const doNotify = async (s: GuestSignIn) => {
-    const phone = waPhone(s.guestPhone);
-    if (phone) {
-      window.open(waLink(phone, tableReadyMessage(s.guestName, s.partySize, s.areaName)), "_blank", "noopener");
-    }
-    setNotifyingId(s.id);
-    await runAction(() => notifyGuest(s.id, phone ? "whatsapp" : undefined));
-    setNotifyingId(null);
-  };
-
-  const doReorder = async (s: GuestSignIn, direction: "up" | "down") => {
-    setReorderingId(s.id);
-    await runAction(() => reorderSignIn(s.id, direction));
-    setReorderingId(null);
-  };
+  const refreshAll = () => { setListRefresh((n) => n + 1); return Promise.all([loadDayHistory(), queue.load()]); };
 
   return (
     <div className="space-y-6">
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+      {queue.error && <p className="text-sm text-destructive">{queue.error}</p>}
+      {queue.actionError && <p className="text-sm text-destructive">{queue.actionError}</p>}
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <KpiCard label="On premises now" value={onPremises?.length ?? "—"} definition="Parties currently checked in and on premises, regardless of party size." />
@@ -752,15 +707,14 @@ export default function GuestRegister({
                 key={s.id} s={s}
                 canWrite={canWrite} canDelete={canDelete}
                 isFirst={i === 0} isLast={i === waiting.length - 1}
-                atRisk={isAtRisk(s)}
-                notifying={notifyingId === s.id}
-                reordering={reorderingId === s.id}
-                onNotify={() => doNotify(s)}
+                notifying={queue.notifyingId === s.id}
+                reordering={queue.reorderingId === s.id}
+                onNotify={() => queue.doNotify(s)}
                 onAssign={() => setAssignTarget(s)}
                 onCancel={() => setSignOutTarget(s)}
                 onDelete={() => setDeleteTarget(s)}
-                onMoveUp={() => doReorder(s, "up")}
-                onMoveDown={() => doReorder(s, "down")}
+                onMoveUp={() => queue.doReorder(s, "up")}
+                onMoveDown={() => queue.doReorder(s, "down")}
               />
             ))}
           </div>
@@ -781,7 +735,7 @@ export default function GuestRegister({
                 onEdit={() => setEditTarget(s)}
                 onSignOut={() => setSignOutTarget(s)}
                 onDelete={() => setDeleteTarget(s)}
-                onExtend={(m) => doExtend(s, m)}
+                onExtend={(m) => queue.doExtend(s.id, m)}
               />
             ))}
           </div>
@@ -852,6 +806,7 @@ export default function GuestRegister({
           tables={tables}
           merges={merges}
           occupiedTableIds={occupiedTableIds}
+          allSignIns={onPremises ?? []}
           canWriteBookings={canWriteBookings}
           onClose={() => setAssignTarget(null)}
           onSaved={() => { setAssignTarget(null); refreshAll(); }}
@@ -859,42 +814,31 @@ export default function GuestRegister({
       )}
       <ConfirmDialog
         open={signOutTarget !== null}
-        onOpenChange={(open) => { if (!open) { setSignOutTarget(null); setActionError(""); } }}
+        onOpenChange={(open) => { if (!open) { setSignOutTarget(null); queue.setActionError(""); } }}
         title="Sign this guest out?"
-        description={actionError || (signOutTarget
+        description={queue.actionError || (signOutTarget
           ? `${signOutTarget.guestName} — party of ${signOutTarget.partySize}. ${signOutTarget.tableId ? "Their table is released." : "They'll be marked as left without being seated."}`
           : "")}
         confirmLabel="Sign out"
         loading={busy}
         onConfirm={async () => {
           setBusy(true);
-          const target = signOutTarget!;
-          const done = await runAction(() => signOutGuest(target.id));
+          const done = await queue.doSignOut(signOutTarget!);
           setBusy(false);
-          if (done) {
-            setSignOutTarget(null);
-            if (target.tableId && target.tableName && target.areaId) {
-              checkWaitlistMatch({
-                name: target.tableName,
-                areaId: target.areaId,
-                capacity: target.tableCapacity ?? 0,
-                maxExtraCapacity: target.tableMaxExtraCapacity ?? 0,
-              });
-            }
-          }
+          if (done) setSignOutTarget(null);
         }}
       />
       <ConfirmDialog
         open={deleteTarget !== null}
-        onOpenChange={(open) => { if (!open) { setDeleteTarget(null); setActionError(""); } }}
+        onOpenChange={(open) => { if (!open) { setDeleteTarget(null); queue.setActionError(""); } }}
         title="Delete this register entry?"
-        description={actionError || (deleteTarget ? `${deleteTarget.guestName}'s sign-in will be permanently removed.` : "")}
+        description={queue.actionError || (deleteTarget ? `${deleteTarget.guestName}'s sign-in will be permanently removed.` : "")}
         confirmLabel="Delete"
         destructive
         loading={busy}
         onConfirm={async () => {
           setBusy(true);
-          const done = await runAction(() => deleteSignIn(deleteTarget!.id));
+          const done = await queue.doDelete(deleteTarget!.id);
           setBusy(false);
           if (done) setDeleteTarget(null);
         }}

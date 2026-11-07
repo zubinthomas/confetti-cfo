@@ -11,7 +11,10 @@ import { db, ready, schema } from './client.ts';
 import { escapeLikeTerm } from '../db.ts';
 import { toMinutes, fromMinutes, istNow, istDayBounds } from './reservationsTime.ts';
 import { DEFAULT_AREAS, DEFAULT_LOCATION } from './reservationCatalog.ts';
-import { activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow } from './tableMerges.ts';
+import {
+  activeMergeForTable, mergedGroup, releaseMergeForTable, mergeBlockWindow,
+  tablesCanMerge, loadLinkSet, createMerge,
+} from './tableMerges.ts';
 import { TableOccupiedError, assertNotOccupied, listOccupants } from './tableOccupancy.ts';
 
 // Re-exported for server/db/guestSignIns.ts, which imports the time helpers
@@ -586,6 +589,7 @@ const reservationColumns = {
   seatedAt: schema.reservations.seatedAt,
   departedAt: schema.reservations.departedAt,
   tableMaxExtraCapacity: schema.reservationTables.maxExtraCapacity,
+  groupId: schema.reservations.groupId,
 };
 
 const selectReservations = () => db
@@ -595,6 +599,27 @@ const selectReservations = () => db
   .innerJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.reservationTables.areaId))
   .innerJoin(schema.reservationLocations, eq(schema.reservationLocations.id, schema.reservationAreas.locationId))
   .$dynamic();
+
+/** Attach `groupTableNames` (every table name in a row's party-group, or
+ *  `[]` when it's not grouped) - a second query over the *unfiltered* group
+ *  membership, since the caller's own filters (date/area/table/search) may
+ *  have excluded a sibling row that still needs naming. */
+async function hydrateGroupTableNames<T extends { id: string; groupId: string | null }>(
+  rows: T[],
+): Promise<(T & { groupTableNames: string[] })[]> {
+  const groupIds = [...new Set(rows.map((r) => r.groupId).filter((g): g is string => g !== null))];
+  if (groupIds.length === 0) return rows.map((r) => ({ ...r, groupTableNames: [] as string[] }));
+  const members = await db.select({ groupId: schema.reservations.groupId, tableName: schema.reservationTables.name })
+    .from(schema.reservations)
+    .innerJoin(schema.reservationTables, eq(schema.reservationTables.id, schema.reservations.tableId))
+    .where(inArray(schema.reservations.groupId, groupIds));
+  const byGroup = new Map<string, string[]>();
+  for (const m of members) {
+    if (!m.groupId) continue;
+    byGroup.set(m.groupId, [...(byGroup.get(m.groupId) ?? []), m.tableName]);
+  }
+  return rows.map((r) => ({ ...r, groupTableNames: r.groupId ? (byGroup.get(r.groupId) ?? []) : [] }));
+}
 
 export async function listReservations({ date, tableId, areaId }: { date?: string; tableId?: string; areaId?: string } = {}) {
   await ready();
@@ -606,7 +631,8 @@ export async function listReservations({ date, tableId, areaId }: { date?: strin
   if (areaId) conditions.push(eq(schema.reservationTables.areaId, areaId));
   if (conditions.length > 0) query = query.where(and(...conditions));
 
-  return query.orderBy(asc(schema.reservations.date), asc(schema.reservations.time));
+  const rows = await query.orderBy(asc(schema.reservations.date), asc(schema.reservations.time));
+  return hydrateGroupTableNames(rows);
 }
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -650,11 +676,12 @@ export async function listReservationPage(f: ReservationPageFilter = {}) {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const dir = f.order === 'desc' ? desc : asc;
-  const rows = await selectReservations()
+  const rawRows = await selectReservations()
     .where(where)
     .orderBy(dir(schema.reservations.date), dir(schema.reservations.time), asc(schema.reservations.id))
     .limit(limit)
     .offset(offset);
+  const rows = await hydrateGroupTableNames(rawRows);
 
   const [{ total }] = await db
     .select({ total: count() })
@@ -734,19 +761,52 @@ async function assertSlotFree(
   }
 }
 
+/** Create a booking on one table, or - when `tableIds` names more than one -
+ *  on every table in the set at once, tied together by a shared `groupId`
+ *  (see the `groupId` column comment in schema.ts for why this is sibling
+ *  rows rather than a junction table). Every sibling shares the same
+ *  date/time/duration/partySize/guest; each is independently checked and
+ *  inserted, all-or-nothing in one transaction, so a party never ends up
+ *  holding only one of its two tables. */
 export async function createReservation(
   userId: number,
-  { tableId, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes }:
-  { tableId: string; date: string; time: string; durationMinutes?: number; partySize: number; guestName: string; guestPhone?: string; guestEmail?: string; notes?: string },
+  { tableIds, date, time, durationMinutes, partySize, guestName, guestPhone, guestEmail, notes }:
+  { tableIds: string[]; date: string; time: string; durationMinutes?: number; partySize: number; guestName: string; guestPhone?: string; guestEmail?: string; notes?: string },
   now = new Date(),
 ) {
   await ready();
-  const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
-  if (!table) throw new ReservationError(`No table with id ${tableId}`);
-  if (table.archivedAt) throw new ReservationError(`${table.name} is archived and can't take new bookings`);
+  const uniqueIds = [...new Set(tableIds ?? [])];
+  if (uniqueIds.length === 0) throw new ReservationError('Pick at least one table');
+  const tables = await db.select().from(schema.reservationTables).where(inArray(schema.reservationTables.id, uniqueIds));
+  if (tables.length !== uniqueIds.length) throw new ReservationError('One or more tables no longer exist');
+  const archivedTable = tables.find((t) => t.archivedAt);
+  if (archivedTable) throw new ReservationError(`${archivedTable.name} is archived and can't take new bookings`);
+  if (new Set(tables.map((t) => t.areaId)).size > 1) {
+    throw new ReservationError('All tables in a booking must be in the same area');
+  }
+
+  // A multi-table booking only makes sense on tables staff have configured
+  // as mergeable - same mutual-pair rule createMerge uses for a live merge.
+  if (tables.length > 1) {
+    const linkSet = await loadLinkSet(uniqueIds);
+    for (let i = 0; i < tables.length; i++) {
+      for (let j = i + 1; j < tables.length; j++) {
+        if (!tablesCanMerge(tables[i], tables[j], linkSet)) {
+          throw new ReservationError(
+            `${tables[i].name} and ${tables[j].name} aren't set up to merge. `
+            + 'Set each as a merge target of the other, or turn on free merge for both, in Locations and Tables.',
+          );
+        }
+      }
+    }
+  }
 
   if (!Number.isInteger(partySize) || partySize <= 0) throw new ReservationError('Party size must be a positive whole number');
-  if (partySize > table.capacity) throw new ReservationError(`${table.name} seats up to ${table.capacity} - a party of ${partySize} won't fit`);
+  const combinedCapacity = tables.reduce((s, t) => s + t.capacity + t.maxExtraCapacity, 0);
+  if (partySize > combinedCapacity) {
+    const label = tables.map((t) => t.name).join(' + ');
+    throw new ReservationError(`${label} seats up to ${combinedCapacity} - a party of ${partySize} won't fit`);
+  }
   if (!guestName?.trim()) throw new ReservationError('Guest name is required');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) throw new ReservationError('Date must be in YYYY-MM-DD format');
   if (!/^\d{2}:\d{2}$/.test(time ?? '')) throw new ReservationError('Time must be in HH:MM format');
@@ -757,30 +817,48 @@ export async function createReservation(
   const end = start + duration;
   if (end > 24 * 60) throw new ReservationError("Reservations can't run past midnight - use a shorter duration or an earlier time");
 
-  await assertSlotFree(table, date, start, end);
+  for (const table of tables) await assertSlotFree(table, date, start, end);
   // A booking that starts now or earlier can't go onto a table someone is at.
-  if (windowIsLive(date, start, end, now)) await assertTableNotOccupied(tableId, undefined, now);
+  if (windowIsLive(date, start, end, now)) {
+    for (const table of tables) await assertTableNotOccupied(table.id, undefined, now);
+  }
 
-  const [row] = await db.insert(schema.reservations).values({
-    id: randomUUID(),
-    createdDate: new Date().toISOString(),
-    tableId,
-    date,
-    time,
-    durationMinutes: duration,
-    partySize,
-    guestName: guestName.trim(),
-    guestPhone: guestPhone?.trim() || null,
-    guestEmail: guestEmail?.trim() || null,
-    status: 'pending',
-    notes: notes?.trim() || null,
-    createdByUserId: userId,
-  }).returning().catch(asReservationError);
-  return row;
+  const groupId = tables.length > 1 ? randomUUID() : null;
+  const createdDate = new Date().toISOString();
+  const rows = await db.transaction(async (tx) => {
+    const inserted: (typeof schema.reservations.$inferSelect)[] = [];
+    for (const table of tables) {
+      const [row] = await tx.insert(schema.reservations).values({
+        id: randomUUID(),
+        createdDate,
+        tableId: table.id,
+        groupId,
+        date,
+        time,
+        durationMinutes: duration,
+        partySize,
+        guestName: guestName.trim(),
+        guestPhone: guestPhone?.trim() || null,
+        guestEmail: guestEmail?.trim() || null,
+        status: 'pending',
+        notes: notes?.trim() || null,
+        createdByUserId: userId,
+      }).returning();
+      inserted.push(row);
+    }
+    return inserted;
+  }).catch(asReservationError);
+  // The anchor row represents the whole booking to every existing caller
+  // (route response, Calendar sync, the verify scripts); its siblings exist
+  // in the DB holding their own tables but aren't returned separately.
+  return rows[0];
 }
 
 /** `skipOccupancyCheck` is for the guest register, which has already vetted the
- *  physical table before it advances a linked booking. */
+ *  physical table before it advances a linked booking. A reservation that
+ *  shares a `groupId` with others (a party booked across more than one
+ *  merged table) always moves as a group: every sibling's status/stamps
+ *  change together, in one transaction. */
 export async function updateReservationStatus(
   id: string, status: string, { skipOccupancyCheck = false, now = new Date() }: { skipOccupancyCheck?: boolean; now?: Date } = {},
 ) {
@@ -790,8 +868,12 @@ export async function updateReservationStatus(
   }
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
+
   if (status === 'seated' && existing.status !== 'seated' && !skipOccupancyCheck) {
-    await assertTableNotOccupied(existing.tableId, id, now);
+    for (const sib of siblings) await assertTableNotOccupied(sib.tableId, sib.id, now);
   }
 
   // Keep the floor-view timestamps in step with the lifecycle no matter where
@@ -803,13 +885,32 @@ export async function updateReservationStatus(
   if (status === 'seated' && !existing.seatedAt) patch.seatedAt = stamp;
   if (status === 'completed' && !existing.departedAt) patch.departedAt = stamp;
 
-  const [row] = await db.update(schema.reservations).set(patch)
-    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
-  // A booking that has ended (or was killed) no longer holds its merge, if any.
+  const rows = await db.transaction(async (tx) => {
+    const updated: (typeof schema.reservations.$inferSelect)[] = [];
+    for (const sib of siblings) {
+      const [row] = await tx.update(schema.reservations).set(patch)
+        .where(eq(schema.reservations.id, sib.id)).returning();
+      updated.push(row);
+    }
+    return updated;
+  }).catch(asReservationError);
+
   if (['completed', 'cancelled', 'no_show'].includes(status)) {
-    await releaseMergeForTable(existing.tableId);
+    // A booking that has ended (or was killed) no longer holds its merge, if any.
+    for (const sib of siblings) await releaseMergeForTable(sib.tableId);
+  } else if (status === 'seated' && siblings.length > 1 && existing.createdByUserId != null) {
+    // A party that booked two tables in advance gets them physically pushed
+    // together automatically - the same live merge a walk-in's "Join with
+    // another table" would create - instead of staff re-merging by hand.
+    // Best-effort: a booking's seated status is never blocked by this.
+    if (!(await activeMergeForTable(siblings[0].tableId))) {
+      await createMerge(existing.createdByUserId, {
+        tableIds: siblings.map((s) => s.tableId), mergeKind: 'adjacent',
+      }).catch(() => {});
+    }
   }
-  return row;
+
+  return rows.find((r) => r.id === id)!;
 }
 
 /** Turn every pending/confirmed booking whose time + duration has passed into
@@ -841,7 +942,8 @@ export async function markExpiredReservationsNoShow(now = new Date()) {
 
 /** Stretch a booking's duration. Rejected (friendly message first, then the
  *  0021 EXCLUDE constraint as backstop) if the longer window runs into the
- *  next active booking on the table or past midnight. */
+ *  next active booking on the table or past midnight. A grouped reservation
+ *  (see `groupId`) extends every sibling table together, all-or-nothing. */
 export async function extendReservation(id: string, { durationMinutes }: { durationMinutes: number }) {
   await ready();
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
@@ -856,18 +958,31 @@ export async function extendReservation(id: string, { durationMinutes }: { durat
   if (start + durationMinutes > 24 * 60) {
     throw new ReservationError("A booking can't run past midnight - end earlier instead");
   }
-  const [clash] = await listActiveReservationOverlaps({
-    tableId: await mergedGroup(existing.tableId), date: existing.date, startMin: start, endMin: start + durationMinutes, excludeId: id,
-  });
-  if (clash) throw new ReservationError(`The next booking on this table starts at ${clash.time} (${clash.guestName})`);
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
+  for (const sib of siblings) {
+    const [clash] = await listActiveReservationOverlaps({
+      tableId: await mergedGroup(sib.tableId), date: sib.date, startMin: start, endMin: start + durationMinutes, excludeId: sib.id,
+    });
+    if (clash) throw new ReservationError(`The next booking on this table starts at ${clash.time} (${clash.guestName})`);
+  }
 
-  const [row] = await db.update(schema.reservations).set({ durationMinutes })
-    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
-  return row;
+  const rows = await db.transaction(async (tx) => {
+    const updated: (typeof schema.reservations.$inferSelect)[] = [];
+    for (const sib of siblings) {
+      const [row] = await tx.update(schema.reservations).set({ durationMinutes })
+        .where(eq(schema.reservations.id, sib.id)).returning();
+      updated.push(row);
+    }
+    return updated;
+  }).catch(asReservationError);
+  return rows.find((r) => r.id === id)!;
 }
 
 /** Move a booking to a new date/time/duration (any subset). Same validation as
- *  createReservation; the EXCLUDE constraint backstops the overlap rule. */
+ *  createReservation; the EXCLUDE constraint backstops the overlap rule. A
+ *  grouped reservation reschedules every sibling table together. */
 export async function rescheduleReservation(
   id: string,
   { date, time, durationMinutes }: { date?: string; time?: string; durationMinutes?: number },
@@ -876,8 +991,14 @@ export async function rescheduleReservation(
   await ready();
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
-  const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, existing.tableId));
-  if (table?.archivedAt) throw new ReservationError(`${table.name} is archived - this booking can't be moved`);
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
+  const tables = await db.select().from(schema.reservationTables)
+    .where(inArray(schema.reservationTables.id, siblings.map((s) => s.tableId)));
+  const tableById = new Map(tables.map((t) => [t.id, t]));
+  const archivedTable = tables.find((t) => t.archivedAt);
+  if (archivedTable) throw new ReservationError(`${archivedTable.name} is archived - this booking can't be moved`);
 
   const nextDate = date ?? existing.date;
   const nextTime = time ?? existing.time;
@@ -891,21 +1012,31 @@ export async function rescheduleReservation(
   if (start + nextDuration > 24 * 60) {
     throw new ReservationError("A booking can't run past midnight - use a shorter duration or an earlier time");
   }
-  const [clash] = await listActiveReservationOverlaps({
-    tableId: await mergedGroup(existing.tableId), date: nextDate, startMin: start, endMin: start + nextDuration, excludeId: id,
-  });
-  if (clash) {
-    throw new ReservationError(`${table?.name ?? 'That table'} is already booked ${clash.time}–${fromMinutes(toMinutes(clash.time) + clash.durationMinutes)} (${clash.guestName})`);
+  for (const sib of siblings) {
+    const [clash] = await listActiveReservationOverlaps({
+      tableId: await mergedGroup(sib.tableId), date: nextDate, startMin: start, endMin: start + nextDuration, excludeId: sib.id,
+    });
+    if (clash) {
+      const name = tableById.get(sib.tableId)?.name ?? 'That table';
+      throw new ReservationError(`${name} is already booked ${clash.time}–${fromMinutes(toMinutes(clash.time) + clash.durationMinutes)} (${clash.guestName})`);
+    }
   }
   if (!INACTIVE_STATUSES.includes(existing.status) && existing.status !== 'completed'
     && windowIsLive(nextDate, start, start + nextDuration, now)) {
-    await assertTableNotOccupied(existing.tableId, id, now);
+    for (const sib of siblings) await assertTableNotOccupied(sib.tableId, sib.id, now);
   }
 
-  const [row] = await db.update(schema.reservations)
-    .set({ date: nextDate, time: nextTime, durationMinutes: nextDuration })
-    .where(eq(schema.reservations.id, id)).returning().catch(asReservationError);
-  return row;
+  const rows = await db.transaction(async (tx) => {
+    const updated: (typeof schema.reservations.$inferSelect)[] = [];
+    for (const sib of siblings) {
+      const [row] = await tx.update(schema.reservations)
+        .set({ date: nextDate, time: nextTime, durationMinutes: nextDuration })
+        .where(eq(schema.reservations.id, sib.id)).returning();
+      updated.push(row);
+    }
+    return updated;
+  }).catch(asReservationError);
+  return rows.find((r) => r.id === id)!;
 }
 
 // ── Moving a booking to another table ────────────────────────────────────
@@ -961,6 +1092,9 @@ export async function seatingOptions(id: string, now = new Date()): Promise<Seat
   if (!MOVABLE_STATUSES.includes(booking.status)) {
     throw new ReservationError(`A ${booking.status.replace('_', ' ')} booking can't be moved`);
   }
+  if (booking.groupId) {
+    throw new ReservationError('This booking spans multiple merged tables - cancel and rebook to move it');
+  }
 
   const tables = await listTables({ archived: 'exclude' });
   const areas = await listAreas({ archived: 'exclude' });
@@ -1013,6 +1147,9 @@ export async function moveReservation(
   if (!MOVABLE_STATUSES.includes(existing.status)) {
     throw new ReservationError(`A ${existing.status.replace('_', ' ')} booking can't be moved`);
   }
+  if (existing.groupId) {
+    throw new ReservationError('This booking spans multiple merged tables - cancel and rebook to move it');
+  }
   if (tableId === existing.tableId) throw new ReservationError('This booking is already on that table');
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
   if (!table) throw new ReservationError(`No table with id ${tableId}`);
@@ -1043,6 +1180,9 @@ export async function endReservationEarly(id: string) {
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
   if (['completed', 'cancelled', 'no_show'].includes(existing.status)) return existing;
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
 
   const now = new Date();
   const patch: { status: ReservationStatus; departedAt: string; durationMinutes?: number } = {
@@ -1054,17 +1194,30 @@ export async function endReservationEarly(id: string) {
     const elapsed = nowMin - toMinutes(existing.time);
     if (elapsed >= 1 && elapsed < existing.durationMinutes) patch.durationMinutes = elapsed;
   }
-  const [row] = await db.update(schema.reservations).set(patch)
-    .where(eq(schema.reservations.id, id)).returning();
-  await releaseMergeForTable(existing.tableId);
-  return row;
+  const rows = await db.transaction(async (tx) => {
+    const updated: (typeof schema.reservations.$inferSelect)[] = [];
+    for (const sib of siblings) {
+      if (['completed', 'cancelled', 'no_show'].includes(sib.status)) { updated.push(sib); continue; }
+      const [row] = await tx.update(schema.reservations).set(patch)
+        .where(eq(schema.reservations.id, sib.id)).returning();
+      updated.push(row);
+    }
+    return updated;
+  });
+  for (const sib of siblings) await releaseMergeForTable(sib.tableId);
+  return rows.find((r) => r.id === id)!;
 }
 
 export async function deleteReservation(id: string) {
   await ready();
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
-  await db.delete(schema.reservations).where(eq(schema.reservations.id, id));
-  await releaseMergeForTable(existing.tableId);
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
+  // A party's two tables are deleted together - a partial delete would leave
+  // one table held for a guest who no longer has a reservation.
+  await db.delete(schema.reservations).where(inArray(schema.reservations.id, siblings.map((s) => s.id)));
+  for (const sib of siblings) await releaseMergeForTable(sib.tableId);
   return existing;
 }

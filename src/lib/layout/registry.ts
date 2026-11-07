@@ -28,6 +28,11 @@ export const GATES = {
   // The module is three permission resources: bookings, the guest register and
   // the Locations & Tables catalog. Any one opens it; the tabs gate the rest.
   restaurant: { mode: 'any', requires: [read('Restaurant'), read('Reservation'), read('GuestRegister')] },
+  // The standalone "All Tables" floor view (src/pages/RestaurantFloorView.tsx)
+  // is gated the same as the Reservations tab's own Day view, not the module
+  // gate above - it's an alternate presentation of that one tab, not a wider
+  // surface.
+  restaurantFloor: { requires: [read('Reservation')] },
   import: { mode: 'any', requires: [read('Import'), read('SheetSource')] },
   tally: { requires: [read('TallySource')] },
   // Either half of the page (source management or the sales-orders list)

@@ -111,12 +111,12 @@ await signOut(overstayer);
 
 // ── Creating and rescheduling over "now" on an occupied table ────────────
 const w2 = await walkIn(c4.id);
-const input = (time: string) => ({ tableId: c4.id, date: TODAY, time, durationMinutes: 60, partySize: 2, guestName: 'New' });
+const input = (time: string) => ({ tableIds: [c4.id], date: TODAY, time, durationMinutes: 60, partySize: 2, guestName: 'New' });
 await assert.rejects(() => R.createReservation(UID, input('15:00'), NOW), /walk-in party is at C4/, 'window containing now is refused');
 await assert.rejects(() => R.createReservation(UID, input('14:45'), NOW), /walk-in party is at C4/, 'started earlier, still running');
 const evening = await R.createReservation(UID, input('19:00'), NOW);
 assert.equal(evening.time, '19:00', 'a later window is fine');
-await assert.doesNotReject(() => R.createReservation(UID, { ...input('17:30'), tableId: b2.id, partySize: 2 }, NOW), 'other tables are unaffected');
+await assert.doesNotReject(() => R.createReservation(UID, { ...input('17:30'), tableIds: [b2.id], partySize: 2 }, NOW), 'other tables are unaffected');
 await assert.rejects(() => R.rescheduleReservation(evening.id, { time: '15:00' }, NOW), /walk-in party is at C4/);
 await assert.doesNotReject(() => R.rescheduleReservation(evening.id, { time: '20:00' }, NOW));
 await db.delete(schema.reservations).where(eq(schema.reservations.tableId, b2.id));

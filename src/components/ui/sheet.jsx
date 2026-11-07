@@ -44,7 +44,11 @@ const sheetVariants = cva(
   }
 )
 
-const SheetContent = React.forwardRef(({ side = "right", className, children, ...props }, ref) => (
+const SheetContent = React.forwardRef((
+  /** @type {React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & import("class-variance-authority").VariantProps<typeof sheetVariants>} */
+  { side = "right", className, children, ...props },
+  ref
+) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
@@ -59,27 +63,31 @@ const SheetContent = React.forwardRef(({ side = "right", className, children, ..
 ))
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
-const SheetHeader = ({
-  className,
-  ...props
-}) => (
+const SheetHeader = (
+  /** @type {React.ComponentPropsWithoutRef<"div">} */
+  { className, ...props }
+) => (
   <div
     className={cn("flex flex-col space-y-2 text-center sm:text-left", className)}
     {...props} />
 )
 SheetHeader.displayName = "SheetHeader"
 
-const SheetFooter = ({
-  className,
-  ...props
-}) => (
+const SheetFooter = (
+  /** @type {React.ComponentPropsWithoutRef<"div">} */
+  { className, ...props }
+) => (
   <div
     className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
     {...props} />
 )
 SheetFooter.displayName = "SheetFooter"
 
-const SheetTitle = React.forwardRef(({ className, ...props }, ref) => (
+const SheetTitle = React.forwardRef((
+  /** @type {React.ComponentPropsWithoutRef<typeof SheetPrimitive.Title>} */
+  { className, ...props },
+  ref
+) => (
   <SheetPrimitive.Title
     ref={ref}
     className={cn("text-lg font-semibold text-foreground", className)}
@@ -87,7 +95,11 @@ const SheetTitle = React.forwardRef(({ className, ...props }, ref) => (
 ))
 SheetTitle.displayName = SheetPrimitive.Title.displayName
 
-const SheetDescription = React.forwardRef(({ className, ...props }, ref) => (
+const SheetDescription = React.forwardRef((
+  /** @type {React.ComponentPropsWithoutRef<typeof SheetPrimitive.Description>} */
+  { className, ...props },
+  ref
+) => (
   <SheetPrimitive.Description
     ref={ref}
     className={cn("text-sm text-muted-foreground", className)}

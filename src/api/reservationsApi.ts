@@ -88,6 +88,12 @@ export interface Reservation {
   seatedAt: string | null;
   departedAt: string | null;
   tableMaxExtraCapacity: number;
+  /** Shared by every sibling of a party booked across more than one merged
+   *  table; null for an ordinary single-table reservation. */
+  groupId: string | null;
+  /** Every table name in this reservation's party-group (including this
+   *  row's own table), or [] when it isn't grouped. */
+  groupTableNames: string[];
 }
 
 /** Catalog lists hide archived rows unless asked: "include" returns both, "only" just the archived. */
@@ -143,7 +149,9 @@ export const listReservations = (params: { date?: string; tableId?: string; area
 };
 
 export const createReservation = (data: {
-  tableId: string;
+  /** More than one table merges them into a single party reservation (see
+   *  the server's groupId). They must be mutually mergeable. */
+  tableIds: string[];
   date: string;
   time: string;
   durationMinutes?: number;

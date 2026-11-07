@@ -1395,6 +1395,12 @@ export const reservations = pgTable('reservations', {
   seatedAt: text('seated_at'),      // ISO-8601, set when the party is actually seated
   departedAt: text('departed_at'),  // ISO-8601, set by endReservationEarly / Free table
   createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Shared by every sibling row of a party that was booked across more than
+  // one merged table (see createReservation) - same date/time/duration/
+  // partySize/guest on each row, one row per table. Null for the ordinary
+  // single-table reservation. No FK: it's just a shared randomUUID(), not a
+  // row anyone looks up on its own.
+  groupId: text('group_id'),
   // Google Calendar sync (server/calendar/) - the linked event's id, if any.
   // Null for a reservation that's never been pushed (Calendar not
   // configured, or the push itself failed - sync is best-effort and never
@@ -1453,6 +1459,13 @@ export const guestSignIns = pgTable('guest_sign_ins', {
   // check-in page (server/routes/publicCheckin.ts).
   source: text('source').notNull().default('staff'),
   createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Shared by every sign-in that's joined onto the same table as one combined
+  // party (see assignTable's allowJoin flow in server/db/guestSignIns.ts) -
+  // the inverse of reservations.groupId: there it's one party across several
+  // tables, here it's several independent sign-ins sharing one table. Null
+  // for an ordinary sign-in seated on its own. No FK: just a shared
+  // randomUUID(), not a row anyone looks up on its own.
+  tableGroupId: text('table_group_id'),
 });
 
 // ── Guest self check-in ("Check a Table") ─────────────────────────────────

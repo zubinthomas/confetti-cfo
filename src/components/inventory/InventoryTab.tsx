@@ -298,7 +298,7 @@ function PurchaseOrdersSection({ items, divisionOptions, canWrite }: { items: an
                   title: "Restored unsaved changes",
                   description: "From your last session.",
                   action: (
-                    <ToastAction onClick={() => { clearPoDraft(); setForm(blankPoForm()); }}>
+                    <ToastAction altText="Discard the restored draft" onClick={() => { clearPoDraft(); setForm(blankPoForm()); }}>
                       Discard
                     </ToastAction>
                   ),

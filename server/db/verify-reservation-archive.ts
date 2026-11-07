@@ -90,7 +90,7 @@ assert.ok((await names({ archived: 'include' })).includes('A1'));
 assert.deepEqual(await names({ archived: 'only', areaId: cafe.id }), ['A0', 'A1']);
 await assert.rejects(() => R.archiveTable(t.id, NOW), /already archived/);
 await assert.rejects(() => R.updateTable(t.id, { capacity: 6 }), /archived/);
-await assert.rejects(() => R.createReservation(1, { tableId: t.id, date: '2026-11-01', time: '19:00', partySize: 2, guestName: 'X' }), /archived/);
+await assert.rejects(() => R.createReservation(1, { tableIds: [t.id], date: '2026-11-01', time: '19:00', partySize: 2, guestName: 'X' }), /archived/);
 await assert.rejects(() => createSignIn(1, { guestName: 'X', partySize: 2, tableId: t.id } as never), GuestSignInError);
 await assert.rejects(() => createMerge(1, { tableIds: [t.id, t2.id], mergeKind: 'adjacent' } as never), TableMergeError);
 await assert.rejects(() => R.createTable({ areaId: cafe.id, name: 'Z', capacity: 2, mergeableWith: [t.id] }), /archived/);

@@ -23,9 +23,12 @@ export default function BookingRow({ booking: r, unit, showWhere = false, bookWr
 }) {
   const { table: t, merge, floor } = unit;
   const tableName = merge ? merge.tableNames.join(" ＋ ") : t.name;
+  // A party booked across more than one merged table (see groupId) - named
+  // here so staff know this row is only half the story.
+  const otherTables = r.groupTableNames.filter((n) => n !== t.name);
   // Someone other than this party is on the table: it can't be seated here.
   const taken = floor.state === "occupied" && floor.seatedBooking?.id !== r.id;
-  const late = taken && bookWrite && isLateBooking(r, nowMin);
+  const late = taken && bookWrite && isLateBooking(r, nowMin) && !r.groupId;
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2 text-sm flex-wrap">
@@ -35,6 +38,9 @@ export default function BookingRow({ booking: r, unit, showWhere = false, bookWr
             {showWhere && <>· <span className="text-foreground">{tableName}</span> ({r.areaName}) </>}
             · {r.guestName} · party of {r.partySize}
           </span>
+          {otherTables.length > 0 && (
+            <div className="text-xs text-muted-foreground">also booked: {otherTables.join(", ")}</div>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[r.status]}20`, color: STATUS_COLORS[r.status] }}>

@@ -280,7 +280,7 @@ function OffboardModal({ employee, onClose, onOffboarded }: { employee: any; onC
       title: "Restored unsaved changes",
       description: `Offboarding details for ${employee.full_name} from your last session.`,
       action: (
-        <ToastAction onClick={() => { clearDraft(); setForm(blankOffboardForm()); setSettlementAmount(""); }}>
+        <ToastAction altText="Discard the restored draft" onClick={() => { clearDraft(); setForm(blankOffboardForm()); setSettlementAmount(""); }}>
           Discard
         </ToastAction>
       ),
@@ -700,7 +700,7 @@ export default function HeadcountTab() {
                     title: "Restored unsaved changes",
                     description: "From your last session.",
                     action: (
-                      <ToastAction onClick={() => { clearOnboardDraft(); setForm(emptyForm()); }}>
+                      <ToastAction altText="Discard the restored draft" onClick={() => { clearOnboardDraft(); setForm(emptyForm()); }}>
                         Discard
                       </ToastAction>
                     ),

@@ -39,6 +39,10 @@ export interface GuestSignIn {
   /** 'staff' (entered at the desk) or 'self' (guest check-in page). */
   source: "staff" | "self";
   createdByUserId: number | null;
+  /** Shared with every other sign-in joined onto the same table as one
+   *  combined party (see assignTable's join flow server-side). Null for a
+   *  party seated on its own. */
+  tableGroupId: string | null;
 }
 
 export interface CreateSignInPayload {

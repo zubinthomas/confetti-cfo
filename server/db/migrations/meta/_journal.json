@@ -456,6 +456,20 @@
       "when": 1793865545581,
       "tag": "0065_colorful_ravenous",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1793969614208,
+      "tag": "0066_narrow_ikaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794030125374,
+      "tag": "0067_lame_kree",
+      "breakpoints": true
     }
   ]
 }

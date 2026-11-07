@@ -104,6 +104,7 @@ function signInQuery() {
       notifiedVia: schema.guestSignIns.notifiedVia,
       source: schema.guestSignIns.source,
       createdByUserId: schema.guestSignIns.createdByUserId,
+      tableGroupId: schema.guestSignIns.tableGroupId,
     })
     .from(schema.guestSignIns)
     .leftJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.guestSignIns.areaId))
@@ -269,15 +270,25 @@ export async function estimateWaitMinutes(
 /** Validates seating `partySize` at `tableId` for the window
  *  [seatIso, expectedUntil). Throws a coded GuestSignInError on a booking
  *  clash, an occupied table, or a party that won't fit. Returns the table
- *  on success.
+ *  and (only with `allowJoin`) the walk-in occupants this party is joining,
+ *  so the caller can link them with a shared `tableGroupId`.
  *
  *  `excludeReservationId` is this sign-in's own linked booking, if any: it is
  *  neither a clash (it IS this party) nor an occupant to merge with, even once
  *  link automation has advanced it to `seated`. `excludeSignInId` is this
- *  sign-in itself, excluded from the occupied-now guest sum on a re-seat. */
+ *  sign-in itself, excluded from the occupied-now guest sum on a re-seat.
+ *
+ *  `allowJoin` lets a party join whoever's already walk-in-seated at the
+ *  table instead of being blocked outright: a seated *booking* still hard-
+ *  blocks (joining a booked table isn't supported), but a walk-in occupant's
+ *  partySize is added into the capacity ceiling instead of refusing the
+ *  table. Used only from assignTable's walk-in seating flow. */
 async function checkTableAssignment(
-  { tableId, partySize, seatIso, expectedUntil, excludeSignInId, excludeReservationId }:
-  { tableId: string; partySize: number; seatIso: string; expectedUntil: string | null; excludeSignInId?: string; excludeReservationId?: string },
+  { tableId, partySize, seatIso, expectedUntil, excludeSignInId, excludeReservationId, allowJoin }:
+  {
+    tableId: string; partySize: number; seatIso: string; expectedUntil: string | null;
+    excludeSignInId?: string; excludeReservationId?: string; allowJoin?: boolean;
+  },
 ) {
   const [table] = await db.select().from(schema.reservationTables).where(eq(schema.reservationTables.id, tableId));
   if (!table) throw new GuestSignInError(`No table with id ${tableId}`);
@@ -312,17 +323,25 @@ async function checkTableAssignment(
   // (B) Anyone physically at the unit blocks it outright: an occupied table is
   // not offered to another party, whoever is asking. Counted by the same
   // module the booking side uses, so a walk-in and a seated booking can't both
-  // end up on one table.
-  const [occupant] = await listOccupants(groupIds, {
+  // end up on one table. `allowJoin` lets a walk-in occupant through (their
+  // partySize feeds into the capacity check below instead); a seated booking
+  // always blocks regardless.
+  const occupants = await listOccupants(groupIds, {
     now: new Date(seatIso), excludeSignInId, excludeReservationId,
   });
-  if (occupant) {
+  const bookingOccupant = occupants.find((o) => o.kind === 'booking');
+  const walkInOccupants = occupants.filter((o) => o.kind === 'walk_in');
+  const blockingOccupant = allowJoin ? bookingOccupant : occupants[0];
+  if (blockingOccupant) {
     throw new GuestSignInError(
-      `${unitName} is occupied (${occupant.until <= fromMinutes(startMin) ? `expected to leave at ${occupant.until}, still there` : `until about ${occupant.until}`}). Pick another table, or wait until they leave.`,
+      `${unitName} is occupied (${blockingOccupant.until <= fromMinutes(startMin) ? `expected to leave at ${blockingOccupant.until}, still there` : `until about ${blockingOccupant.until}`}). Pick another table, or wait until they leave.`,
       'table_occupied',
-      { tableName: unitName, until: occupant.until },
+      { tableName: unitName, until: blockingOccupant.until },
     );
   }
+
+  const occupantPartySize = allowJoin ? walkInOccupants.reduce((sum, o) => sum + o.partySize, 0) : 0;
+  const combined = occupantPartySize + partySize;
 
   // How to say the ceiling: a bare number, or "4 + 2 extra", or "8 when joined".
   const capacityText = merge
@@ -331,15 +350,18 @@ async function checkTableAssignment(
       ? `${capacity} seats (${table.capacity} + ${table.maxExtraCapacity} extra)`
       : `${capacity} seats`;
 
-  if (partySize > capacity) {
+  if (combined > capacity) {
+    const joinedBy = walkInOccupants.map((o) => o.guestName).join(', ');
     throw new GuestSignInError(
-      `${unitName} has ${capacityText} - a party of ${partySize} won't fit.`,
+      occupantPartySize > 0
+        ? `${unitName} already seats ${joinedBy} (${occupantPartySize}) - adding a party of ${partySize} needs ${combined} seats, but it only has ${capacityText}.`
+        : `${unitName} has ${capacityText} - a party of ${partySize} won't fit.`,
       'over_capacity',
-      { tableName: unitName, occupants: 0, partySize, capacity, combined: partySize, alreadyMerged: !!merge },
+      { tableName: unitName, occupants: occupantPartySize, partySize, capacity, combined, alreadyMerged: !!merge },
     );
   }
 
-  return table;
+  return { table, joinedWith: walkInOccupants };
 }
 
 // ── Write ────────────────────────────────────────────────────────────────
@@ -387,7 +409,7 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
   let expectedUntil: string | null = input.expectedUntil ?? null;
   let sortOrder = 0;
   if (tableId) {
-    const table = await checkTableAssignment({
+    const { table } = await checkTableAssignment({
       tableId, partySize, seatIso: signedInAt, expectedUntil,
       excludeReservationId: reservationId ?? undefined,
     });
@@ -470,8 +492,22 @@ export async function updateSignIn(id: string, patch: Partial<CreateSignInInput>
   return getSignIn(id);
 }
 
+/** Everyone sharing `tableGroupId` as one combined party - just `[solo]` when
+ *  it's null. Mirrors the `reservations.groupId` sibling-fetch idiom. */
+async function tableGroupSiblings(solo: typeof schema.guestSignIns.$inferSelect) {
+  if (!solo.tableGroupId) return [solo];
+  return db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.tableGroupId, solo.tableGroupId));
+}
+
 /** Seat a party at a table (or move them). Pass `tableId: null` to unseat.
- *  Runs the clash / occupied / capacity checks. */
+ *  Runs the clash / occupied / capacity checks.
+ *
+ *  A party already sharing a table via `tableGroupId` (see checkTableAssignment's
+ *  `allowJoin`) is tied together for unseat and move: the whole group clears
+ *  or relocates as one, since there's no such thing as partially vacating or
+ *  moving half of a shared table. A solo party seated onto an occupied table
+ *  joins it here: a fresh `tableGroupId` is minted (or the occupant's own, if
+ *  they're already joined with someone else) and written onto both rows. */
 export async function assignTable(
   id: string,
   { tableId, expectedUntil }: { tableId: string | null; expectedUntil?: string },
@@ -481,8 +517,15 @@ export async function assignTable(
   if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
   if (existing.signedOutAt) throw new GuestSignInError('This guest has already signed out');
 
+  const siblings = await tableGroupSiblings(existing);
+
   if (!tableId) {
-    await db.update(schema.guestSignIns).set({ tableId: null, expectedUntil: null }).where(eq(schema.guestSignIns.id, id));
+    await db.transaction(async (tx) => {
+      for (const s of siblings) {
+        await tx.update(schema.guestSignIns).set({ tableId: null, expectedUntil: null, tableGroupId: null })
+          .where(eq(schema.guestSignIns.id, s.id));
+      }
+    });
     if (existing.tableId) await releaseMergeForTable(existing.tableId);
     return getSignIn(id);
   }
@@ -495,16 +538,41 @@ export async function assignTable(
     nextExpected = addMinutesIso(seatIso, DEFAULT_TURN_MINUTES);
   }
 
-  await checkTableAssignment({
-    tableId, partySize: existing.partySize, seatIso, expectedUntil: nextExpected,
+  // A grouped party relocating moves as a unit, checked against its combined
+  // size; it doesn't itself join whoever (if anyone) is at the new table.
+  const isGroupMove = siblings.length > 1;
+  const { joinedWith } = await checkTableAssignment({
+    tableId,
+    partySize: isGroupMove ? siblings.reduce((sum, s) => sum + s.partySize, 0) : existing.partySize,
+    seatIso, expectedUntil: nextExpected,
     excludeSignInId: id, excludeReservationId: existing.reservationId ?? undefined,
+    allowJoin: !isGroupMove,
   });
 
-  await db.update(schema.guestSignIns).set({
-    tableId,
-    seatedAt: existing.seatedAt ?? nowIso,
-    expectedUntil: nextExpected,
-  }).where(eq(schema.guestSignIns.id, id));
+  let tableGroupId = existing.tableGroupId;
+  if (!isGroupMove && joinedWith.length > 0) {
+    const occupantIds = joinedWith.map((o) => o.signInId).filter((x): x is string => !!x);
+    const occupantRows = occupantIds.length
+      ? await db.select({ id: schema.guestSignIns.id, tableGroupId: schema.guestSignIns.tableGroupId })
+        .from(schema.guestSignIns).where(inArray(schema.guestSignIns.id, occupantIds))
+      : [];
+    tableGroupId = occupantRows.find((r) => r.tableGroupId)?.tableGroupId ?? randomUUID();
+    const needsBackfill = occupantRows.filter((r) => !r.tableGroupId).map((r) => r.id);
+    if (needsBackfill.length > 0) {
+      await db.update(schema.guestSignIns).set({ tableGroupId }).where(inArray(schema.guestSignIns.id, needsBackfill));
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    for (const s of siblings) {
+      await tx.update(schema.guestSignIns).set({
+        tableId,
+        seatedAt: s.seatedAt ?? nowIso,
+        expectedUntil: nextExpected,
+        tableGroupId,
+      }).where(eq(schema.guestSignIns.id, s.id));
+    }
+  });
   // Moving the party off a merged table ends that merge (they were holding it).
   if (existing.tableId && existing.tableId !== tableId) await releaseMergeForTable(existing.tableId);
   return getSignIn(id);
@@ -556,7 +624,9 @@ export async function reorder(id: string, direction: 'up' | 'down') {
 }
 
 /** Push a seated walk-in's expected turn time out, capped at the next booking
- *  on the table (mirrors extendReservation). */
+ *  on the table (mirrors extendReservation). A party sharing the table with
+ *  another via `tableGroupId` extends together - two different "leaving at"
+ *  clocks for people sitting at the same table would make no sense. */
 export async function extendSignIn(id: string, { minutes }: { minutes: number }) {
   await ready();
   const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
@@ -580,21 +650,36 @@ export async function extendSignIn(id: string, { minutes }: { minutes: number })
     throw new GuestSignInError(`The next booking on this table starts at ${r.time} (${r.guestName})`);
   }
 
-  await db.update(schema.guestSignIns).set({ expectedUntil: nextExpected }).where(eq(schema.guestSignIns.id, id));
+  const siblings = await tableGroupSiblings(existing);
+  await db.transaction(async (tx) => {
+    for (const s of siblings) {
+      await tx.update(schema.guestSignIns).set({ expectedUntil: nextExpected }).where(eq(schema.guestSignIns.id, s.id));
+    }
+  });
   return getSignIn(id);
 }
 
+/** A party sharing the table with another via `tableGroupId` signs out
+ *  together - the whole shared table clears in one action. */
 export async function signOut(id: string) {
   await ready();
   const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
   if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
   if (existing.signedOutAt) throw new GuestSignInError('This guest is already signed out');
 
-  await db.update(schema.guestSignIns).set({ signedOutAt: new Date().toISOString() }).where(eq(schema.guestSignIns.id, id));
+  const siblings = await tableGroupSiblings(existing);
+  const signedOutAt = new Date().toISOString();
+  await db.transaction(async (tx) => {
+    for (const s of siblings) {
+      if (s.signedOutAt) continue;
+      await tx.update(schema.guestSignIns).set({ signedOutAt }).where(eq(schema.guestSignIns.id, s.id));
+    }
+  });
   if (existing.tableId) await releaseMergeForTable(existing.tableId);
 
-  if (existing.reservationId) {
-    const [r] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, existing.reservationId));
+  for (const s of siblings) {
+    if (!s.reservationId) continue;
+    const [r] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, s.reservationId));
     await maybeAdvanceReservation(r, 'completed');
   }
   return getSignIn(id);

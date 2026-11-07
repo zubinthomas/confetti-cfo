@@ -29,6 +29,7 @@ const Compliance = lazy(() => import('@/pages/Compliance'));
 const MyProfile = lazy(() => import('@/pages/MyProfile'));
 const InventoryPage = lazy(() => import('@/pages/Inventory'));
 const RestaurantPage = lazy(() => import('@/pages/Restaurant'));
+const RestaurantFloorView = lazy(() => import('@/pages/RestaurantFloorView'));
 
 const Splash = ({ message }: { message?: string }) => (
   <div className="fixed inset-0 flex flex-col items-center justify-center gap-3">
@@ -116,6 +117,10 @@ const AuthenticatedApp = () => {
           </Route>
           <Route element={<RequirePermission {...GATES.restaurant} />}>
             <Route path="/restaurant" element={<Suspense fallback={<Splash />}><RestaurantPage /></Suspense>} />
+          </Route>
+          {/* Standalone, shell-free "All Tables" floor view - see RestaurantFloorView.tsx. */}
+          <Route element={<RequirePermission {...GATES.restaurantFloor} />}>
+            <Route path="/restaurant/floor" element={<Suspense fallback={<Splash />}><RestaurantFloorView /></Suspense>} />
           </Route>
           {/* Identity-based, not permission-gated - see server/db/employeeSelf.ts.
               Renders its own "not linked" message for anyone who navigates here

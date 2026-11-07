@@ -1,127 +1,35 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  listLocations, createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
-  listAreas, createArea, updateArea, archiveArea, restoreArea, purgeArea,
-  listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
-  listReservations, createReservation, updateReservationStatus, deleteReservation,
-  extendReservation, endReservationEarly, listTableMerges, releaseTableMerge, listTableOccupancy,
-  type TableOccupancy, type ReservationLocation, type ReservationArea, type ReservationTable, type Reservation, type ReservationStatus, type TableMerge,
+  createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
+  createArea, updateArea, archiveArea, restoreArea, purgeArea,
+  createTable, updateTable, archiveTable, restoreTable, purgeTable,
+  type ReservationLocation, type ReservationArea, type ReservationTable,
 } from "@/api/reservationsApi";
-import { listSignIns, signOutGuest, extendSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
-import { checkWaitlistMatch } from "@/lib/waitlistMatch";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import GuestRegister from "@/components/reservations/GuestRegister";
+import GuestRegister, { SignInModal, AssignTableModal } from "@/components/reservations/GuestRegister";
 import AllReservations from "@/components/reservations/AllReservations";
-import AreaSelect from "@/components/reservations/AreaSelect";
+import BookingModal from "@/components/reservations/BookingModal";
 import CatalogManager from "@/components/reservations/CatalogManager";
 import GuestCheckInSettings from "@/components/reservations/GuestCheckInSettings";
 import MenuManager from "@/components/reservations/MenuManager";
 import DayFloor, { DayFloorControls, isDayLayout, type DayLayout } from "@/components/reservations/DayFloor";
 import type { TableUnit } from "@/components/reservations/TableCard";
 import { type CatalogKind } from "@/components/reservations/CatalogParts";
+import type { GuestSignIn } from "@/api/guestSignInsApi";
 import { useAuth } from "@/lib/AuthContext";
 import { useTabs } from "@/lib/layout/useTabs";
-import { istDateStr, istMinutes, istClock } from "@/lib/ist";
-import { ACTIVE_STATUSES, allCollapsed, collapseAreas, expandAreas, floorInfoFor, isIdList, toggleId, type FloorInfo } from "@/components/reservations/reservationUi";
+import { istDateStr, istMinutes } from "@/lib/ist";
+import { ACTIVE_STATUSES, allCollapsed, collapseAreas, expandAreas, isIdList, toggleId } from "@/components/reservations/reservationUi";
 import { usePersistedState } from "@/hooks/usePersistedState";
+import { useFloorData } from "@/hooks/useFloorData";
 
 const todayStr = () => istDateStr();
 
 const nowMinutes = () => istMinutes();
-const clockOf = istClock;
-
-const EMPTY_BOOKING = { areaId: "", tableId: "", date: todayStr(), time: "19:00", durationMinutes: "90", partySize: "2", guestName: "", guestPhone: "", guestEmail: "", notes: "" };
-
-function BookingModal({ locations, areas, tables, defaultDate, onClose, onSaved }: {
-  locations: ReservationLocation[]; areas: ReservationArea[]; tables: ReservationTable[]; defaultDate: string;
-  onClose: () => void; onSaved: () => void;
-}) {
-  const [form, setForm] = useState({ ...EMPTY_BOOKING, date: defaultDate, areaId: areas.find((a) => tables.some((t) => t.areaId === a.id))?.id ?? areas[0]?.id ?? "" });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const tablesForArea = tables.filter((t) => t.areaId === form.areaId);
-  useEffect(() => {
-    if (!tablesForArea.some((t) => t.id === form.tableId)) {
-      setForm((f) => ({ ...f, tableId: tablesForArea[0]?.id ?? "" }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.areaId]);
-
-  const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
-
-  const save = async () => {
-    setError("");
-    if (!form.tableId) { setError("Pick a table"); return; }
-    if (!form.guestName.trim()) { setError("Guest name is required"); return; }
-    const partySize = Number(form.partySize);
-    const durationMinutes = Number(form.durationMinutes);
-    if (!partySize || partySize <= 0) { setError("Enter a valid party size"); return; }
-    setSaving(true);
-    try {
-      await createReservation({
-        tableId: form.tableId, date: form.date, time: form.time, durationMinutes, partySize,
-        guestName: form.guestName.trim(), guestPhone: form.guestPhone.trim() || undefined,
-        guestEmail: form.guestEmail.trim() || undefined, notes: form.notes.trim() || undefined,
-      });
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create reservation");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-card rounded-2xl border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">New Reservation</h2>
-          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
-        </div>
-        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Area *</label>
-            <AreaSelect
-              value={form.areaId} onChange={(id) => update("areaId", id)}
-              locations={locations} areas={areas}
-              className="w-full text-base sm:text-sm border border-border rounded-lg px-3 py-2 max-sm:min-h-11 bg-background text-foreground"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Table *</label>
-            <select
-              value={form.tableId} onChange={(e) => update("tableId", e.target.value)}
-              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background text-foreground"
-            >
-              {tablesForArea.length === 0 && <option value="">No tables in this area</option>}
-              {tablesForArea.map((t) => <option key={t.id} value={t.id}>{t.name} (seats {t.capacity})</option>)}
-            </select>
-          </div>
-          <FormField label="Date *" name="date" type="date" value={form.date} onChange={update} />
-          <FormField label="Time *" name="time" type="time" value={form.time} onChange={update} />
-          <FormField label="Duration (min)" name="durationMinutes" type="number" value={form.durationMinutes} onChange={update} />
-          <FormField label="Party Size *" name="partySize" type="number" value={form.partySize} onChange={update} />
-          <FormField label="Guest Name *" name="guestName" value={form.guestName} onChange={update} />
-          <FormField label="Guest Phone" name="guestPhone" value={form.guestPhone} onChange={update} />
-          <div className="sm:col-span-2"><FormField label="Guest Email" name="guestEmail" value={form.guestEmail} onChange={update} /></div>
-          <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes} onChange={update} /></div>
-        </div>
-        {error && <p className="px-6 text-xs text-destructive -mt-2 mb-2">{error}</p>}
-        <div className="px-6 pb-6 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
-          <button onClick={save} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Book
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ModalShell({ title, onClose, onSave, saving, error, children }: {
   title: string; onClose: () => void; onSave: () => void; saving: boolean; error: string; children: React.ReactNode;
@@ -340,28 +248,9 @@ export default function ReservationsTab() {
   const menuDelete = can("Menu", "delete");
   // Splitting a merge is open to either floor permission (same as the API).
   const mergeWrite = bookWrite || regWrite;
-  // Free table / Extend touch the seated booking and the signed-in guests, so
-  // the user needs the write permission for every part the table actually has.
-  // A walk-in the viewer can't name still needs register write to end or extend.
-  const floorWritable = (floor: { seatedBooking?: unknown; guests: unknown[]; hiddenWalkIns: number }) =>
-    (!floor.seatedBooking || bookWrite) && (floor.guests.length + floor.hiddenWalkIns === 0 || regWrite);
 
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
   const { tabs: viewTabs, active: view, setActive: setView } = useTabs("restaurant");
-  // Everything the server has, archived rows included. `locations`, `areas` and
-  // `tables` below are the active subset, which is what pickers, the guest
-  // register and the counts use; the full lists only feed the day view (an
-  // archived table still shows its past bookings) and the manager's archive view.
-  const [allLocations, setAllLocations] = useState<ReservationLocation[]>([]);
-  const [allAreas, setAllAreas] = useState<ReservationArea[]>([]);
-  const [allTables, setAllTables] = useState<ReservationTable[]>([]);
-  const locations = useMemo(() => allLocations.filter((l) => !l.archivedAt), [allLocations]);
-  const areas = useMemo(() => allAreas.filter((a) => !a.archivedAt), [allAreas]);
-  const tables = useMemo(() => allTables.filter((t) => !t.archivedAt), [allTables]);
-  const [reservations, setReservations] = useState<Reservation[] | null>(null);
-  const [daySignIns, setDaySignIns] = useState<GuestSignIn[]>([]);
-  const [occupancy, setOccupancy] = useState<TableOccupancy[]>([]);
-  const [merges, setMerges] = useState<TableMerge[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   // Day = per-table floor view for one date; All = flat, filterable list of every booking.
   const [dayMode, setDayMode] = useState<"day" | "all">("day");
@@ -370,8 +259,6 @@ export default function ReservationsTab() {
   // as collapsed ids, so an area created later starts open.
   const [dayLayout, setDayLayout] = usePersistedState<DayLayout>("restaurant.day.view", "grid", isDayLayout);
   const [dayCollapsed, setDayCollapsed] = usePersistedState<string[]>("restaurant.day.collapsed", [], isIdList);
-  const [loadingCatalog, setLoadingCatalog] = useState(true);
-  const [error, setError] = useState("");
 
   const [showBooking, setShowBooking] = useState(false);
   const [locationModal, setLocationModal] = useState<{ location: ReservationLocation | null } | null>(null);
@@ -382,38 +269,25 @@ export default function ReservationsTab() {
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
 
-  const loadCatalog = async () => {
-    setLoadingCatalog(true);
-    try {
-      const [locs, ars, tbls] = await Promise.all([listLocations("include"), listAreas(undefined, "include"), listTables(undefined, "include")]);
-      setAllLocations(locs);
-      setAllAreas(ars);
-      setAllTables(tbls);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load locations, areas and tables");
-    } finally {
-      setLoadingCatalog(false);
-    }
-  };
+  // Per-guest actions from a table's dialog (TableCard's walk-in rows) -
+  // distinct from the booking-centric modals above.
+  const [editingGuest, setEditingGuest] = useState<GuestSignIn | null>(null);
+  const [assigningGuest, setAssigningGuest] = useState<GuestSignIn | null>(null);
+  const [signOutGuestTarget, setSignOutGuestTarget] = useState<GuestSignIn | null>(null);
+  const [deleteGuestTarget, setDeleteGuestTarget] = useState<GuestSignIn | null>(null);
+  const [guestActionBusy, setGuestActionBusy] = useState(false);
+  // DayFloor's own table dialog suspends itself (instead of stacking a second
+  // overlay) while one of these return-to-parent modals is up.
+  const detailDialogSuspended = editingGuest !== null || signOutGuestTarget !== null || deleteGuestTarget !== null;
 
-  const loadReservations = async (date: string) => {
-    if (!bookRead) return;
-    try {
-      const [rs, signIns, ms, occ] = await Promise.all([
-        listReservations({ date }),
-        // Names only come back for someone with Guest Register access.
-        listSignIns({ date }).catch(() => [] as GuestSignIn[]),
-        listTableMerges().catch(() => [] as TableMerge[]),
-        listTableOccupancy().catch(() => [] as TableOccupancy[]),
-      ]);
-      setReservations(rs);
-      setDaySignIns(signIns);
-      setMerges(ms);
-      setOccupancy(occ);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load reservations");
-    }
-  };
+  const {
+    allLocations, allAreas, allTables, locations, areas, tables,
+    reservations, loadingCatalog, error, setError,
+    loadCatalog, loadReservations,
+    dayAreas, unitsFor, floorWritable,
+    freeTable, extendFloor, splitMerge, setReservationStatus, removeReservation,
+    extendGuest, signOutOneGuest, deleteGuest, merges, occupiedTableIds, daySignIns,
+  } = useFloorData({ bookRead, bookWrite, regWrite });
 
   useEffect(() => { loadCatalog(); }, []);
   // Re-fetch whenever the day view is (re-)entered or the date changes: the
@@ -428,136 +302,14 @@ export default function ReservationsTab() {
     return () => clearInterval(timer);
   }, [bookRead, selectedDate]);
 
-  const reservationsByTable = useMemo(() => {
-    const map = new Map<string, Reservation[]>();
-    for (const r of reservations ?? []) {
-      const list = map.get(r.tableId) ?? [];
-      list.push(r);
-      map.set(r.tableId, list);
-    }
-    for (const list of map.values()) list.sort((a, b) => a.time.localeCompare(b.time));
-    return map;
-  }, [reservations]);
-
-  // Active tables, plus an archived one that has bookings on the selected day, so
-  // a past day never loses a booking just because its table was retired later.
-  const dayTables = useMemo(
-    () => allTables.filter((t) => !t.archivedAt || reservationsByTable.has(t.id)),
-    [allTables, reservationsByTable],
-  );
-  const dayAreas = useMemo(
-    () => allAreas.filter((a) => !a.archivedAt || dayTables.some((t) => t.areaId === a.id)),
-    [allAreas, dayTables],
-  );
-
-  const signInsByTable = useMemo(() => {
-    const map = new Map<string, GuestSignIn[]>();
-    for (const s of daySignIns) {
-      if (!s.tableId || s.signedOutAt) continue;
-      const list = map.get(s.tableId) ?? [];
-      list.push(s);
-      map.set(s.tableId, list);
-    }
-    return map;
-  }, [daySignIns]);
-
-  const isToday = selectedDate === todayStr();
-
-  const occupancyByTable = useMemo(() => new Map(occupancy.map((o) => [o.tableId, o])), [occupancy]);
-
-  const mergeByTableId = useMemo(() => {
-    const map = new Map<string, TableMerge>();
-    for (const m of merges) for (const id of m.tableIds) map.set(id, m);
-    return map;
-  }, [merges]);
-
-  /** Live status of a table (or a merged unit, when `merge` is passed) on the
-   *  selected day: who's sitting there now, who is late, and what's next. */
-  const tableFloor = (t: ReservationTable, merge?: TableMerge): FloorInfo => {
-    const ids = merge ? merge.tableIds : [t.id];
-    const here = ids.map((id) => occupancyByTable.get(id)).filter((o): o is TableOccupancy => !!o);
-    return floorInfoFor({
-      bookings: ids.flatMap((id) => reservationsByTable.get(id) ?? []),
-      guests: ids.flatMap((id) => signInsByTable.get(id) ?? []),
-      occupancy: here.length > 0
-        ? { parties: here.reduce((n, o) => n + o.parties, 0), until: here.map((o) => o.until).sort().pop()! }
-        : undefined,
-      nowMin: nowMinutes(),
-      isToday,
-      clock: clockOf,
-    });
-  };
-
   // One entry per table, or per merged unit (drawn once, at its first table).
-  const dayUnits: TableUnit[] = dayTables
-    .filter((t) => {
-      const m = mergeByTableId.get(t.id);
-      return !m || m.tableIds[0] === t.id;
-    })
-    .map((t) => {
-      const merge = mergeByTableId.get(t.id);
-      const unitIds = merge ? merge.tableIds : [t.id];
-      const bookings = unitIds.flatMap((id) => reservationsByTable.get(id) ?? [])
-        .sort((a, b) => a.time.localeCompare(b.time));
-      return { key: merge ? merge.id : t.id, table: t, merge, bookings, floor: tableFloor(t, merge) };
-    });
+  const dayUnits: TableUnit[] = unitsFor(selectedDate);
   const dayAreaIds = dayAreas.filter((a) => dayUnits.some((u) => u.table.areaId === a.id)).map((a) => a.id);
 
   const coversBooked = (reservations ?? [])
     .filter((r) => ACTIVE_STATUSES.includes(r.status))
     .reduce((sum, r) => sum + r.partySize, 0);
   const activeCount = (reservations ?? []).filter((r) => ACTIVE_STATUSES.includes(r.status)).length;
-
-  const setReservationStatus = async (id: string, status: ReservationStatus) => {
-    setError("");
-    try {
-      await updateReservationStatus(id, status);
-      loadReservations(selectedDate);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update reservation");
-    }
-  };
-
-  const runFloorAction = async (fn: () => Promise<unknown>) => {
-    setError("");
-    try {
-      await fn();
-      await loadReservations(selectedDate);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed");
-    }
-  };
-
-  const freeTable = (floor: FloorInfo, table: ReservationTable) => runFloorAction(async () => {
-    if (floor.seatedBooking) await endReservationEarly(floor.seatedBooking.id);
-    await Promise.all(floor.guests.map((g) => signOutGuest(g.id)));
-    checkWaitlistMatch(table);
-  });
-
-  const extendFloor = (floor: FloorInfo, minutes: number) => runFloorAction(async () => {
-    if (floor.seatedBooking) {
-      await extendReservation(floor.seatedBooking.id, floor.seatedBooking.durationMinutes + minutes);
-    }
-    await Promise.all(floor.guests.map((g) => extendSignIn(g.id, minutes)));
-  });
-
-  const splitMerge = (merge: TableMerge) => runFloorAction(async () => {
-    await releaseTableMerge(merge.id);
-    for (const id of merge.tableIds) {
-      const t = tables.find((x) => x.id === id);
-      if (t) checkWaitlistMatch(t);
-    }
-  });
-
-  const removeReservation = async (id: string) => {
-    setError("");
-    try {
-      await deleteReservation(id);
-      loadReservations(selectedDate);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete reservation");
-    }
-  };
 
   const confirmCatalogAction = async () => {
     if (!catalogAction) return;
@@ -669,9 +421,18 @@ export default function ReservationsTab() {
                   onToggleArea={(id) => setDayCollapsed((ids) => toggleId(ids, id))}
                   bookWrite={bookWrite} bookDelete={bookDelete} mergeWrite={mergeWrite}
                   floorWritable={floorWritable}
-                  onSplit={splitMerge} onExtend={extendFloor} onFree={(u) => freeTable(u.floor, u.table)}
-                  onStatus={setReservationStatus} onRemove={removeReservation}
+                  regWrite={regWrite} regDelete={regDelete}
+                  onSplit={(m) => splitMerge(selectedDate, m)} onExtend={(f, m) => extendFloor(selectedDate, f, m)}
+                  onFree={(u) => freeTable(selectedDate, u.floor, u.table)}
+                  onStatus={(id, status) => setReservationStatus(selectedDate, id, status)}
+                  onRemove={(id) => removeReservation(selectedDate, id)}
                   onMoved={() => loadReservations(selectedDate)} nowMin={nowMinutes()}
+                  onExtendGuest={(id, m) => extendGuest(selectedDate, id, m)}
+                  onSignOutGuest={setSignOutGuestTarget}
+                  onEditGuest={setEditingGuest}
+                  onAssignGuest={setAssigningGuest}
+                  onDeleteGuest={setDeleteGuestTarget}
+                  detailDialogSuspended={detailDialogSuspended}
                 />
                 {areas.every((a) => tables.filter((t) => t.areaId === a.id).length === 0) && (
                   <p className="text-sm text-muted-foreground text-center py-8">No tables yet - add some under "Locations &amp; Tables".</p>
@@ -744,6 +505,53 @@ export default function ReservationsTab() {
           onSaved={() => { setTableModal(null); loadCatalog(); }}
         />
       )}
+      {editingGuest && (
+        <SignInModal
+          locations={locations} areas={areas} existing={editingGuest}
+          onClose={() => setEditingGuest(null)}
+          onSaved={() => { setEditingGuest(null); loadReservations(selectedDate); }}
+        />
+      )}
+      {assigningGuest && (
+        <AssignTableModal
+          signIn={assigningGuest} tables={tables} merges={merges} occupiedTableIds={occupiedTableIds}
+          allSignIns={daySignIns}
+          canWriteBookings={bookWrite}
+          onClose={() => setAssigningGuest(null)}
+          onSaved={() => { setAssigningGuest(null); loadReservations(selectedDate); }}
+        />
+      )}
+      <ConfirmDialog
+        open={signOutGuestTarget !== null}
+        onOpenChange={(open) => { if (!open) { setSignOutGuestTarget(null); setError(""); } }}
+        title="Sign this guest out?"
+        description={error || (signOutGuestTarget
+          ? `${signOutGuestTarget.guestName} — party of ${signOutGuestTarget.partySize}. Their table is released.`
+          : "")}
+        confirmLabel="Sign out"
+        loading={guestActionBusy}
+        onConfirm={async () => {
+          setGuestActionBusy(true);
+          await signOutOneGuest(selectedDate, signOutGuestTarget!);
+          setGuestActionBusy(false);
+          setSignOutGuestTarget(null);
+        }}
+      />
+      <ConfirmDialog
+        open={deleteGuestTarget !== null}
+        onOpenChange={(open) => { if (!open) { setDeleteGuestTarget(null); setError(""); } }}
+        title="Delete this register entry?"
+        description={error || (deleteGuestTarget ? `${deleteGuestTarget.guestName}'s sign-in will be permanently removed.` : "")}
+        confirmLabel="Delete"
+        destructive
+        loading={guestActionBusy}
+        onConfirm={async () => {
+          setGuestActionBusy(true);
+          await deleteGuest(selectedDate, deleteGuestTarget!.id);
+          setGuestActionBusy(false);
+          setDeleteGuestTarget(null);
+        }}
+      />
       <ConfirmDialog
         open={catalogAction !== null}
         onOpenChange={(open) => { if (!open) { setCatalogAction(null); setDeleteError(""); } }}
