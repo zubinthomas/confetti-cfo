@@ -42,6 +42,7 @@ export const GATES = {
   settings: { requires: [read('Settings')] },
   users: { mode: 'any', requires: [read('User'), read('Invite'), read('Role'), read('Layout')] },
   costCentres: { requires: [read('CostCentre')] },
+  documentTemplates: { requires: [read('DocumentTemplate')] },
 } satisfies Record<string, Gate>;
 
 export interface NavItem extends NavItemBase {
@@ -95,6 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'tally', label: 'Tally Integration', to: '/data/tally', icon: Cable, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.tally },
   { id: 'petpooja', label: 'PetPooja Integration', to: '/data/petpooja', icon: Receipt, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.petpooja },
   { id: 'cost-centres', label: 'Cost Centres', to: '/settings/cost-centres', icon: Layers, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.costCentres },
+  { id: 'document-templates', label: 'Card & Slip Designs', to: '/settings/document-templates', icon: LayoutTemplate, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.documentTemplates },
   { id: 'users', label: 'Users and Permissions', to: '/settings/users', icon: Users, group: 'Settings', defaultPlacement: 'userMenu', gate: GATES.users },
 ];
 

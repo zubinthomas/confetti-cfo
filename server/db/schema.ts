@@ -18,6 +18,7 @@ import {
 import { sql } from 'drizzle-orm';
 import type { ParsedWorkbook, RecordChange } from '../import/types.ts';
 import type { StoredLayout } from './layouts.ts';
+import type { TemplateElement } from './documentTemplates.ts';
 
 // ── Closed value sets (verified distinct values) ─────────────────────────────
 export const unitTypeEnum = pgEnum('unit_type', ['department', 'outlet']);
@@ -291,6 +292,29 @@ export const userLayouts = pgTable('user_layouts', {
   updatedAt: text('updated_at').notNull(), // ISO-8601
 }, (t) => [
   uniqueIndex('user_layouts_user').on(t.userId),
+]);
+
+// ── Document templates (ID cards, salary slips) - see server/db/documentTemplates.ts
+// for the element schema, field catalog and render-side logic. One row per
+// saved design; `elements` is the whole layout (positions in mm, matching
+// jsPDF's own coordinate space) so generation is "interpret this array" rather
+// than a hardcoded drawing function. At most one row per docType can be the
+// default, enforced here (a partial unique index, same convention as the
+// reservation_* `archivedAt is null` indexes below) and again in
+// setDefaultTemplate's transaction - belt and suspenders, not either/or. ─────
+export const docTypeEnum = pgEnum('doc_type', ['id_card', 'salary_slip']);
+
+export const documentTemplates = pgTable('document_templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  docType: docTypeEnum('doc_type').notNull(),
+  isDefault: boolean('is_default').notNull().default(false),
+  elements: jsonb('elements').$type<TemplateElement[]>().notNull(),
+  createdDate: text('created_date').notNull(), // ISO-8601
+  updatedAt: text('updated_at').notNull(), // ISO-8601
+  updatedByUserId: integer('updated_by_user_id').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  uniqueIndex('document_templates_default_per_doctype').on(t.docType).where(sql`${t.isDefault} = true`),
 ]);
 
 // ── Invites (accounts are created via the CLI or by accepting an invite -

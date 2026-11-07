@@ -44,6 +44,7 @@ const ImportPage = lazy(() => import('@/components/dashboard/ImportPage'));
 const TallyPage = lazy(() => import('@/components/dashboard/TallyPage'));
 const PetpoojaPage = lazy(() => import('@/components/dashboard/PetpoojaPage'));
 const CostCentresPanel = lazy(() => import('@/components/dashboard/CostCentresPanel'));
+const DocumentTemplateDesigner = lazy(() => import('@/components/hr/DocumentTemplateDesigner'));
 
 export default function DashboardApp() {
   useEffect(() => {
@@ -118,6 +119,10 @@ export default function DashboardApp() {
 
         <Route element={<RequirePermission {...GATES.costCentres} />}>
           <Route path="settings/cost-centres" element={<CostCentresPanel />} />
+        </Route>
+
+        <Route element={<RequirePermission {...GATES.documentTemplates} />}>
+          <Route path="settings/document-templates" element={<DocumentTemplateDesigner />} />
         </Route>
 
         {/* No backend resource is read on this page - open to any authenticated user */}

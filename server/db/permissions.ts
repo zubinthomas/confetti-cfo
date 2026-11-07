@@ -16,7 +16,7 @@ export const RESOURCES = [
   'Employee', 'Licence', 'Recruitment', 'LeaveRequest', 'PayrollRecord', 'EmployeeExit', 'Inventory', 'Restaurant', 'Reservation', 'GuestRegister', 'GuestCheckIn', 'Menu',
   'FinancialRecord', 'SalesRecord', 'ConsignmentRecord', 'Operations',
   'Import', 'SheetSource', 'TallySource', 'PetPooja', 'PetpoojaSales', 'PetpoojaMenu', 'PetpoojaOrders', 'Integration', 'Settings', 'Invite', 'User', 'Role', 'Backup', 'BankAccount',
-  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout', 'DirectorKyc',
+  'Period', 'RevenueTarget', 'ExceptionAssignment', 'TimeLog', 'OutstandingBills', 'CostCentre', 'Layout', 'DocumentTemplate', 'DirectorKyc',
 ] as const;
 export type Resource = typeof RESOURCES[number];
 
@@ -68,10 +68,16 @@ const READ_ONLY: Resource[] = ['FinancialRecord', 'SalesRecord', 'ConsignmentRec
 // role. Presentation only (hiding an item never denies access), so it needs no
 // grant-clamping like Role does. A user editing their own layout needs no
 // permission at all, and clearing a layout is a `write`.
+// DocumentTemplate: authoring ID card / salary slip designs (admin list +
+// mutation only). Downloading a card/slip never needs this: the render route
+// (server/routes/documentTemplates.ts GET /render) sits behind authMiddleware
+// alone, the same "presentation only" treatment as Layout above, since a
+// template's elements are positions/fonts/an image URL, not the employee data
+// drawn into them (that's still gated by Employee:read / self-service /auth/me).
 // DirectorKyc: the director register imported from the Compliance Payment
 // Tracker workbook (server/import/mergeCompliance.ts) - corrected via
 // re-import or edit, never deleted, same posture as BankAccount/Period.
-const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout', 'GuestCheckIn', 'DirectorKyc'];
+const READ_WRITE: Resource[] = ['Integration', 'Backup', 'BankAccount', 'Period', 'RevenueTarget', 'ExceptionAssignment', 'CostCentre', 'Layout', 'GuestCheckIn', 'DocumentTemplate', 'DirectorKyc'];
 
 // Resources the built-in Viewer role does NOT get for free, unlike every
 // other resource (which Viewer reads by default - see the seeding loop

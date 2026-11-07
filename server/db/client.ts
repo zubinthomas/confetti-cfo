@@ -78,6 +78,8 @@ export function ready(): Promise<void> {
       await seedPermissionsCatalog();
       const { seedDefaultReservationLocations } = await import('./reservations.ts');
       await seedDefaultReservationLocations();
+      const { ensureDefaultTemplates } = await import('./documentTemplates.ts');
+      await ensureDefaultTemplates();
     });
   return migrated;
 }
