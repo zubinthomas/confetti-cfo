@@ -20,7 +20,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { SignInModal, AssignTableModal } from "@/components/reservations/GuestRegister";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
-import { areaLabel } from "@/api/reservationsApi";
+import { areaLabel, type ReservationTable } from "@/api/reservationsApi";
+import TableModal from "@/components/reservations/TableModal";
 import { bookingRows } from "@/components/reservations/reservationUi";
 import { istDateStr, istMinutes } from "@/lib/ist";
 
@@ -36,6 +37,10 @@ export default function RestaurantFloorView() {
   const regWrite = can("GuestRegister", "write");
   const regDelete = can("GuestRegister", "delete");
   const mergeWrite = bookWrite || regWrite;
+  // Restaurant:write - this page's own route gate only requires Reservation:read
+  // (see GATES.restaurantFloor), so someone can land here without it; the Edit
+  // Table control below just stays hidden in that case.
+  const catWrite = can("Restaurant", "write");
 
   const {
     locations, tables, merges, occupiedTableIds, loadingCatalog, error, setError,
@@ -61,6 +66,10 @@ export default function RestaurantFloorView() {
   // per-guest row in TableCard or the Waiting panel - AssignTableModal
   // already handles both.
   const [seatingSignIn, setSeatingSignIn] = useState<GuestSignIn | null>(null);
+  // The table's own definition (name, capacity, merge settings), opened via
+  // the pencil in TableCard - distinct from everything else here, which acts
+  // on the table's live floor state, not the table itself.
+  const [editingTable, setEditingTable] = useState<ReservationTable | null>(null);
   // Per-guest actions from a table's dialog (TableCard's walk-in rows).
   const [editingGuest, setEditingGuest] = useState<GuestSignIn | null>(null);
   const [signOutGuestTarget, setSignOutGuestTarget] = useState<GuestSignIn | null>(null);
@@ -223,7 +232,7 @@ export default function RestaurantFloorView() {
           so the two overlays never stack - it reappears with the same table once
           the child clears its own state. */}
       <Dialog
-        open={openUnit !== null && editingGuest === null && signOutGuestTarget === null && deleteGuestTarget === null}
+        open={openUnit !== null && editingGuest === null && signOutGuestTarget === null && deleteGuestTarget === null && editingTable === null}
         onOpenChange={(o) => { if (!o) setOpenKey(null); }}
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto">
@@ -238,6 +247,7 @@ export default function RestaurantFloorView() {
                 bookWrite={bookWrite} bookDelete={bookDelete} mergeWrite={mergeWrite}
                 floorWritable={floorWritable(openUnit.floor)}
                 regWrite={regWrite} regDelete={regDelete}
+                canEditTable={catWrite} onEditTable={() => setEditingTable(openUnit.table)}
                 onSplit={() => openUnit.merge && splitMerge(today, openUnit.merge)}
                 onExtend={(m) => extendFloor(today, openUnit.floor, m)}
                 onFree={() => freeTable(today, openUnit.floor, openUnit.table)}
@@ -291,6 +301,16 @@ export default function RestaurantFloorView() {
           onClose={() => setSeatingSignIn(null)}
           onSaved={() => { setSeatingSignIn(null); loadReservations(today); queue.load(); }}
           onSeatNext={(next) => { setSeatingSignIn(next); loadReservations(today); queue.load(); }}
+        />
+      )}
+
+      {editingTable && (
+        <TableModal
+          table={editingTable} tables={tables}
+          areaId={editingTable.areaId}
+          areaName={dayAreas.find((a) => a.id === editingTable.areaId)?.name ?? ""}
+          onClose={() => setEditingTable(null)}
+          onSaved={() => { setEditingTable(null); loadCatalog(); }}
         />
       )}
 

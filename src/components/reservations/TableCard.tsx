@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clock, Link2, Link2Off } from "lucide-react";
+import { Clock, Link2, Link2Off, Pencil } from "lucide-react";
 import type { ReservationStatus, ReservationTable, Reservation, TableMerge } from "@/api/reservationsApi";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
 import { ArchivedBadge } from "@/components/reservations/CatalogParts";
@@ -58,7 +58,7 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
  *  The List layout renders it inline and the floor map opens it in a dialog. */
 export default function TableCard({
   unit, bordered = true, bookWrite, bookDelete, mergeWrite, floorWritable,
-  regWrite, regDelete,
+  regWrite, regDelete, canEditTable, onEditTable,
   onSplit, onExtend, onFree, onStatus, onRemove, onMoved, nowMin,
   onExtendGuest, onSignOutGuest, onEditGuest, onAssignGuest, onDeleteGuest,
 }: {
@@ -69,6 +69,10 @@ export default function TableCard({
   floorWritable: boolean;
   /** GuestRegister:write/delete, for the per-guest walk-in rows below. */
   regWrite: boolean; regDelete: boolean;
+  /** Restaurant:write. Omit both (or leave onEditTable unset) to hide the
+   *  table's own Edit control - callers that don't offer it just skip these. */
+  canEditTable?: boolean;
+  onEditTable?: () => void;
   onSplit: () => void;
   onExtend: (minutes: number) => void;
   onFree: () => void;
@@ -98,6 +102,13 @@ export default function TableCard({
           {merge && mergeWrite && (
             <button onClick={onSplit} className="text-primary hover:underline flex items-center gap-1">
               <Link2Off className="w-3.5 h-3.5" /> Split
+            </button>
+          )}
+          {/* A merged unit edits as its own tables (Split, then edit each) -
+              editing "this" table would be ambiguous about which one. */}
+          {!merge && canEditTable && onEditTable && (
+            <button onClick={onEditTable} className="text-primary hover:underline flex items-center gap-1">
+              <Pencil className="w-3.5 h-3.5" /> Edit
             </button>
           )}
         </span>
