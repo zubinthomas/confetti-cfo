@@ -18,15 +18,21 @@ const noop = () => {};
  *  the Day / All switch on the Signed out card). Filtering and paging happen on
  *  the server. `areas` and `tables` include archived ones, so entries that sat
  *  at a retired table can still be found. */
-export default function AllSignIns({ locations, areas, tables, canWrite, canDelete, refreshKey, onError, onEdit, onDelete }: {
+export default function AllSignIns({
+  locations, areas, tables, canWrite, canDelete, refreshKey, onError, onEdit, onDelete, initialAutoClosedOnly,
+}: {
   locations: ReservationLocation[]; areas: ReservationArea[]; tables: ReservationTable[];
   canWrite: boolean; canDelete: boolean; refreshKey: number; onError: (message: string) => void;
   onEdit: (s: GuestSignIn) => void; onDelete: (s: GuestSignIn) => void;
+  /** Lands the list pre-filtered to the stale-sweep's own closures, from
+   *  Floor View's "N auto-closed" badge. Only read once, on mount. */
+  initialAutoClosedOnly?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [areaId, setAreaId] = useState("");
   const [tableId, setTableId] = useState("");
   const [visitType, setVisitType] = useState<GuestVisitType | "">("");
+  const [autoClosedOnly, setAutoClosedOnly] = useState(initialAutoClosedOnly ?? false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [offset, setOffset] = useState(0);
@@ -44,12 +50,12 @@ export default function AllSignIns({ locations, areas, tables, canWrite, canDele
   );
 
   // Any filter change goes back to the first page.
-  useEffect(() => { setOffset(0); }, [q, areaId, tableId, visitType, from, to]);
+  useEffect(() => { setOffset(0); }, [q, areaId, tableId, visitType, autoClosedOnly, from, to]);
 
   useEffect(() => {
     let stale = false;
     setLoading(true);
-    listSignInPage({ from, to, areaId, tableId, visitType, q, state: "signedOut", limit: PAGE_SIZE, offset })
+    listSignInPage({ from, to, areaId, tableId, visitType, q, state: "signedOut", autoClosedOnly, limit: PAGE_SIZE, offset })
       .then((p) => {
         if (stale) return;
         // A delete can empty the last page: step back rather than show "no matches".
@@ -60,11 +66,11 @@ export default function AllSignIns({ locations, areas, tables, canWrite, canDele
       .finally(() => { if (!stale) setLoading(false); });
     return () => { stale = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, areaId, tableId, visitType, from, to, offset, refreshKey]);
+  }, [q, areaId, tableId, visitType, autoClosedOnly, from, to, offset, refreshKey]);
 
   const total = page?.total ?? 0;
   const rows = page?.rows ?? [];
-  const filtered = !!q || !!areaId || !!tableId || !!visitType || !!from || !!to;
+  const filtered = !!q || !!areaId || !!tableId || !!visitType || !!autoClosedOnly || !!from || !!to;
 
   return (
     <div className="space-y-4">
@@ -97,6 +103,10 @@ export default function AllSignIns({ locations, areas, tables, canWrite, canDele
         {(from || to) && (
           <button onClick={() => { setFrom(""); setTo(""); }} className="text-xs text-primary hover:underline max-sm:min-h-11">Clear dates</button>
         )}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <input type="checkbox" checked={autoClosedOnly} onChange={(e) => setAutoClosedOnly(e.target.checked)} />
+          Auto-closed only
+        </label>
       </div>
 
       {page === null ? (

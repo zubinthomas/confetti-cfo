@@ -19,14 +19,20 @@ const SCOPES: { id: ListScope; label: string }[] = [
 
 /** Flat, filterable list of every reservation (the "All" side of the Day / All
  *  switch). Filtering and paging happen on the server. */
-export default function AllReservations({ locations, areas, canWrite, canDelete, refreshKey, onError }: {
+export default function AllReservations({
+  locations, areas, canWrite, canDelete, refreshKey, onError, initialAutoClosedOnly,
+}: {
   locations: ReservationLocation[]; areas: ReservationArea[];
   canWrite: boolean; canDelete: boolean; refreshKey: number; onError: (message: string) => void;
+  /** Lands the list pre-filtered to the stale-sweep's own closures, from
+   *  Floor View's "N auto-closed" badge. Only read once, on mount. */
+  initialAutoClosedOnly?: boolean;
 }) {
   const [scope, setScope] = useState<ListScope>("upcoming");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ReservationStatus | "">("");
   const [areaId, setAreaId] = useState("");
+  const [autoClosedOnly, setAutoClosedOnly] = useState(initialAutoClosedOnly ?? false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [offset, setOffset] = useState(0);
@@ -37,14 +43,14 @@ export default function AllReservations({ locations, areas, canWrite, canDelete,
   const q = useDebouncedValue(search.trim(), 300);
 
   // Any filter change goes back to the first page.
-  useEffect(() => { setOffset(0); }, [scope, q, status, areaId, from, to]);
+  useEffect(() => { setOffset(0); }, [scope, q, status, areaId, autoClosedOnly, from, to]);
 
   const today = istDateStr();
   useEffect(() => {
     let stale = false;
     const range = scopeRange(scope, today, from, to);
     setLoading(true);
-    listReservationPage({ ...range, status, areaId, q, limit: PAGE_SIZE, offset })
+    listReservationPage({ ...range, status, areaId, q, autoClosedOnly, limit: PAGE_SIZE, offset })
       .then((p) => {
         if (stale) return;
         // A delete can empty the last page: step back rather than show "no matches".
@@ -55,7 +61,7 @@ export default function AllReservations({ locations, areas, canWrite, canDelete,
       .finally(() => { if (!stale) setLoading(false); });
     return () => { stale = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, q, status, areaId, from, to, offset, today, refreshKey, reload]);
+  }, [scope, q, status, areaId, autoClosedOnly, from, to, offset, today, refreshKey, reload]);
 
   const run = useCallback(async (fn: () => Promise<unknown>, fallback: string) => {
     onError("");
@@ -64,7 +70,7 @@ export default function AllReservations({ locations, areas, canWrite, canDelete,
 
   const total = page?.total ?? 0;
   const rows = page?.rows ?? [];
-  const filtered = scope !== "upcoming" || !!q || !!status || !!areaId || !!from || !!to;
+  const filtered = scope !== "upcoming" || !!q || !!status || !!areaId || !!autoClosedOnly || !!from || !!to;
 
   return (
     <div className="space-y-4">
@@ -100,6 +106,10 @@ export default function AllReservations({ locations, areas, canWrite, canDelete,
         {(from || to) && (
           <button onClick={() => { setFrom(""); setTo(""); }} className="text-xs text-primary hover:underline max-sm:min-h-11">Clear dates</button>
         )}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <input type="checkbox" checked={autoClosedOnly} onChange={(e) => setAutoClosedOnly(e.target.checked)} />
+          Auto-closed only
+        </label>
       </div>
 
       {page === null ? (
@@ -130,6 +140,9 @@ export default function AllReservations({ locations, areas, canWrite, canDelete,
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[r.status]}20`, color: STATUS_COLORS[r.status] }}>
                   {STATUS_LABELS[r.status]}
                 </span>
+                {r.autoClosedAt && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Auto-closed</span>
+                )}
                 {canWrite && (NEXT_ACTIONS[r.status] ?? []).map((a) => (
                   <button
                     key={a.status} onClick={() => run(() => updateReservationStatus(r.id, a.status), "Failed to update reservation")}

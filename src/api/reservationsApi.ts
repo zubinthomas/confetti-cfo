@@ -97,6 +97,10 @@ export interface Reservation {
   /** ISO timestamp once staff dismiss the overdue-table alert for this
    *  booking's seated occupancy; null while undismissed. */
   overdueDismissedAt: string | null;
+  overdueDismissedByUserId: number | null;
+  /** ISO timestamp if the stale-occupancy sweep closed this booking because
+   *  its day was no longer today; null for an ordinary, human-closed row. */
+  autoClosedAt: string | null;
 }
 
 /** Catalog lists hide archived rows unless asked: "include" returns both, "only" just the archived. */
@@ -198,6 +202,10 @@ export interface TableOccupancy {
 
 export const listTableOccupancy = () => get<TableOccupancy[]>("/restaurant/occupancy");
 
+/** Today's auto-close counts, behind Floor View's "N auto-closed" badge. */
+export interface StaleCount { reservations: number; signIns: number }
+export const getStaleCount = () => get<StaleCount>("/restaurant/stale-count");
+
 export interface SeatingOption {
   tableId: string;
   name: string;
@@ -254,11 +262,11 @@ export interface ReservationPage { rows: Reservation[]; total: number }
 /** One page of reservations across all days (the "All" list). `from`/`to` are inclusive. */
 export const listReservationPage = (params: {
   from?: string; to?: string; status?: ReservationStatus | ""; areaId?: string; q?: string;
-  order?: "asc" | "desc"; limit?: number; offset?: number;
+  autoClosedOnly?: boolean; order?: "asc" | "desc"; limit?: number; offset?: number;
 } = {}) => {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "") query.set(key, String(value));
+    if (value !== undefined && value !== "" && value !== false) query.set(key, String(value));
   }
   const qs = query.toString();
   return get<ReservationPage>(`/restaurant/all${qs ? `?${qs}` : ""}`);

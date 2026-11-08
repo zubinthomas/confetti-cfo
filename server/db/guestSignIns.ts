@@ -107,6 +107,8 @@ function signInQuery() {
       createdByUserId: schema.guestSignIns.createdByUserId,
       tableGroupId: schema.guestSignIns.tableGroupId,
       overdueDismissedAt: schema.guestSignIns.overdueDismissedAt,
+      overdueDismissedByUserId: schema.guestSignIns.overdueDismissedByUserId,
+      autoClosedAt: schema.guestSignIns.autoClosedAt,
     })
     .from(schema.guestSignIns)
     .leftJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.guestSignIns.areaId))
@@ -153,6 +155,8 @@ export interface SignInPageFilter {
   q?: string;
   /** 'signedOut' (default) or 'onPremises'. */
   state?: string;
+  /** Only rows the stale-occupancy sweep closed, not a human. */
+  autoClosedOnly?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -176,6 +180,7 @@ export async function listSignInPage(f: SignInPageFilter = {}) {
   if (f.areaId) conditions.push(eq(schema.guestSignIns.areaId, f.areaId));
   if (f.tableId) conditions.push(eq(schema.guestSignIns.tableId, f.tableId));
   if (f.visitType) conditions.push(eq(schema.guestSignIns.visitType, f.visitType as VisitType));
+  if (f.autoClosedOnly) conditions.push(isNotNull(schema.guestSignIns.autoClosedAt));
   const q = f.q?.trim();
   if (q) {
     const term = `%${escapeLikeTerm(q)}%`;
@@ -689,6 +694,36 @@ export async function dismissOverdueAlert(id: string, userId: number, now = new 
   return getSignIn(id);
 }
 
+/** Shared close logic behind signOut (a human signing a guest out) and
+ *  sweepStaleSignIns (the day-rollover sweep closing one nobody signed out).
+ *  Every tableGroupId sibling clears together, the table's merge (if any)
+ *  releases, and a linked reservation advances - same cascade either way. */
+async function closeSignInParty(
+  siblings: (typeof schema.guestSignIns.$inferSelect)[],
+  { now, auto }: { now: Date; auto: boolean },
+) {
+  const signedOutAt = now.toISOString();
+  const rows = await db.transaction(async (tx) => {
+    const updated: (typeof schema.guestSignIns.$inferSelect)[] = [];
+    for (const s of siblings) {
+      if (s.signedOutAt) { updated.push(s); continue; }
+      const [row] = await tx.update(schema.guestSignIns)
+        .set({ signedOutAt, autoClosedAt: auto ? signedOutAt : null })
+        .where(eq(schema.guestSignIns.id, s.id)).returning();
+      updated.push(row);
+    }
+    return updated;
+  });
+  const tableIds = new Set(siblings.map((s) => s.tableId).filter((id): id is string => !!id));
+  for (const tableId of tableIds) await releaseMergeForTable(tableId);
+  for (const s of siblings) {
+    if (!s.reservationId) continue;
+    const [r] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, s.reservationId));
+    await maybeAdvanceReservation(r, 'completed');
+  }
+  return rows;
+}
+
 /** A party sharing the table with another via `tableGroupId` signs out
  *  together - the whole shared table clears in one action. */
 export async function signOut(id: string) {
@@ -696,23 +731,46 @@ export async function signOut(id: string) {
   const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
   if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
   if (existing.signedOutAt) throw new GuestSignInError('This guest is already signed out');
-
   const siblings = await tableGroupSiblings(existing);
-  const signedOutAt = new Date().toISOString();
-  await db.transaction(async (tx) => {
-    for (const s of siblings) {
-      if (s.signedOutAt) continue;
-      await tx.update(schema.guestSignIns).set({ signedOutAt }).where(eq(schema.guestSignIns.id, s.id));
-    }
-  });
-  if (existing.tableId) await releaseMergeForTable(existing.tableId);
-
-  for (const s of siblings) {
-    if (!s.reservationId) continue;
-    const [r] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, s.reservationId));
-    await maybeAdvanceReservation(r, 'completed');
-  }
+  await closeSignInParty(siblings, { now: new Date(), auto: false });
   return getSignIn(id);
+}
+
+/** Closes every sign-in still on premises - seated or still waiting unseated
+ *  in the queue - whose day is no longer today. Deliberately has no tableId
+ *  filter (unlike listOccupancy's today-only query): a forgotten queue entry
+ *  from yesterday closes too, not just a seated one. */
+export async function sweepStaleSignIns(now = new Date()) {
+  await ready();
+  const { gte: dayFrom, lt: dayUntil } = istDayBounds(istNow(now).date);
+  const candidates = await db.select().from(schema.guestSignIns).where(isNull(schema.guestSignIns.signedOutAt));
+  const stale = candidates.filter((g) => {
+    const at = g.seatedAt ?? g.signedInAt;
+    return at < dayFrom || at >= dayUntil;
+  });
+  const seenGroups = new Set<string>();
+  const closed: (typeof schema.guestSignIns.$inferSelect)[] = [];
+  for (const g of stale) {
+    const groupKey = g.tableGroupId ?? g.id;
+    if (seenGroups.has(groupKey)) continue;
+    seenGroups.add(groupKey);
+    const siblings = await tableGroupSiblings(g);
+    closed.push(...(await closeSignInParty(siblings, { now, auto: true })));
+  }
+  return closed;
+}
+
+/** How many sign-ins the stale sweep has auto-closed today (IST) - the count
+ *  behind Floor View's "N auto-closed" badge and Guest Register's KPI card. */
+export async function countAutoClosedSignInsToday(now = new Date()) {
+  await ready();
+  const { gte: dayFrom, lt: dayUntil } = istDayBounds(istNow(now).date);
+  const [{ total }] = await db.select({ total: count() }).from(schema.guestSignIns).where(and(
+    isNotNull(schema.guestSignIns.autoClosedAt),
+    gte(schema.guestSignIns.autoClosedAt, dayFrom),
+    lt(schema.guestSignIns.autoClosedAt, dayUntil),
+  ));
+  return Number(total);
 }
 
 export async function deleteSignIn(id: string) {

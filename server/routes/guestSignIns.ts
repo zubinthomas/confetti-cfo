@@ -45,6 +45,7 @@ router.get('/all', requirePermission('GuestRegister', 'read'), async (req: Authe
     res.json(await listSignInPage({
       from: str(req.query.from), to: str(req.query.to), areaId: str(req.query.areaId), tableId: str(req.query.tableId),
       visitType: str(req.query.visitType), q: str(req.query.q), state: str(req.query.state),
+      autoClosedOnly: req.query.autoClosedOnly === 'true',
       limit: num(req.query.limit), offset: num(req.query.offset),
     }));
   } catch (err) {

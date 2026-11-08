@@ -10,7 +10,7 @@ const booking = (over: Partial<Reservation> = {}): Reservation => ({
   id: "b1", createdDate: "", tableId: "t1", tableName: "A4", tableCapacity: 4, areaId: "a1", areaName: "Cafe", floor: null,
   locationName: "Sienna", date: "2026-10-22", time: "19:00", durationMinutes: 90, partySize: 2, guestName: "Guest",
   guestPhone: null, guestEmail: null, status: "confirmed", notes: null, seatedAt: null, departedAt: null, tableMaxExtraCapacity: 0,
-  groupId: null, groupTableNames: [], overdueDismissedAt: null,
+  groupId: null, groupTableNames: [], overdueDismissedAt: null, overdueDismissedByUserId: null, autoClosedAt: null,
   ...over,
 });
 

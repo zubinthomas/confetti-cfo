@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
   archiveArea, restoreArea, purgeArea,
-  archiveTable, restoreTable, purgeTable,
-  type ReservationLocation, type ReservationArea, type ReservationTable,
+  archiveTable, restoreTable, purgeTable, getStaleCount,
+  type ReservationLocation, type ReservationArea, type ReservationTable, type StaleCount,
 } from "@/api/reservationsApi";
 import { Plus, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
@@ -86,12 +87,21 @@ export default function ReservationsTab() {
   // Splitting a merge is open to either floor permission (same as the API).
   const mergeWrite = bookWrite || regWrite;
 
+  // Floor View's "N auto-closed" badge deep-links here with this state.
+  const location = useLocation();
+  const wantsAutoClosed = (location.state as { preset?: string } | null)?.preset === "autoClosed";
+
   // Order and opening view come from the layout registry (PAGE_TABS.reservations).
   const { tabs: viewTabs, active: view, setActive: setView } = useTabs("restaurant");
+  // useTabs' own state can't take an initial override, so force the Day tab
+  // once on mount when the deep link asks for it - the resolved default may
+  // not be "day" for every role.
+  useEffect(() => { if (wantsAutoClosed) setView("day"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedDate, setSelectedDate] = useState(todayStr());
   // Day = per-table floor view for one date; All = flat, filterable list of every booking.
-  const [dayMode, setDayMode] = useState<"day" | "all">("day");
+  const [dayMode, setDayMode] = useState<"day" | "all">(wantsAutoClosed ? "all" : "day");
   const [listRefresh, setListRefresh] = useState(0);
+  const [staleCount, setStaleCount] = useState<StaleCount>({ reservations: 0, signIns: 0 });
   // Day mode layout and which areas are collapsed: remembered per browser. Stored
   // as collapsed ids, so an area created later starts open.
   const [dayLayout, setDayLayout] = usePersistedState<DayLayout>("restaurant.day.view", "grid", isDayLayout);
@@ -127,6 +137,7 @@ export default function ReservationsTab() {
   } = useFloorData({ bookRead, bookWrite, regWrite });
 
   useEffect(() => { loadCatalog(); }, []);
+  useEffect(() => { getStaleCount().then(setStaleCount).catch(() => {}); }, []);
   // Re-fetch whenever the day view is (re-)entered or the date changes: the
   // Guest Register tab mutates the same sign-ins/merges from its own state, so
   // switching back here must pick those changes up without a page reload.
@@ -195,11 +206,12 @@ export default function ReservationsTab() {
 
       {view === "day" ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <KpiCard label="Reservations Today" value={activeCount} definition="Active reservations for today." />
             <KpiCard label="Covers Booked" value={coversBooked} definition="Total guest count across today's reservations." />
             <KpiCard label="Areas" value={areas.length} definition="Dining areas (cafe, restaurant, bar...) configured for reservations." />
             <KpiCard label="Tables" value={tables.length} definition="Tables configured across all areas." />
+            <KpiCard label="Auto-closed today" value={staleCount.reservations} definition="Bookings the stale-occupancy sweep closed on its own, because they were left seated from a previous day." />
           </div>
 
           <DashCard
@@ -245,6 +257,7 @@ export default function ReservationsTab() {
               <AllReservations
                 locations={locations} areas={areas} canWrite={bookWrite} canDelete={bookDelete}
                 refreshKey={listRefresh} onError={setError}
+                initialAutoClosedOnly={wantsAutoClosed}
               />
             ) : loadingCatalog || reservations === null ? (
               <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>

@@ -1444,6 +1444,10 @@ export const reservations = pgTable('reservations', {
   // runs out again stays silent too.
   overdueDismissedAt: text('overdue_dismissed_at'),
   overdueDismissedByUserId: integer('overdue_dismissed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Set when the stale-occupancy sweep (server/reservations/staleSweepScheduler.ts)
+  // closes this booking because its date is no longer today and it was left
+  // `seated` - never set by any user-initiated close. Null forever otherwise.
+  autoClosedAt: text('auto_closed_at'),
 });
 
 // ── Guest sign-in register (Sienna front-of-house) ────────────────────────
@@ -1500,6 +1504,8 @@ export const guestSignIns = pgTable('guest_sign_ins', {
   // for this sign-in's own seated occupancy.
   overdueDismissedAt: text('overdue_dismissed_at'),
   overdueDismissedByUserId: integer('overdue_dismissed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Same auto-close provenance flag as reservations.autoClosedAt.
+  autoClosedAt: text('auto_closed_at'),
 });
 
 // ── Guest self check-in ("Check a Table") ─────────────────────────────────

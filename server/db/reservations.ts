@@ -5,7 +5,7 @@
 // (plus a party-size-vs-capacity check) is what gives every table real
 // capacity enforcement, the chef's table included, with no special-casing.
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, ne, or } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db, ready, schema } from './client.ts';
 import { escapeLikeTerm } from '../db.ts';
@@ -592,6 +592,8 @@ const reservationColumns = {
   tableMaxExtraCapacity: schema.reservationTables.maxExtraCapacity,
   groupId: schema.reservations.groupId,
   overdueDismissedAt: schema.reservations.overdueDismissedAt,
+  overdueDismissedByUserId: schema.reservations.overdueDismissedByUserId,
+  autoClosedAt: schema.reservations.autoClosedAt,
 };
 
 const selectReservations = () => db
@@ -647,6 +649,8 @@ export interface ReservationPageFilter {
   areaId?: string;
   /** Matches guest name, phone or email, case-insensitively. */
   q?: string;
+  /** Only rows the stale-occupancy sweep closed, not a human. */
+  autoClosedOnly?: boolean;
   order?: string;
   limit?: number;
   offset?: number;
@@ -670,6 +674,7 @@ export async function listReservationPage(f: ReservationPageFilter = {}) {
   if (f.to) conditions.push(lte(schema.reservations.date, f.to));
   if (f.status) conditions.push(eq(schema.reservations.status, f.status as ReservationStatus));
   if (f.areaId) conditions.push(eq(schema.reservationTables.areaId, f.areaId));
+  if (f.autoClosedOnly) conditions.push(isNotNull(schema.reservations.autoClosedAt));
   const q = f.q?.trim();
   if (q) {
     const term = `%${escapeLikeTerm(q)}%`;
@@ -1205,22 +1210,19 @@ export async function moveReservation(
   return row;
 }
 
-/** "Free table" for a booking: mark it done now and hand the rest of the slot
- *  back. Shrinking the window can never violate the overlap constraint. A
- *  no-op for an already-closed booking. */
-export async function endReservationEarly(id: string) {
-  await ready();
-  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
-  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
-  if (['completed', 'cancelled', 'no_show'].includes(existing.status)) return existing;
-  const siblings = existing.groupId
-    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
-    : [existing];
-
-  const now = new Date();
-  const patch: { status: ReservationStatus; departedAt: string; durationMinutes?: number } = {
+/** Shared close logic behind endReservationEarly (a human freeing a table) and
+ *  sweepStaleReservations (the day-rollover sweep closing one nobody freed).
+ *  `existing` is the row whose date/time drives the duration-trim decision -
+ *  siblings sharing its groupId are closed alongside it either way. */
+async function closeReservationParty(
+  existing: typeof schema.reservations.$inferSelect,
+  siblings: (typeof schema.reservations.$inferSelect)[],
+  { now, auto }: { now: Date; auto: boolean },
+) {
+  const patch: { status: ReservationStatus; departedAt: string; durationMinutes?: number; autoClosedAt: string | null } = {
     status: 'completed',
     departedAt: now.toISOString(),
+    autoClosedAt: auto ? now.toISOString() : null,
   };
   const { date: today, minutes: nowMin } = istNow(now);
   if (existing.date === today) {
@@ -1238,7 +1240,61 @@ export async function endReservationEarly(id: string) {
     return updated;
   });
   for (const sib of siblings) await releaseMergeForTable(sib.tableId);
+  return rows;
+}
+
+/** "Free table" for a booking: mark it done now and hand the rest of the slot
+ *  back. Shrinking the window can never violate the overlap constraint. A
+ *  no-op for an already-closed booking. */
+export async function endReservationEarly(id: string) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  if (['completed', 'cancelled', 'no_show'].includes(existing.status)) return existing;
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
+  const rows = await closeReservationParty(existing, siblings, { now: new Date(), auto: false });
   return rows.find((r) => r.id === id)!;
+}
+
+/** Closes every booking left `seated` on a day that is no longer today - the
+ *  day-rollover sweep (server/reservations/staleSweepScheduler.ts) calls this
+ *  on a ~60s cadence. A grouped party's full sibling set is re-fetched (not
+ *  just the stale rows seen here) so it closes exactly like endReservationEarly
+ *  would, even if a sibling's own date/status drifted differently somehow. */
+export async function sweepStaleReservations(now = new Date()) {
+  await ready();
+  const { date: today } = istNow(now);
+  const stale = await db.select().from(schema.reservations).where(and(
+    eq(schema.reservations.status, 'seated'),
+    ne(schema.reservations.date, today),
+  ));
+  const seenGroups = new Set<string>();
+  const closed: (typeof schema.reservations.$inferSelect)[] = [];
+  for (const r of stale) {
+    const groupKey = r.groupId ?? r.id;
+    if (seenGroups.has(groupKey)) continue;
+    seenGroups.add(groupKey);
+    const siblings = r.groupId
+      ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, r.groupId))
+      : [r];
+    closed.push(...(await closeReservationParty(r, siblings, { now, auto: true })));
+  }
+  return closed;
+}
+
+/** How many bookings the stale sweep has auto-closed today (IST) - the count
+ *  behind Floor View's "N auto-closed" badge and the Day view's KPI card. */
+export async function countAutoClosedReservationsToday(now = new Date()) {
+  await ready();
+  const { gte: dayFrom, lt: dayUntil } = istDayBounds(istNow(now).date);
+  const [{ total }] = await db.select({ total: count() }).from(schema.reservations).where(and(
+    isNotNull(schema.reservations.autoClosedAt),
+    gte(schema.reservations.autoClosedAt, dayFrom),
+    lt(schema.reservations.autoClosedAt, dayUntil),
+  ));
+  return Number(total);
 }
 
 export async function deleteReservation(id: string) {

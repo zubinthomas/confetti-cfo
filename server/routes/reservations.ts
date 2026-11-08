@@ -11,7 +11,9 @@ import {
   type ArchivedFilter,
   listReservations, listReservationPage, createReservation, updateReservationStatus, deleteReservation,
   extendReservation, dismissOverdueAlert, rescheduleReservation, endReservationEarly, seatingOptions, moveReservation,
+  countAutoClosedReservationsToday,
 } from '../db/reservations.ts';
+import { countAutoClosedSignInsToday } from '../db/guestSignIns.ts';
 import { listOccupancy } from '../db/tableOccupancy.ts';
 import { TableMergeError, listActiveMerges, createMerge, releaseMerge } from '../db/tableMerges.ts';
 import { pushReservationEvent, deleteReservationEvent, claimAppAuthority } from '../calendar/sync.ts';
@@ -287,6 +289,21 @@ router.get('/occupancy', requireAnyPermission(...ANY_READ), async (_req: AuthedR
   }
 });
 
+// How many bookings/sign-ins the stale-occupancy sweep (server/reservations/
+// staleSweepScheduler.ts) has auto-closed today - behind Floor View's
+// "N auto-closed" badge. Same anonymous gating as /occupancy: a count, no names.
+router.get('/stale-count', requireAnyPermission(...ANY_READ), async (_req: AuthedRequest, res) => {
+  try {
+    const [reservations, signIns] = await Promise.all([
+      countAutoClosedReservationsToday(),
+      countAutoClosedSignInsToday(),
+    ]);
+    res.json({ reservations, signIns });
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
 // ── Reservations ─────────────────────────────────────────────────────────
 
 router.get('/', requirePermission('Reservation', 'read'), async (req: AuthedRequest, res) => {
@@ -309,6 +326,7 @@ router.get('/all', requirePermission('Reservation', 'read'), async (req: AuthedR
     res.json(await listReservationPage({
       from: str(req.query.from), to: str(req.query.to), status: str(req.query.status),
       areaId: str(req.query.areaId), q: str(req.query.q),
+      autoClosedOnly: req.query.autoClosedOnly === 'true',
       order: str(req.query.order),
       limit: num(req.query.limit), offset: num(req.query.offset),
     }));

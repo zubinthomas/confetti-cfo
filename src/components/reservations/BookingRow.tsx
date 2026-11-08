@@ -46,6 +46,9 @@ export default function BookingRow({ booking: r, unit, showWhere = false, bookWr
           <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[r.status]}20`, color: STATUS_COLORS[r.status] }}>
             {STATUS_LABELS[r.status]}
           </span>
+          {r.autoClosedAt && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Auto-closed</span>
+          )}
           {bookWrite && (NEXT_ACTIONS[r.status] ?? []).map((a) => (
             a.status === "seated" && taken ? (
               <button key={a.status} disabled title={`Table occupied${floor.until ? ` until ${floor.until}` : ""}`}

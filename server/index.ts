@@ -47,6 +47,7 @@ import attendanceRoutes from './routes/attendance.ts';
 import { startSheetsScheduler } from './sheets/scheduler.ts';
 import { startCalendarScheduler } from './calendar/scheduler.ts';
 import { startReservationNoShowScheduler } from './reservations/scheduler.ts';
+import { startStaleSweepScheduler } from './reservations/staleSweepScheduler.ts';
 import { startImportBatchPruneScheduler } from './import/pruneScheduler.ts';
 import { startBackupScheduler } from './db/backupScheduler.ts';
 import backupsRoutes from './routes/backups.ts';
@@ -125,6 +126,7 @@ const server = app.listen(PORT, () => {
   startSheetsScheduler();
   startCalendarScheduler();
   startReservationNoShowScheduler();
+  startStaleSweepScheduler();
   startImportBatchPruneScheduler();
   startBackupScheduler();
 });

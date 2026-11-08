@@ -46,6 +46,10 @@ export interface GuestSignIn {
   /** ISO timestamp once staff dismiss the overdue-table alert for this
    *  sign-in's seated occupancy; null while undismissed. */
   overdueDismissedAt: string | null;
+  overdueDismissedByUserId: number | null;
+  /** ISO timestamp if the stale-occupancy sweep closed this sign-in because
+   *  its day was no longer today; null for an ordinary, human-closed row. */
+  autoClosedAt: string | null;
 }
 
 export interface CreateSignInPayload {
@@ -91,11 +95,11 @@ export interface SignInPage { rows: GuestSignIn[]; total: number }
  *  `state` defaults to signed-out entries on the server. */
 export const listSignInPage = (params: {
   from?: string; to?: string; areaId?: string; tableId?: string; visitType?: GuestVisitType | "";
-  q?: string; state?: "signedOut" | "onPremises"; limit?: number; offset?: number;
+  q?: string; state?: "signedOut" | "onPremises"; autoClosedOnly?: boolean; limit?: number; offset?: number;
 } = {}) => {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "") query.set(key, String(value));
+    if (value !== undefined && value !== "" && value !== false) query.set(key, String(value));
   }
   const qs = query.toString();
   return get<SignInPage>(`/guest-sign-ins/all${qs ? `?${qs}` : ""}`);

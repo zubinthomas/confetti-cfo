@@ -36,6 +36,9 @@ export default function SignInRow({
             style={{ backgroundColor: `${VISIT_COLORS[s.visitType]}20`, color: VISIT_COLORS[s.visitType] }}>
             {VISIT_LABELS[s.visitType]}
           </span>
+          {s.autoClosedAt && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Auto-closed</span>
+          )}
         </div>
         <div className="text-xs text-muted-foreground">
           {s.areaName ?? "—"} · {s.tableName ? <span className="text-foreground">{s.tableName}</span> : "unseated"}

@@ -6,7 +6,7 @@
 // presentations can never disagree about what "Occupied" means.
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Plus, Loader2, Grid2x2, List, Users } from "lucide-react";
+import { ArrowLeft, MoreVertical, Plus, Loader2, Grid2x2, List, Users, Archive } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useFloorData } from "@/hooks/useFloorData";
 import { useGuestQueue } from "@/hooks/useGuestQueue";
@@ -20,7 +20,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { SignInModal, AssignTableModal } from "@/components/reservations/GuestRegister";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
-import { areaLabel, type ReservationTable } from "@/api/reservationsApi";
+import { areaLabel, getStaleCount, type ReservationTable, type StaleCount } from "@/api/reservationsApi";
 import TableModal from "@/components/reservations/TableModal";
 import AreaModal from "@/components/reservations/AreaModal";
 import { bookingRows } from "@/components/reservations/reservationUi";
@@ -52,6 +52,10 @@ export default function RestaurantFloorView() {
   } = useFloorData({ bookRead, bookWrite, regWrite });
 
   const queue = useGuestQueue();
+  // Today's count of bookings/sign-ins the stale-occupancy sweep closed on
+  // its own - behind the "N auto-closed" badge next to Waiting, below.
+  const [staleCount, setStaleCount] = useState<StaleCount>({ reservations: 0, signIns: 0 });
+  const loadStaleCount = () => { getStaleCount().then(setStaleCount).catch(() => {}); };
 
   const today = todayStr();
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
@@ -89,12 +93,12 @@ export default function RestaurantFloorView() {
 
   useEffect(() => { loadCatalog(); }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadReservations(today); queue.load(); }, []);
+  useEffect(() => { loadReservations(today); queue.load(); loadStaleCount(); }, []);
   useEffect(() => {
     // todayStr() recomputed on every tick, not closed over from mount - a
     // tablet left open past midnight IST must keep polling the real today,
     // not whatever day it was when the page first loaded.
-    const timer = setInterval(() => { if (!document.hidden) { loadReservations(todayStr()); queue.load(); } }, 30_000);
+    const timer = setInterval(() => { if (!document.hidden) { loadReservations(todayStr()); queue.load(); loadStaleCount(); } }, 30_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -124,6 +128,15 @@ export default function RestaurantFloorView() {
               className="flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted"
             >
               <Users className="w-4 h-4" /> {queue.waiting.length}
+            </button>
+          )}
+          {(bookWrite || regWrite) && staleCount.reservations + staleCount.signIns > 0 && (
+            <button
+              onClick={() => navigate("/restaurant?classic=1", { state: { preset: "autoClosed" } })}
+              aria-label="Auto-closed bookings and sign-ins"
+              className="flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted"
+            >
+              <Archive className="w-4 h-4" /> {staleCount.reservations + staleCount.signIns} auto-closed
             </button>
           )}
           <div className="relative">

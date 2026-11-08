@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import AreaSelect from "@/components/reservations/AreaSelect";
 import { Plus, X, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
@@ -16,8 +17,9 @@ import {
   type GuestSignIn, type GuestVisitType,
 } from "@/api/guestSignInsApi";
 import {
-  listReservations, createTableMerge, canMergeTables,
+  listReservations, createTableMerge, canMergeTables, getStaleCount,
   type Reservation, type ReservationLocation, type ReservationArea, type ReservationTable, type TableMerge, type MergeKind,
+  type StaleCount,
 } from "@/api/reservationsApi";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
 import { waPhone } from "@/lib/checkin";
@@ -644,12 +646,19 @@ export default function GuestRegister({
   const queue = useGuestQueue();
   const { onPremises, waiting, seated, occupiedTableIds, merges } = queue;
 
+  // Floor View's "N auto-closed" badge deep-links here with this state -
+  // read once, on this component's own mount (it may mount well after the
+  // navigation, since it's lazily rendered behind the Sign-in tab).
+  const location = useLocation();
+  const wantsAutoClosed = (location.state as { preset?: string } | null)?.preset === "autoClosed";
+
   const [dayHistory, setDayHistory] = useState<GuestSignIn[] | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayStr());
   // Signed out card: Day = one date, All = flat filterable list across every date.
-  const [outMode, setOutMode] = useState<"day" | "all">("day");
+  const [outMode, setOutMode] = useState<"day" | "all">(wantsAutoClosed ? "all" : "day");
   const [listRefresh, setListRefresh] = useState(0);
   const [error, setError] = useState("");
+  const [staleCount, setStaleCount] = useState<StaleCount>({ reservations: 0, signIns: 0 });
 
   const [showSignIn, setShowSignIn] = useState(false);
   const [editTarget, setEditTarget] = useState<GuestSignIn | null>(null);
@@ -684,6 +693,8 @@ export default function GuestRegister({
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => { getStaleCount().then(setStaleCount).catch(() => {}); }, []);
+
   const signedOut = useMemo(
     () => (dayHistory ?? []).filter((s) => s.signedOutAt),
     [dayHistory],
@@ -703,12 +714,13 @@ export default function GuestRegister({
       {queue.error && <p className="text-sm text-destructive">{queue.error}</p>}
       {queue.actionError && <p className="text-sm text-destructive">{queue.actionError}</p>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <KpiCard label="On premises now" value={onPremises?.length ?? "—"} definition="Parties currently checked in and on premises, regardless of party size." />
         <KpiCard label="Covers on premises" value={coversOnPremises} definition="Total guest count currently on premises, across all parties." />
         <KpiCard label="Seated now" value={seatedNow} definition="Parties currently seated at a table, regardless of party size." />
         <KpiCard label="Guests today" value={dayHistory?.length ?? "—"} definition="All parties checked in today, including those who have since left." />
         <KpiCard label="Longest wait" value={waiting.length > 0 ? formatDuration(longestWaitMs) : "—"} definition="How long the longest-waiting party in the queue has been waiting." />
+        <KpiCard label="Auto-closed today" value={staleCount.signIns} definition="Sign-ins the stale-occupancy sweep closed on its own, because they were left on premises from a previous day." />
       </div>
 
       <DashCard
@@ -797,6 +809,7 @@ export default function GuestRegister({
             locations={history?.locations ?? locations} areas={history?.areas ?? areas} tables={history?.tables ?? tables}
             canWrite={canWrite} canDelete={canDelete} refreshKey={listRefresh} onError={setError}
             onEdit={setEditTarget} onDelete={setDeleteTarget}
+            initialAutoClosedOnly={wantsAutoClosed}
           />
         ) : dayHistory === null ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
