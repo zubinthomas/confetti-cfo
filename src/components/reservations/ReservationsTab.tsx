@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import {
   createLocation, updateLocation, archiveLocation, restoreLocation, purgeLocation,
-  createArea, updateArea, archiveArea, restoreArea, purgeArea,
+  archiveArea, restoreArea, purgeArea,
   archiveTable, restoreTable, purgeTable,
   type ReservationLocation, type ReservationArea, type ReservationTable,
 } from "@/api/reservationsApi";
-import { Plus, X, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import DashCard from "@/components/dashboard/DashCard";
 import KpiCard from "@/components/dashboard/KpiCard";
 import FormField from "@/components/hr/FormField";
@@ -15,6 +15,8 @@ import AllReservations from "@/components/reservations/AllReservations";
 import BookingModal from "@/components/reservations/BookingModal";
 import CatalogManager from "@/components/reservations/CatalogManager";
 import TableModal from "@/components/reservations/TableModal";
+import ModalShell from "@/components/reservations/ModalShell";
+import AreaModal from "@/components/reservations/AreaModal";
 import GuestCheckInSettings from "@/components/reservations/GuestCheckInSettings";
 import MenuManager from "@/components/reservations/MenuManager";
 import DayFloor, { DayFloorControls, isDayLayout, type DayLayout } from "@/components/reservations/DayFloor";
@@ -31,29 +33,6 @@ import { useFloorData } from "@/hooks/useFloorData";
 const todayStr = () => istDateStr();
 
 const nowMinutes = () => istMinutes();
-
-function ModalShell({ title, onClose, onSave, saving, error, children }: {
-  title: string; onClose: () => void; onSave: () => void; saving: boolean; error: string; children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-card rounded-2xl border border-border w-full max-w-sm">
-        <div className="border-b border-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="max-sm:p-2 max-sm:-mr-2"><X className="w-5 h-5 text-muted-foreground" /></button>
-        </div>
-        <div className="p-6 space-y-4">{children}</div>
-        {error && <p className="px-6 text-xs text-destructive -mt-2 mb-2">{error}</p>}
-        <div className="px-6 pb-6 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm px-4 py-2 max-sm:min-h-11 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
-          <button onClick={onSave} disabled={saving} className="text-sm px-4 py-2 max-sm:min-h-11 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function LocationModal({ location, onClose, onSaved }: { location: ReservationLocation | null; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ name: location?.name ?? "" });
@@ -79,38 +58,6 @@ function LocationModal({ location, onClose, onSaved }: { location: ReservationLo
   return (
     <ModalShell title={location ? "Edit Location" : "Add Location"} onClose={onClose} onSave={save} saving={saving} error={error}>
       <FormField label="Name *" name="name" value={form.name} onChange={update} placeholder="e.g. Sienna, Hindustan Park" />
-    </ModalShell>
-  );
-}
-
-function AreaModal({ area, locationId, locationName, onClose, onSaved }: {
-  area: ReservationArea | null; locationId: string; locationName: string; onClose: () => void; onSaved: () => void;
-}) {
-  const [form, setForm] = useState({ name: area?.name ?? "", floor: area?.floor ?? "", type: area?.type ?? "" });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const update = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
-
-  const save = async () => {
-    setError("");
-    setSaving(true);
-    try {
-      const payload = { name: form.name.trim(), floor: form.floor.trim() || null, type: form.type.trim() || null };
-      if (area) await updateArea(area.id, payload);
-      else await createArea({ locationId, ...payload });
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save area");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell title={area ? "Edit Area" : `Add Area · ${locationName}`} onClose={onClose} onSave={save} saving={saving} error={error}>
-      <FormField label="Name *" name="name" value={form.name} onChange={update} placeholder="e.g. Cafe, Restaurant, Bar" />
-      <FormField label="Floor" name="floor" value={form.floor} onChange={update} placeholder="e.g. Ground Floor (leave empty if the area is its own floor)" />
-      <FormField label="Type" name="type" value={form.type} onChange={update} placeholder="e.g. Dine-in" />
     </ModalShell>
   );
 }

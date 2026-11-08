@@ -22,6 +22,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
 import { areaLabel, type ReservationTable } from "@/api/reservationsApi";
 import TableModal from "@/components/reservations/TableModal";
+import AreaModal from "@/components/reservations/AreaModal";
 import { bookingRows } from "@/components/reservations/reservationUi";
 import { istDateStr, istMinutes } from "@/lib/ist";
 
@@ -70,6 +71,10 @@ export default function RestaurantFloorView() {
   // the pencil in TableCard - distinct from everything else here, which acts
   // on the table's live floor state, not the table itself.
   const [editingTable, setEditingTable] = useState<ReservationTable | null>(null);
+  // The two catalog "+" affordances - add a table to the active area, add an
+  // area to the one location this view has. Both gated on catWrite below.
+  const [addingTable, setAddingTable] = useState(false);
+  const [addingArea, setAddingArea] = useState(false);
   // Per-guest actions from a table's dialog (TableCard's walk-in rows).
   const [editingGuest, setEditingGuest] = useState<GuestSignIn | null>(null);
   const [signOutGuestTarget, setSignOutGuestTarget] = useState<GuestSignIn | null>(null);
@@ -156,9 +161,19 @@ export default function RestaurantFloorView() {
       {loadingCatalog ? (
         <div className="flex-1 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : dayAreas.length === 0 ? (
-        <p className="flex-1 flex items-center justify-center text-sm text-muted-foreground text-center px-6">
-          No areas yet - add one under Locations &amp; Tables.
-        </p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
+          <p className="text-sm text-muted-foreground">No areas yet.</p>
+          {catWrite ? (
+            <button
+              onClick={() => setAddingArea(true)}
+              className="flex items-center gap-1.5 text-sm px-3.5 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
+            >
+              <Plus className="w-4 h-4" /> Add area
+            </button>
+          ) : (
+            <p className="text-sm text-muted-foreground">Add one under Locations &amp; Tables.</p>
+          )}
+        </div>
       ) : (
         <>
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
@@ -171,6 +186,15 @@ export default function RestaurantFloorView() {
                   {areaLabel(a)}
                 </button>
               ))}
+              {catWrite && (
+                <button
+                  onClick={() => setAddingArea(true)}
+                  aria-label="Add area"
+                  className="shrink-0 p-2 rounded-lg text-muted-foreground hover:bg-muted"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 shrink-0" role="group" aria-label="Table layout">
               <button
@@ -189,10 +213,10 @@ export default function RestaurantFloorView() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            {areaUnits.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No tables in this area.</p>
-            ) : areaLayout === "list" ? (
-              bookingRows(areaUnits).length === 0 ? (
+            {areaLayout === "list" ? (
+              areaUnits.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No tables in this area.</p>
+              ) : bookingRows(areaUnits).length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">No reservations for this day.</p>
               ) : (
                 <div className="space-y-2">
@@ -212,6 +236,15 @@ export default function RestaurantFloorView() {
             ) : (
               <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]">
                 {areaUnits.map((u) => <BigFloorTile key={u.key} unit={u} onOpen={() => setOpenKey(u.key)} />)}
+                {catWrite && (
+                  <button
+                    onClick={() => setAddingTable(true)}
+                    className="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border p-4 min-h-[6.5rem] text-muted-foreground hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span className="text-sm">Add table</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -311,6 +344,25 @@ export default function RestaurantFloorView() {
           areaName={dayAreas.find((a) => a.id === editingTable.areaId)?.name ?? ""}
           onClose={() => setEditingTable(null)}
           onSaved={() => { setEditingTable(null); loadCatalog(); }}
+        />
+      )}
+
+      {addingTable && areaId && (
+        <TableModal
+          table={null} tables={tables}
+          areaId={areaId}
+          areaName={activeArea?.name ?? ""}
+          onClose={() => setAddingTable(false)}
+          onSaved={() => { setAddingTable(false); loadCatalog(); }}
+        />
+      )}
+
+      {addingArea && locations[0] && (
+        <AreaModal
+          area={null}
+          locationId={locations[0].id} locationName={locations[0].name}
+          onClose={() => setAddingArea(false)}
+          onSaved={(saved) => { setAddingArea(false); setActiveAreaId(saved.id); loadCatalog(); }}
         />
       )}
 
