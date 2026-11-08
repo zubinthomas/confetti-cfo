@@ -91,9 +91,11 @@ export default function RestaurantFloorView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadReservations(today); queue.load(); }, []);
   useEffect(() => {
-    const timer = setInterval(() => { if (!document.hidden) { loadReservations(today); queue.load(); } }, 30_000);
+    // todayStr() recomputed on every tick, not closed over from mount - a
+    // tablet left open past midnight IST must keep polling the real today,
+    // not whatever day it was when the page first loaded.
+    const timer = setInterval(() => { if (!document.hidden) { loadReservations(todayStr()); queue.load(); } }, 30_000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const units = unitsFor(today);
