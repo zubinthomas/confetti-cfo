@@ -7,14 +7,14 @@ import { useState, useMemo } from "react";
 import {
   listLocations, listAreas, listTables,
   listReservations, updateReservationStatus, deleteReservation,
-  extendReservation, endReservationEarly, listTableMerges, releaseTableMerge, listTableOccupancy,
+  extendReservation, dismissOverdueReservation, endReservationEarly, listTableMerges, releaseTableMerge, listTableOccupancy,
   type TableOccupancy, type ReservationLocation, type ReservationArea, type ReservationTable,
   type Reservation, type ReservationStatus, type TableMerge,
 } from "@/api/reservationsApi";
-import { listSignIns, signOutGuest, extendSignIn, deleteSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
+import { listSignIns, signOutGuest, extendSignIn, dismissOverdueSignIn, deleteSignIn, type GuestSignIn } from "@/api/guestSignInsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
 import type { TableUnit } from "@/components/reservations/TableCard";
-import { floorInfoFor, type FloorInfo } from "@/components/reservations/reservationUi";
+import { floorInfoFor, isOverdueBooking, isOverdueSignIn, type FloorInfo } from "@/components/reservations/reservationUi";
 import { istDateStr, istMinutes, istClock } from "@/lib/ist";
 
 const todayStr = () => istDateStr();
@@ -133,6 +133,7 @@ export function useFloorData({ bookRead, bookWrite, regWrite }: UseFloorDataOpti
         ? { parties: here.reduce((n, o) => n + o.parties, 0), until: here.map((o) => o.until).sort().pop()! }
         : undefined,
       nowMin: nowMinutes(),
+      now: new Date(),
       isToday,
       clock: clockOf,
     });
@@ -196,10 +197,19 @@ export function useFloorData({ bookRead, bookWrite, regWrite }: UseFloorDataOpti
   });
 
   const extendFloor = (date: string, floor: FloorInfo, minutes: number) => runFloorAction(date, async () => {
-    if (floor.seatedBooking) {
-      await extendReservation(floor.seatedBooking.id, floor.seatedBooking.durationMinutes + minutes);
-    }
+    if (floor.seatedBooking) await extendReservation(floor.seatedBooking.id, minutes);
     await Promise.all(oncePerTableGroup(floor.guests).map((g) => extendSignIn(g.id, minutes)));
+  });
+
+  // Silences the overdue alert for every currently-overdue occupant of the
+  // unit at once - same granularity as freeTable/extendFloor above.
+  const dismissOverdue = (date: string, floor: FloorInfo) => runFloorAction(date, async () => {
+    const now = new Date();
+    if (floor.seatedBooking && isOverdueBooking(floor.seatedBooking, now)) {
+      await dismissOverdueReservation(floor.seatedBooking.id);
+    }
+    const overdueGuests = floor.guests.filter((g) => isOverdueSignIn(g, now));
+    await Promise.all(oncePerTableGroup(overdueGuests).map((g) => dismissOverdueSignIn(g.id)));
   });
 
   // Per-guest actions, from TableCard's walk-in rows - distinct from
@@ -251,7 +261,7 @@ export function useFloorData({ bookRead, bookWrite, regWrite }: UseFloorDataOpti
     reservations, loadingCatalog, error, setError,
     loadCatalog, loadReservations,
     dayAreas, unitsFor, floorWritable,
-    freeTable, extendFloor, splitMerge, setReservationStatus, removeReservation,
+    freeTable, extendFloor, dismissOverdue, splitMerge, setReservationStatus, removeReservation,
     extendGuest, signOutOneGuest, deleteGuest,
     merges, occupiedTableIds, daySignIns,
   };

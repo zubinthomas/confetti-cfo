@@ -1,6 +1,7 @@
 // Shared by the day view and the All list on the Reservations tab.
 import type { Reservation, ReservationStatus } from "@/api/reservationsApi";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
+import { istTimeStr } from "@/lib/ist";
 
 export const STATUS_LABELS: Record<ReservationStatus, string> = {
   pending: "Pending", confirmed: "Confirmed", seated: "Seated",
@@ -87,6 +88,8 @@ export type FloorInfo = {
   guests: GuestSignIn[];
   /** Walk-in parties we know are there but can't name. */
   hiddenWalkIns: number;
+  /** At least one occupant is overdue and nobody has dismissed that alert yet. */
+  hasOverdueAlert: boolean;
 };
 
 const toMinutes = (hhmm: string) => {
@@ -102,6 +105,27 @@ export function isLateBooking(b: Pick<Reservation, "status" | "time" | "duration
   return start <= nowMin && nowMin < start + b.durationMinutes;
 }
 
+/** True when a seated booking has run past its booked end and nobody has
+ *  dismissed that alert for it yet - see useOverdueTableAlerts.ts and the
+ *  Dismiss alert control on TableCard.tsx. */
+export function isOverdueBooking(
+  b: Pick<Reservation, "status" | "time" | "durationMinutes" | "overdueDismissedAt">,
+  now: Date,
+): boolean {
+  if (b.status !== "seated" || b.overdueDismissedAt) return false;
+  return istTimeStr(now) > endTime(b.time, b.durationMinutes);
+}
+
+/** Same as isOverdueBooking, for a named register entry: overdue once the
+ *  real clock passes its expectedUntil instant and it hasn't been dismissed. */
+export function isOverdueSignIn(
+  g: Pick<GuestSignIn, "tableId" | "signedOutAt" | "expectedUntil" | "overdueDismissedAt">,
+  now: Date,
+): boolean {
+  if (!g.tableId || g.signedOutAt || !g.expectedUntil || g.overdueDismissedAt) return false;
+  return new Date(g.expectedUntil) < now;
+}
+
 /** What the day view knows about one table or merged unit. */
 export type FloorInput = {
   /** The unit's bookings for the selected day. */
@@ -112,6 +136,9 @@ export type FloorInput = {
   /** Anonymous live occupancy summed over the unit's tables, if any. */
   occupancy?: { parties: number; until: string };
   nowMin: number;
+  /** Real instant behind nowMin - needed for isOverdueSignIn, which compares
+   *  against an absolute expectedUntil timestamp rather than today's minutes. */
+  now: Date;
   isToday: boolean;
   /** 'HH:MM' for a register entry's expectedUntil instant. */
   clock: (iso: string) => string;
@@ -121,8 +148,8 @@ export type FloorInput = {
  *  bookings list is the whole story. Precedence: occupied, late, reserved, free.
  *  Occupied needs only that someone is there, so a viewer without register
  *  access still sees a walk-in party (as "Walk-in party"). */
-export function floorInfoFor({ bookings, guests, occupancy, nowMin, isToday, clock }: FloorInput): FloorInfo {
-  if (!isToday) return { state: "free", label: "Free", until: null, guests: [], hiddenWalkIns: 0 };
+export function floorInfoFor({ bookings, guests, occupancy, nowMin, now, isToday, clock }: FloorInput): FloorInfo {
+  if (!isToday) return { state: "free", label: "Free", until: null, guests: [], hiddenWalkIns: 0, hasOverdueAlert: false };
 
   const seatedBooking = bookings.find((b) => b.status === "seated");
   const lateBooking = bookings.find((b) => isLateBooking(b, nowMin));
@@ -142,6 +169,8 @@ export function floorInfoFor({ bookings, guests, occupancy, nowMin, isToday, clo
       ...guests.map((g) => (g.expectedUntil ? clock(g.expectedUntil) : "")),
       ...(occupancy ? [occupancy.until] : []),
     ].filter(Boolean).sort();
+    const hasOverdueAlert = (!!seatedBooking && isOverdueBooking(seatedBooking, now))
+      || guests.some((g) => isOverdueSignIn(g, now));
     return {
       state: "occupied",
       label: `Occupied${names.length ? ` · ${names.join(", ")}` : ""}`,
@@ -150,19 +179,20 @@ export function floorInfoFor({ bookings, guests, occupancy, nowMin, isToday, clo
       seatedBooking,
       guests,
       hiddenWalkIns,
+      hasOverdueAlert,
     };
   }
   if (lateBooking) {
     return {
       state: "late", label: `Late · ${lateBooking.guestName}, ${lateBooking.time} booking`, until: null,
-      lateBooking, seatedBooking: undefined, guests: [], hiddenWalkIns: 0,
+      lateBooking, seatedBooking: undefined, guests: [], hiddenWalkIns: 0, hasOverdueAlert: false,
     };
   }
   const next = bookings.find((b) => (b.status === "pending" || b.status === "confirmed") && toMinutes(b.time) >= nowMin);
   if (next) {
-    return { state: "reserved", label: `Next booking ${next.time}`, until: null, nextTime: next.time, seatedBooking: undefined, guests: [], hiddenWalkIns: 0 };
+    return { state: "reserved", label: `Next booking ${next.time}`, until: null, nextTime: next.time, seatedBooking: undefined, guests: [], hiddenWalkIns: 0, hasOverdueAlert: false };
   }
-  return { state: "free", label: "Free", until: null, seatedBooking: undefined, guests: [], hiddenWalkIns: 0 };
+  return { state: "free", label: "Free", until: null, seatedBooking: undefined, guests: [], hiddenWalkIns: 0, hasOverdueAlert: false };
 }
 
 /** The short status line on a floor tile: "Free", "Next 19:00", "Late 19:00", "Occupied · until 20:30". */

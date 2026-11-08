@@ -21,8 +21,8 @@ export interface TableUnit {
   floor: FloorInfo;
 }
 
-function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
-  floor: FloorInfo; canWrite: boolean; onExtend: (m: number) => void; onFree: () => void;
+function TableFloorLine({ floor, canWrite, onExtend, onFree, onDismissAlert }: {
+  floor: FloorInfo; canWrite: boolean; onExtend: (m: number) => void; onFree: () => void; onDismissAlert: () => void;
 }) {
   const [extendOpen, setExtendOpen] = useState(false);
   return (
@@ -47,6 +47,9 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
             )}
           </span>
           <button onClick={onFree} className="text-primary hover:underline">Free table</button>
+          {floor.hasOverdueAlert && (
+            <button onClick={onDismissAlert} className="text-primary hover:underline">Dismiss alert</button>
+          )}
         </span>
       )}
     </div>
@@ -59,7 +62,7 @@ function TableFloorLine({ floor, canWrite, onExtend, onFree }: {
 export default function TableCard({
   unit, bordered = true, bookWrite, bookDelete, mergeWrite, floorWritable,
   regWrite, regDelete, canEditTable, onEditTable,
-  onSplit, onExtend, onFree, onStatus, onRemove, onMoved, nowMin,
+  onSplit, onExtend, onFree, onDismissAlert, onStatus, onRemove, onMoved, nowMin,
   onExtendGuest, onSignOutGuest, onEditGuest, onAssignGuest, onDeleteGuest,
 }: {
   unit: TableUnit;
@@ -76,6 +79,7 @@ export default function TableCard({
   onSplit: () => void;
   onExtend: (minutes: number) => void;
   onFree: () => void;
+  onDismissAlert: () => void;
   onStatus: (id: string, status: ReservationStatus) => void;
   onRemove: (id: string) => void;
   onMoved: () => void;
@@ -113,7 +117,7 @@ export default function TableCard({
           )}
         </span>
       </div>
-      <TableFloorLine floor={floor} canWrite={floorWritable} onExtend={onExtend} onFree={onFree} />
+      <TableFloorLine floor={floor} canWrite={floorWritable} onExtend={onExtend} onFree={onFree} onDismissAlert={onDismissAlert} />
       {floor.guests.length > 0 && (
         <div className="space-y-1.5 mb-2">
           {floor.guests.map((g) => (

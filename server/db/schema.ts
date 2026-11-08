@@ -1438,6 +1438,12 @@ export const reservations = pgTable('reservations', {
   // like any other reservation and pushes overwrite Calendar instead. See
   // the plan's conflict rule in server/calendar/sync.ts.
   calendarAuthoritative: boolean('calendar_authoritative').notNull().default(false),
+  // Set once staff explicitly dismiss the "overdue" alert for this specific
+  // booking's seated occupancy - see useOverdueTableAlerts.ts. Null means
+  // still-undismissed; it never clears itself, so a later extension that
+  // runs out again stays silent too.
+  overdueDismissedAt: text('overdue_dismissed_at'),
+  overdueDismissedByUserId: integer('overdue_dismissed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
 
 // ── Guest sign-in register (Sienna front-of-house) ────────────────────────
@@ -1490,6 +1496,10 @@ export const guestSignIns = pgTable('guest_sign_ins', {
   // for an ordinary sign-in seated on its own. No FK: just a shared
   // randomUUID(), not a row anyone looks up on its own.
   tableGroupId: text('table_group_id'),
+  // Same dismiss-the-overdue-alert flag as reservations.overdueDismissedAt,
+  // for this sign-in's own seated occupancy.
+  overdueDismissedAt: text('overdue_dismissed_at'),
+  overdueDismissedByUserId: integer('overdue_dismissed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
 
 // ── Guest self check-in ("Check a Table") ─────────────────────────────────

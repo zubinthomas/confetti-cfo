@@ -477,6 +477,13 @@
       "when": 1794039285414,
       "tag": "0068_good_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1794067865145,
+      "tag": "0069_groovy_sprite",
+      "breakpoints": true
     }
   ]
 }

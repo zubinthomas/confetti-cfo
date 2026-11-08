@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Reservation } from "@/api/reservationsApi";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
-import { addDays, allCollapsed, bookingRows, collapseAreas, endTime, expandAreas, floorInfoFor, floorSummary, isIdList, isLateBooking, mergeSummary, scopeRange, seatsLabel, tileNote, tileStatus, toggleId } from "./reservationUi";
+import { istTimeToUtcIso } from "@/lib/ist";
+import { addDays, allCollapsed, bookingRows, collapseAreas, endTime, expandAreas, floorInfoFor, floorSummary, isIdList, isLateBooking, isOverdueBooking, isOverdueSignIn, mergeSummary, scopeRange, seatsLabel, tileNote, tileStatus, toggleId } from "./reservationUi";
 
 const TODAY = "2026-10-22";
 
@@ -9,7 +10,7 @@ const booking = (over: Partial<Reservation> = {}): Reservation => ({
   id: "b1", createdDate: "", tableId: "t1", tableName: "A4", tableCapacity: 4, areaId: "a1", areaName: "Cafe", floor: null,
   locationName: "Sienna", date: "2026-10-22", time: "19:00", durationMinutes: 90, partySize: 2, guestName: "Guest",
   guestPhone: null, guestEmail: null, status: "confirmed", notes: null, seatedAt: null, departedAt: null, tableMaxExtraCapacity: 0,
-  groupId: null, groupTableNames: [],
+  groupId: null, groupTableNames: [], overdueDismissedAt: null,
   ...over,
 });
 
@@ -121,8 +122,41 @@ describe("isLateBooking", () => {
   });
 });
 
+describe("isOverdueBooking", () => {
+  it("is true only for a seated, undismissed booking past its booked end", () => {
+    const b = booking({ status: "seated", time: "18:30", durationMinutes: 90 });
+    expect(isOverdueBooking(b, new Date(istTimeToUtcIso("19:59", TODAY)))).toBe(false);
+    expect(isOverdueBooking(b, new Date(istTimeToUtcIso("20:01", TODAY)))).toBe(true);
+    expect(isOverdueBooking({ ...b, status: "confirmed" }, new Date(istTimeToUtcIso("20:01", TODAY)))).toBe(false);
+    expect(isOverdueBooking({ ...b, overdueDismissedAt: "2026-10-22T14:35:00Z" }, new Date(istTimeToUtcIso("20:01", TODAY)))).toBe(false);
+  });
+});
+
+describe("isOverdueSignIn", () => {
+  it("is true only for a seated, undismissed guest past expectedUntil", () => {
+    const g = signIn({ expectedUntil: "2026-10-22T14:30:00Z" });
+    expect(isOverdueSignIn(g, new Date("2026-10-22T14:29:00Z"))).toBe(false);
+    expect(isOverdueSignIn(g, new Date("2026-10-22T14:31:00Z"))).toBe(true);
+    expect(isOverdueSignIn({ ...g, signedOutAt: "2026-10-22T14:00:00Z" }, new Date("2026-10-22T14:31:00Z"))).toBe(false);
+    expect(isOverdueSignIn({ ...g, overdueDismissedAt: "2026-10-22T14:35:00Z" }, new Date("2026-10-22T14:31:00Z"))).toBe(false);
+  });
+});
+
 describe("floorInfoFor", () => {
-  const base = { bookings: [] as Reservation[], guests: [] as GuestSignIn[], nowMin: 19 * 60 + 10, isToday: true, clock: (iso: string) => iso.slice(11, 16) };
+  const base = {
+    bookings: [] as Reservation[], guests: [] as GuestSignIn[],
+    nowMin: 19 * 60 + 10, now: new Date(istTimeToUtcIso("19:10", TODAY)),
+    isToday: true, clock: (iso: string) => iso.slice(11, 16),
+  };
+
+  it("flags hasOverdueAlert once a seated booking runs past its end", () => {
+    const onTime = floorInfoFor({ ...base, bookings: [booking({ status: "seated", time: "18:30", durationMinutes: 90 })] });
+    expect(onTime.hasOverdueAlert).toBe(false);
+    const overdue = floorInfoFor({ ...base, bookings: [booking({ status: "seated", time: "17:00", durationMinutes: 90 })] });
+    expect(overdue.hasOverdueAlert).toBe(true);
+    const dismissed = floorInfoFor({ ...base, bookings: [booking({ status: "seated", time: "17:00", durationMinutes: 90, overdueDismissedAt: base.now.toISOString() })] });
+    expect(dismissed.hasOverdueAlert).toBe(false);
+  });
 
   it("is free with nothing on the table", () => {
     expect(floorInfoFor(base).state).toBe("free");

@@ -43,6 +43,9 @@ export interface GuestSignIn {
    *  combined party (see assignTable's join flow server-side). Null for a
    *  party seated on its own. */
   tableGroupId: string | null;
+  /** ISO timestamp once staff dismiss the overdue-table alert for this
+   *  sign-in's seated occupancy; null while undismissed. */
+  overdueDismissedAt: string | null;
 }
 
 export interface CreateSignInPayload {
@@ -120,6 +123,9 @@ export const assignTable = (
 
 export const extendSignIn = (id: string, minutes: number) =>
   patch<GuestSignIn>(`/guest-sign-ins/${id}/extend`, { minutes });
+
+export const dismissOverdueSignIn = (id: string) =>
+  patch<GuestSignIn>(`/guest-sign-ins/${id}/dismiss-overdue`, {});
 
 export const signOutGuest = (id: string) =>
   patch<GuestSignIn>(`/guest-sign-ins/${id}/sign-out`, {});

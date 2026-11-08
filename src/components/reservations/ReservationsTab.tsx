@@ -122,7 +122,7 @@ export default function ReservationsTab() {
     reservations, loadingCatalog, error, setError,
     loadCatalog, loadReservations,
     dayAreas, unitsFor, floorWritable,
-    freeTable, extendFloor, splitMerge, setReservationStatus, removeReservation,
+    freeTable, extendFloor, dismissOverdue, splitMerge, setReservationStatus, removeReservation,
     extendGuest, signOutOneGuest, deleteGuest, merges, occupiedTableIds, daySignIns,
   } = useFloorData({ bookRead, bookWrite, regWrite });
 
@@ -261,6 +261,7 @@ export default function ReservationsTab() {
                   regWrite={regWrite} regDelete={regDelete}
                   onSplit={(m) => splitMerge(selectedDate, m)} onExtend={(f, m) => extendFloor(selectedDate, f, m)}
                   onFree={(u) => freeTable(selectedDate, u.floor, u.table)}
+                  onDismissAlert={(u) => dismissOverdue(selectedDate, u.floor)}
                   onStatus={(id, status) => setReservationStatus(selectedDate, id, status)}
                   onRemove={(id) => removeReservation(selectedDate, id)}
                   onMoved={() => loadReservations(selectedDate)} nowMin={nowMinutes()}

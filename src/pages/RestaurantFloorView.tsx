@@ -47,7 +47,7 @@ export default function RestaurantFloorView() {
     locations, tables, merges, occupiedTableIds, loadingCatalog, error, setError,
     loadCatalog, loadReservations,
     dayAreas, unitsFor, floorWritable,
-    freeTable, extendFloor, splitMerge, setReservationStatus, removeReservation,
+    freeTable, extendFloor, dismissOverdue, splitMerge, setReservationStatus, removeReservation,
     extendGuest, signOutOneGuest, deleteGuest,
   } = useFloorData({ bookRead, bookWrite, regWrite });
 
@@ -284,6 +284,7 @@ export default function RestaurantFloorView() {
                 onSplit={() => openUnit.merge && splitMerge(today, openUnit.merge)}
                 onExtend={(m) => extendFloor(today, openUnit.floor, m)}
                 onFree={() => freeTable(today, openUnit.floor, openUnit.table)}
+                onDismissAlert={() => dismissOverdue(today, openUnit.floor)}
                 onStatus={(id, status) => setReservationStatus(today, id, status)}
                 onRemove={(id) => removeReservation(today, id)}
                 onMoved={() => loadReservations(today)}

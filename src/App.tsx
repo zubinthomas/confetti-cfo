@@ -17,6 +17,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import AcceptInvite from '@/pages/AcceptInvite';
 import CheckATable from '@/pages/CheckATable';
 import { useReferenceData } from '@/hooks/useReferenceData';
+import { useOverdueTableAlerts } from '@/hooks/useOverdueTableAlerts';
 import { SpotlightSearchProvider } from '@/lib/SpotlightSearchContext';
 
 const DashboardApp = lazy(() => import('./DashboardApp'));
@@ -74,9 +75,12 @@ const ReferenceDataGate = () => {
 const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/check-a-table'];
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, can } = useAuth();
   const location = useLocation();
   const isPublicPath = PUBLIC_PATHS.includes(location.pathname) || location.pathname.startsWith('/invite/');
+
+  // App-wide, regardless of which page is open - see useOverdueTableAlerts.ts.
+  useOverdueTableAlerts(!isLoadingAuth && !isLoadingPublicSettings && !authError && can("Reservation", "read"));
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {

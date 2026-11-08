@@ -105,6 +105,7 @@ function signInQuery() {
       source: schema.guestSignIns.source,
       createdByUserId: schema.guestSignIns.createdByUserId,
       tableGroupId: schema.guestSignIns.tableGroupId,
+      overdueDismissedAt: schema.guestSignIns.overdueDismissedAt,
     })
     .from(schema.guestSignIns)
     .leftJoin(schema.reservationAreas, eq(schema.reservationAreas.id, schema.guestSignIns.areaId))
@@ -627,7 +628,7 @@ export async function reorder(id: string, direction: 'up' | 'down') {
  *  on the table (mirrors extendReservation). A party sharing the table with
  *  another via `tableGroupId` extends together - two different "leaving at"
  *  clocks for people sitting at the same table would make no sense. */
-export async function extendSignIn(id: string, { minutes }: { minutes: number }) {
+export async function extendSignIn(id: string, { minutes }: { minutes: number }, now = new Date()) {
   await ready();
   const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
   if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
@@ -637,7 +638,10 @@ export async function extendSignIn(id: string, { minutes }: { minutes: number })
     throw new GuestSignInError('Extension must be a positive number of minutes');
   }
 
-  const base = existing.expectedUntil ?? existing.seatedAt ?? new Date().toISOString();
+  // Build on the existing estimate, unless it's already in the past - then
+  // the extension restarts from now instead of compounding a stale number.
+  const storedBase = existing.expectedUntil ?? existing.seatedAt ?? now.toISOString();
+  const base = new Date(storedBase) <= now ? now.toISOString() : storedBase;
   const nextExpected = addMinutesIso(base, minutes);
   const seatAt = istNow(new Date(existing.seatedAt ?? base));
   const endMin = istNow(new Date(nextExpected)).minutes;
@@ -654,6 +658,27 @@ export async function extendSignIn(id: string, { minutes }: { minutes: number })
   await db.transaction(async (tx) => {
     for (const s of siblings) {
       await tx.update(schema.guestSignIns).set({ expectedUntil: nextExpected }).where(eq(schema.guestSignIns.id, s.id));
+    }
+  });
+  return getSignIn(id);
+}
+
+/** Permanently silence the overdue-table alert for this sign-in's seated
+ *  occupancy (see useOverdueTableAlerts.ts) - it never reappears for this
+ *  row even if it drifts further, or runs out again after a later extend.
+ *  A party sharing the table via `tableGroupId` dismisses together, same as
+ *  extendSignIn/signOut. */
+export async function dismissOverdueAlert(id: string, userId: number, now = new Date()) {
+  await ready();
+  const [existing] = await db.select().from(schema.guestSignIns).where(eq(schema.guestSignIns.id, id));
+  if (!existing) throw new GuestSignInError(`No sign-in with id ${id}`);
+
+  const siblings = await tableGroupSiblings(existing);
+  await db.transaction(async (tx) => {
+    for (const s of siblings) {
+      await tx.update(schema.guestSignIns)
+        .set({ overdueDismissedAt: now.toISOString(), overdueDismissedByUserId: userId })
+        .where(eq(schema.guestSignIns.id, s.id));
     }
   });
   return getSignIn(id);

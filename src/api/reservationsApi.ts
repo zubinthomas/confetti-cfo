@@ -94,6 +94,9 @@ export interface Reservation {
   /** Every table name in this reservation's party-group (including this
    *  row's own table), or [] when it isn't grouped. */
   groupTableNames: string[];
+  /** ISO timestamp once staff dismiss the overdue-table alert for this
+   *  booking's seated occupancy; null while undismissed. */
+  overdueDismissedAt: string | null;
 }
 
 /** Catalog lists hide archived rows unless asked: "include" returns both, "only" just the archived. */
@@ -165,8 +168,11 @@ export const createReservation = (data: {
 export const updateReservationStatus = (id: string, status: ReservationStatus) =>
   patch<Reservation>(`/restaurant/${id}/status`, { status });
 
-export const extendReservation = (id: string, durationMinutes: number) =>
-  patch<Reservation>(`/restaurant/${id}/extend`, { durationMinutes });
+export const extendReservation = (id: string, minutes: number) =>
+  patch<Reservation>(`/restaurant/${id}/extend`, { minutes });
+
+export const dismissOverdueReservation = (id: string) =>
+  patch<Reservation>(`/restaurant/${id}/dismiss-overdue`, {});
 
 export const rescheduleReservation = (id: string, data: { date?: string; time?: string; durationMinutes?: number }) =>
   patch<Reservation>(`/restaurant/${id}/reschedule`, data);

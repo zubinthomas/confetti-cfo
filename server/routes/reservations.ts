@@ -10,7 +10,7 @@ import {
   listTables, createTable, updateTable, archiveTable, restoreTable, purgeTable,
   type ArchivedFilter,
   listReservations, listReservationPage, createReservation, updateReservationStatus, deleteReservation,
-  extendReservation, rescheduleReservation, endReservationEarly, seatingOptions, moveReservation,
+  extendReservation, dismissOverdueAlert, rescheduleReservation, endReservationEarly, seatingOptions, moveReservation,
 } from '../db/reservations.ts';
 import { listOccupancy } from '../db/tableOccupancy.ts';
 import { TableMergeError, listActiveMerges, createMerge, releaseMerge } from '../db/tableMerges.ts';
@@ -369,9 +369,17 @@ router.post('/:id/move', requirePermission('Reservation', 'write'), async (req: 
 
 router.patch('/:id/extend', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
   try {
-    const { durationMinutes } = req.body ?? {};
-    if (typeof durationMinutes !== 'number') return res.status(400).json({ message: 'durationMinutes must be a number' });
-    res.json(await syncAfterMutation(await extendReservation(req.params.id, { durationMinutes })));
+    const { minutes } = req.body ?? {};
+    if (typeof minutes !== 'number') return res.status(400).json({ message: 'minutes must be a number' });
+    res.json(await syncAfterMutation(await extendReservation(req.params.id, { minutes })));
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+router.patch('/:id/dismiss-overdue', requirePermission('Reservation', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    res.json(await dismissOverdueAlert(req.params.id, req.user!.id));
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }

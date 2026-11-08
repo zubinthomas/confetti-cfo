@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { authMiddleware, requirePermission, type AuthedRequest } from '../middleware/auth.ts';
 import {
   GuestSignInError,
-  listSignIns, listSignInPage, createSignIn, updateSignIn, assignTable, extendSignIn, signOut, deleteSignIn,
+  listSignIns, listSignInPage, createSignIn, updateSignIn, assignTable, extendSignIn, dismissOverdueAlert, signOut, deleteSignIn,
   estimateWaitMinutes, markNotified, reorder,
 } from '../db/guestSignIns.ts';
 
@@ -100,6 +100,14 @@ router.patch('/:id/extend', requirePermission('GuestRegister', 'write'), async (
     const { minutes } = req.body ?? {};
     if (typeof minutes !== 'number') return res.status(400).json({ message: 'minutes must be a number' });
     res.json(await extendSignIn(req.params.id, { minutes }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.patch('/:id/dismiss-overdue', requirePermission('GuestRegister', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    res.json(await dismissOverdueAlert(req.params.id, req.user!.id));
   } catch (err) {
     fail(res, err);
   }

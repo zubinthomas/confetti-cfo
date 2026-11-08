@@ -590,6 +590,7 @@ const reservationColumns = {
   departedAt: schema.reservations.departedAt,
   tableMaxExtraCapacity: schema.reservationTables.maxExtraCapacity,
   groupId: schema.reservations.groupId,
+  overdueDismissedAt: schema.reservations.overdueDismissedAt,
 };
 
 const selectReservations = () => db
@@ -944,17 +945,21 @@ export async function markExpiredReservationsNoShow(now = new Date()) {
  *  0021 EXCLUDE constraint as backstop) if the longer window runs into the
  *  next active booking on the table or past midnight. A grouped reservation
  *  (see `groupId`) extends every sibling table together, all-or-nothing. */
-export async function extendReservation(id: string, { durationMinutes }: { durationMinutes: number }) {
+export async function extendReservation(id: string, { minutes }: { minutes: number }, now = new Date()) {
   await ready();
   const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
   if (!existing) throw new ReservationError(`No reservation with id ${id}`);
-  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-    throw new ReservationError('Duration must be a positive whole number of minutes');
-  }
-  if (durationMinutes <= existing.durationMinutes) {
-    throw new ReservationError('Extend must lengthen the booking - use Free table to end it early');
+  if (!Number.isInteger(minutes) || minutes <= 0) {
+    throw new ReservationError('Extension must be a positive number of minutes');
   }
   const start = toMinutes(existing.time);
+  // Build on the booking's current end, unless it's already in the past -
+  // then the extension restarts from now instead of compounding a stale end.
+  const currentEnd = start + existing.durationMinutes;
+  const { date: today, minutes: nowMin } = istNow(now);
+  const isStale = existing.date !== today || nowMin > currentEnd;
+  const baseEnd = isStale ? nowMin : currentEnd;
+  const durationMinutes = (baseEnd - start) + minutes;
   if (start + durationMinutes > 24 * 60) {
     throw new ReservationError("A booking can't run past midnight - end earlier instead");
   }
@@ -977,6 +982,32 @@ export async function extendReservation(id: string, { durationMinutes }: { durat
     }
     return updated;
   }).catch(asReservationError);
+  return rows.find((r) => r.id === id)!;
+}
+
+/** Permanently silence the overdue-table alert for this booking's seated
+ *  occupancy (see useOverdueTableAlerts.ts) - it never reappears for this
+ *  row even if it drifts further, or runs out again after a later extend.
+ *  A grouped reservation dismisses every sibling table together, matching
+ *  extendReservation's own cascade. */
+export async function dismissOverdueAlert(id: string, userId: number, now = new Date()) {
+  await ready();
+  const [existing] = await db.select().from(schema.reservations).where(eq(schema.reservations.id, id));
+  if (!existing) throw new ReservationError(`No reservation with id ${id}`);
+  const siblings = existing.groupId
+    ? await db.select().from(schema.reservations).where(eq(schema.reservations.groupId, existing.groupId))
+    : [existing];
+
+  const rows = await db.transaction(async (tx) => {
+    const updated: (typeof schema.reservations.$inferSelect)[] = [];
+    for (const sib of siblings) {
+      const [row] = await tx.update(schema.reservations)
+        .set({ overdueDismissedAt: now.toISOString(), overdueDismissedByUserId: userId })
+        .where(eq(schema.reservations.id, sib.id)).returning();
+      updated.push(row);
+    }
+    return updated;
+  });
   return rows.find((r) => r.id === id)!;
 }
 

@@ -49,7 +49,7 @@ export default function DayFloor({
   areas, locations, units, layout, collapsed, onToggleArea,
   bookWrite, bookDelete, mergeWrite, floorWritable,
   regWrite, regDelete,
-  onSplit, onExtend, onFree, onStatus, onRemove, onMoved, nowMin,
+  onSplit, onExtend, onFree, onDismissAlert, onStatus, onRemove, onMoved, nowMin,
   onExtendGuest, onSignOutGuest, onEditGuest, onAssignGuest, onDeleteGuest,
   detailDialogSuspended,
 }: {
@@ -67,6 +67,7 @@ export default function DayFloor({
   onSplit: (merge: TableMerge) => void;
   onExtend: (floor: FloorInfo, minutes: number) => void;
   onFree: (unit: TableUnit) => void;
+  onDismissAlert: (unit: TableUnit) => void;
   onStatus: (id: string, status: ReservationStatus) => void;
   onRemove: (id: string) => void;
   /** A booking was moved to another table: reload the floor. */
@@ -94,6 +95,7 @@ export default function DayFloor({
     onSplit: () => unit.merge && onSplit(unit.merge),
     onExtend: (m: number) => onExtend(unit.floor, m),
     onFree: () => onFree(unit),
+    onDismissAlert: () => onDismissAlert(unit),
     onStatus, onRemove, onMoved, nowMin,
     onExtendGuest,
     onSignOutGuest: (id: string) => {
