@@ -16,6 +16,7 @@ import {
   tablesCanMerge, loadLinkSet, createMerge,
 } from './tableMerges.ts';
 import { TableOccupiedError, assertNotOccupied, listOccupants } from './tableOccupancy.ts';
+import { normalisePhone } from './checkinSettings.ts';
 
 // Re-exported for server/db/guestSignIns.ts, which imports the time helpers
 // from here alongside the reservation query helpers below.
@@ -809,6 +810,7 @@ export async function createReservation(
     throw new ReservationError(`${label} seats up to ${combinedCapacity} - a party of ${partySize} won't fit`);
   }
   if (!guestName?.trim()) throw new ReservationError('Guest name is required');
+  if (!normalisePhone(guestPhone)) throw new ReservationError('A valid guest phone number is required');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) throw new ReservationError('Date must be in YYYY-MM-DD format');
   if (!/^\d{2}:\d{2}$/.test(time ?? '')) throw new ReservationError('Time must be in HH:MM format');
 

@@ -12,7 +12,7 @@ import {
 } from "@/api/guestSignInsApi";
 import { listTableMerges, type TableMerge } from "@/api/reservationsApi";
 import { checkWaitlistMatch } from "@/lib/waitlistMatch";
-import { waPhone, waLink, tableReadyMessage } from "@/lib/checkin";
+import { waPhone, waLink, tableReadyMessage, isEmail, mailtoLink } from "@/lib/checkin";
 
 export function useGuestQueue() {
   const [onPremises, setOnPremises] = useState<GuestSignIn[] | null>(null);
@@ -63,16 +63,22 @@ export function useGuestQueue() {
 
   const doExtend = (id: string, minutes: number) => runAction(() => extendSignIn(id, minutes));
 
-  // With a usable number the host messages the guest on WhatsApp (a prefilled
-  // link, opened before any await so the browser lets the tab through), then
-  // the entry is marked notified. Without one it is the plain "staff called" mark.
+  // With a usable number the host messages the guest on WhatsApp; otherwise,
+  // with a usable email, a prefilled mailto: draft. Either way the link is
+  // opened before any await so the browser lets the tab/client through, then
+  // the entry is marked notified. WaitingRow hides this action entirely when
+  // neither channel is usable, so there's nothing to fall back to here.
   const doNotify = async (s: GuestSignIn) => {
     const phone = waPhone(s.guestPhone);
+    const email = !phone && isEmail(s.guestEmail) ? s.guestEmail!.trim() : null;
+    const message = tableReadyMessage(s.guestName, s.partySize, s.areaName);
     if (phone) {
-      window.open(waLink(phone, tableReadyMessage(s.guestName, s.partySize, s.areaName)), "_blank", "noopener");
+      window.open(waLink(phone, message), "_blank", "noopener");
+    } else if (email) {
+      window.open(mailtoLink(email, "Your table is ready", message), "_blank", "noopener");
     }
     setNotifyingId(s.id);
-    await runAction(() => notifyGuest(s.id, phone ? "whatsapp" : undefined));
+    await runAction(() => notifyGuest(s.id, phone ? "whatsapp" : email ? "email" : undefined));
     setNotifyingId(null);
   };
 

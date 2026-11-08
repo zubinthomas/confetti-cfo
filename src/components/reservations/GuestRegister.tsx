@@ -20,6 +20,7 @@ import {
   type Reservation, type ReservationLocation, type ReservationArea, type ReservationTable, type TableMerge, type MergeKind,
 } from "@/api/reservationsApi";
 import { istDateStr, istTimeStr, istClock, istTimeToUtcIso } from "@/lib/ist";
+import { waPhone } from "@/lib/checkin";
 import { useDraftPersistence } from "@/hooks/useDraftPersistence";
 import { useGuestQueue } from "@/hooks/useGuestQueue";
 import { toast } from "@/components/ui/use-toast";
@@ -185,6 +186,7 @@ export function SignInModal({
   const save = async () => {
     setError("");
     if (!form.guestName.trim()) { setError("Guest name is required"); return; }
+    if (!waPhone(form.guestPhone)) { setError("Enter a valid guest phone number"); return; }
     const partySize = Number(form.partySize);
     if (!partySize || partySize <= 0) { setError("Enter a valid party size"); return; }
     setSaving(true);
@@ -261,7 +263,7 @@ export function SignInModal({
           )}
           <FormField label="Guest Name *" name="guestName" value={form.guestName} onChange={update} />
           <FormField label="Party Size *" name="partySize" type="number" value={form.partySize} onChange={update} />
-          <FormField label="Guest Phone" name="guestPhone" value={form.guestPhone} onChange={update} />
+          <FormField label="Guest Phone *" name="guestPhone" value={form.guestPhone} onChange={update} />
           <FormField label="Guest Email" name="guestEmail" value={form.guestEmail} onChange={update} />
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Area</label>

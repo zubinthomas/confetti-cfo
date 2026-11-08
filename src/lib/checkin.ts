@@ -1,4 +1,5 @@
-// Small pure helpers for the guest check-in page and the staff WhatsApp action.
+// Small pure helpers for the guest check-in page and the staff WhatsApp/email
+// notify actions.
 
 /** Digits only, no country code: "+91 98765-43210" -> "9876543210". null when
  *  the input isn't a 10-digit Indian mobile number (optionally with 91 / 0). */
@@ -36,4 +37,16 @@ export function waPhone(raw: string | null | undefined): string | null {
 
 export function tableReadyMessage(name: string, partySize: number, areaName: string | null): string {
   return `Hi ${name}, your table for ${partySize}${areaName ? ` at the ${areaName}` : ""} is ready. Please come to the host stand.`;
+}
+
+/** True when `raw` looks like an email address - a loose routing check
+ *  (good enough to decide "can we open a mail client"), not full RFC
+ *  validation. */
+export function isEmail(raw: string | null | undefined): boolean {
+  return !!raw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim());
+}
+
+/** mailto: link prefilled with a subject and body, mirroring waLink(). */
+export function mailtoLink(email: string, subject: string, body: string): string {
+  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

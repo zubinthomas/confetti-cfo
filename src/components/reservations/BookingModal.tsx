@@ -7,6 +7,7 @@ import {
   type ReservationLocation, type ReservationArea, type ReservationTable,
 } from "@/api/reservationsApi";
 import { istDateStr } from "@/lib/ist";
+import { waPhone } from "@/lib/checkin";
 
 const todayStr = () => istDateStr();
 
@@ -63,6 +64,7 @@ export default function BookingModal({ locations, areas, tables, defaultDate, on
     setError("");
     if (!form.tableId) { setError("Pick a table"); return; }
     if (!form.guestName.trim()) { setError("Guest name is required"); return; }
+    if (!waPhone(form.guestPhone)) { setError("Enter a valid guest phone number"); return; }
     const partySize = Number(form.partySize);
     const durationMinutes = Number(form.durationMinutes);
     if (!partySize || partySize <= 0) { setError("Enter a valid party size"); return; }
@@ -150,7 +152,7 @@ export default function BookingModal({ locations, areas, tables, defaultDate, on
           <FormField label="Duration (min)" name="durationMinutes" type="number" value={form.durationMinutes} onChange={update} />
           <FormField label="Party Size *" name="partySize" type="number" value={form.partySize} onChange={update} />
           <FormField label="Guest Name *" name="guestName" value={form.guestName} onChange={update} />
-          <FormField label="Guest Phone" name="guestPhone" value={form.guestPhone} onChange={update} />
+          <FormField label="Guest Phone *" name="guestPhone" value={form.guestPhone} onChange={update} />
           <div className="sm:col-span-2"><FormField label="Guest Email" name="guestEmail" value={form.guestEmail} onChange={update} /></div>
           <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes} onChange={update} /></div>
         </div>

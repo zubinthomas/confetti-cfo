@@ -1,7 +1,7 @@
 import React from "react";
 import { Phone, ArrowUp, ArrowDown, AlertTriangle, Armchair, Trash2, Loader2 } from "lucide-react";
 import type { GuestSignIn } from "@/api/guestSignInsApi";
-import { waPhone } from "@/lib/checkin";
+import { waPhone, isEmail } from "@/lib/checkin";
 
 // A host stops seeing this as "the system still has it handled" after this
 // long without a seat - an advisory flag only, staff still decide what to do.
@@ -33,6 +33,8 @@ export default function WaitingRow({
 }) {
   const notified = s.notifiedAt != null;
   const atRisk = isAtRisk(s);
+  const wa = waPhone(s.guestPhone);
+  const canNotify = wa != null || isEmail(s.guestEmail);
   return (
     <div className="border border-border rounded-lg p-3 flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0 space-y-0.5">
@@ -72,9 +74,9 @@ export default function WaitingRow({
               <ArrowDown className="w-3.5 h-3.5" />
             </button>
           </div>
-          {!notified && (
+          {!notified && canNotify && (
             <button onClick={onNotify} disabled={notifying} className="flex items-center gap-1 text-primary hover:underline disabled:opacity-50">
-              {notifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} {waPhone(s.guestPhone) ? "Message on WhatsApp" : "Notify"}
+              {notifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />} {wa ? "Message on WhatsApp" : "Message by email"}
             </button>
           )}
           <button onClick={onAssign} className="flex items-center gap-1 text-primary hover:underline">

@@ -24,6 +24,7 @@ import {
   listActiveReservationOverlaps, listTables, toMinutes, fromMinutes, istNow, istDayBounds,
 } from './reservations.ts';
 import { activeMergeForTable, mergedGroup, releaseMergeForTable } from './tableMerges.ts';
+import { normalisePhone } from './checkinSettings.ts';
 import { listOccupants } from './tableOccupancy.ts';
 
 /** `code` drives the assign-table UI branch (reservation_clash | table_occupied |
@@ -371,6 +372,7 @@ export async function createSignIn(userId: number, input: CreateSignInInput) {
   await ready();
   const guestName = input.guestName?.trim();
   if (!guestName) throw new GuestSignInError('Guest name is required');
+  if (!normalisePhone(input.guestPhone)) throw new GuestSignInError('A valid guest phone number is required');
 
   const visitType = input.visitType ?? 'walk_in';
   if (!VISIT_TYPES.includes(visitType)) throw new GuestSignInError(`Invalid visit type: ${visitType}`);
@@ -474,7 +476,10 @@ export async function updateSignIn(id: string, patch: Partial<CreateSignInInput>
     }
     set.partySize = patch.partySize;
   }
-  if (patch.guestPhone !== undefined) set.guestPhone = patch.guestPhone?.trim() || null;
+  if (patch.guestPhone !== undefined) {
+    if (!normalisePhone(patch.guestPhone)) throw new GuestSignInError('A valid guest phone number is required');
+    set.guestPhone = patch.guestPhone.trim();
+  }
   if (patch.guestEmail !== undefined) set.guestEmail = patch.guestEmail?.trim() || null;
   if (patch.purpose !== undefined) set.purpose = patch.purpose?.trim() || null;
   if (patch.host !== undefined) set.host = patch.host?.trim() || null;
