@@ -18,6 +18,7 @@ import {
   type Perm,
 } from './permissions.ts';
 import { getAllDivisionScopes, getUserDivisionScope, replaceUserDivisionScope as replaceDivisionScope } from './divisionScope.ts';
+import { createPasswordResetToken, RESET_TOKEN_EXPIRY_MINUTES } from './passwordReset.ts';
 
 export class UserAccountError extends Error {}
 
@@ -84,6 +85,16 @@ export async function setUserActive(targetId: number, editorId: number, active: 
   await requireUserRow(targetId);
   await db.update(schema.users).set({ active }).where(eq(schema.users.id, targetId));
   return getUserDetail(targetId);
+}
+
+// No editorId/self-target guard, unlike the actions above: handing yourself
+// a reset link carries none of the lockout risk that changing your own
+// roles, permissions or active status does.
+export async function generatePasswordResetLink(targetId: number) {
+  await ready();
+  await requireUserRow(targetId);
+  const { link } = await createPasswordResetToken(targetId);
+  return { link, expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES };
 }
 
 // Self-edit is blocked inside replaceDivisionScope (divisionScope.ts) - not

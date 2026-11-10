@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import DashCard from "./DashCard";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ResetLinkDialog from "@/components/ResetLinkDialog";
 import PermissionMatrix, { permKey as key } from "@/components/PermissionMatrix";
 import { useAuth } from "@/lib/AuthContext";
 import {
   listUsers, getUser, setUserActive, replaceUserRoles, replaceUserPermissions, replaceUserDivisionScope,
-  type UserListItem, type UserDetail,
+  generateResetLink, type UserListItem, type UserDetail,
 } from "@/api/usersApi";
 import type { RoleWithPermissions } from "@/api/rolesApi";
 import type { PermissionAction } from "@/api/invitesApi";
@@ -196,6 +197,7 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
   const [deactivateTarget, setDeactivateTarget] = useState<UserListItem | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [resetTarget, setResetTarget] = useState<UserListItem | null>(null);
+  const [resetLinkResult, setResetLinkResult] = useState<{ link: string; expiresInMinutes: number } | null>(null);
   const [notice, setNotice] = useState("");
 
   const refresh = () => { listUsers().then(setUsers).catch((err: Error) => setError(err.message)); };
@@ -234,6 +236,19 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reset layout");
       setResetTarget(null);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // No confirm step first, unlike reset-layout/deactivate above: this is
+  // non-destructive (it just mints a token), so there's nothing to confirm.
+  const onGenerateResetLink = async (u: UserListItem) => {
+    setBusyId(u.id);
+    try {
+      setResetLinkResult(await generateResetLink(u.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate a reset link");
     } finally {
       setBusyId(null);
     }
@@ -320,6 +335,14 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
                                 Reset layout
                               </button>
                             )}
+                            {canWrite && (
+                              <button
+                                onClick={() => onGenerateResetLink(u)} disabled={busyId === u.id}
+                                className="text-xs max-sm:py-3 text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+                              >
+                                Reset link
+                              </button>
+                            )}
                             {u.active
                               ? canDelete && (
                                 <button
@@ -378,6 +401,13 @@ export default function UsersTab({ roles, heldPerms }: { roles: RoleWithPermissi
         destructive
         loading={busyId === deactivateTarget?.id}
         onConfirm={onDeactivate}
+      />
+
+      <ResetLinkDialog
+        open={resetLinkResult !== null}
+        onOpenChange={(open) => { if (!open) setResetLinkResult(null); }}
+        link={resetLinkResult?.link ?? ""}
+        expiresInMinutes={resetLinkResult?.expiresInMinutes ?? 0}
       />
     </>
   );

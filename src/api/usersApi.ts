@@ -2,7 +2,7 @@
 // user's roles/direct permissions is clamped to what the editor themselves
 // currently holds - same rule as invites - and self-edit is blocked outright
 // server-side, not just hidden client-side.
-import { get, patch } from "./http";
+import { get, patch, post } from "./http";
 import type { Perm } from "./invitesApi";
 
 export interface Role {
@@ -40,3 +40,6 @@ export const replaceUserPermissions = (id: number, permissions: Perm[]) =>
 
 export const replaceUserDivisionScope = (id: number, divisions: string[]) =>
   patch<UserDetail>(`/users/${id}/division-scope`, { divisions });
+
+export const generateResetLink = (id: number) =>
+  post<{ link: string; expiresInMinutes: number }>(`/users/${id}/reset-link`);

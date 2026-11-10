@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { asc, eq, and, isNull, gt } from 'drizzle-orm';
 import { Router } from 'express';
@@ -8,10 +7,10 @@ import { getEffectivePermissions } from '../db/permissions.ts';
 import { getUserDivisionScope } from '../db/divisionScope.ts';
 import { getLayoutLayers } from '../db/layouts.ts';
 import { getSelfEmployeeView, getDepartmentRoster } from '../db/employeeSelf.ts';
+import { createPasswordResetToken, RESET_TOKEN_EXPIRY_MINUTES } from '../db/passwordReset.ts';
 import { sendMail, MailNotConfiguredError } from '../email/sendMail.ts';
 
 const router = Router();
-const RESET_TOKEN_EXPIRY_MINUTES = 30;
 
 // There is no open registration - accounts are created via the CLI
 // (server/db/users.ts) or by accepting an invite (server/routes/invites.ts).
@@ -82,15 +81,7 @@ router.post('/reset-password-request', async (req, res) => {
       await ready();
       const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email.toLowerCase()));
       if (user) {
-        const now = new Date();
-        const token = randomBytes(32).toString('hex');
-        await db.insert(schema.passwordResetTokens).values({
-          userId: user.id,
-          token,
-          createdAt: now.toISOString(),
-          expiresAt: new Date(now.getTime() + RESET_TOKEN_EXPIRY_MINUTES * 60_000).toISOString(),
-        });
-        const link = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+        const { link } = await createPasswordResetToken(user.id);
         await sendMail({
           to: user.email,
           subject: 'Reset your password',

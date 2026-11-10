@@ -6,7 +6,7 @@ import { authMiddleware, requirePermission, type AuthedRequest } from '../middle
 import { hasPermission, PermissionGrantError, type Perm } from '../db/permissions.ts';
 import {
   listUsers, getUserDetail, setUserActive, replaceUserRoles, replaceUserPermissions,
-  replaceUserDivisionScope, UserAccountError,
+  replaceUserDivisionScope, generatePasswordResetLink, UserAccountError,
 } from '../db/userAccounts.ts';
 import { DivisionScopeError } from '../db/divisionScope.ts';
 
@@ -89,6 +89,19 @@ router.patch('/:id/division-scope', requirePermission('User', 'write'), async (r
     }
     const user = await replaceUserDivisionScope(Number(req.params.id), req.user!.id, divisions);
     res.json(user);
+  } catch (err) {
+    res.status(status(err)).json({ message: message(err) });
+  }
+});
+
+// Mints the same reset token the self-service "forgot password" flow does,
+// but returns the link directly instead of emailing it - lets an admin hand
+// it to a user through any channel, independent of SMTP being configured.
+router.post('/:id/reset-link', requirePermission('User', 'write'), async (req: AuthedRequest, res) => {
+  try {
+    const result = await generatePasswordResetLink(Number(req.params.id));
+    console.log(`admin ${req.user!.id} generated a password-reset link for user ${req.params.id}`);
+    res.json(result);
   } catch (err) {
     res.status(status(err)).json({ message: message(err) });
   }
