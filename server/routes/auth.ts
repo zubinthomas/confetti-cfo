@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { asc, eq, and, isNull, gt } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { db, ready, schema } from '../db/client.ts';
 import { authMiddleware, signToken, type AuthedRequest } from '../middleware/auth.ts';
@@ -7,7 +7,7 @@ import { getEffectivePermissions } from '../db/permissions.ts';
 import { getUserDivisionScope } from '../db/divisionScope.ts';
 import { getLayoutLayers } from '../db/layouts.ts';
 import { getSelfEmployeeView, getDepartmentRoster } from '../db/employeeSelf.ts';
-import { createPasswordResetToken, RESET_TOKEN_EXPIRY_MINUTES } from '../db/passwordReset.ts';
+import { createPasswordResetToken, findValidResetToken, RESET_TOKEN_EXPIRY_MINUTES } from '../db/passwordReset.ts';
 import { sendMail, MailNotConfiguredError } from '../email/sendMail.ts';
 
 const router = Router();
@@ -100,6 +100,19 @@ router.post('/reset-password-request', async (req, res) => {
   res.json({ message: 'ok' });
 });
 
+/** GET /auth/reset-password/:token { email } - lets the reset-password page
+ *  show which account a link is for before the user commits to a new
+ *  password. Safe to expose for any token that validates: the token itself
+ *  is a 256-bit random secret, so knowing it already means you were meant
+ *  to have it (emailed to you, or handed to you by an admin). */
+router.get('/reset-password/:token', async (req, res) => {
+  await ready();
+  const row = await findValidResetToken(req.params.token);
+  if (!row) return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
+  const [user] = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, row.userId));
+  res.json({ email: user.email });
+});
+
 /** POST /auth/reset-password { resetToken, newPassword } */
 router.post('/reset-password', async (req, res) => {
   const { resetToken, newPassword } = req.body ?? {};
@@ -110,12 +123,7 @@ router.post('/reset-password', async (req, res) => {
     return res.status(400).json({ message: 'Password must be at least 8 characters' });
   }
   await ready();
-  const [row] = await db.select().from(schema.passwordResetTokens)
-    .where(and(
-      eq(schema.passwordResetTokens.token, resetToken),
-      isNull(schema.passwordResetTokens.usedAt),
-      gt(schema.passwordResetTokens.expiresAt, new Date().toISOString()),
-    ));
+  const row = await findValidResetToken(resetToken);
   if (!row) return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await db.update(schema.users).set({ passwordHash }).where(eq(schema.users.id, row.userId));

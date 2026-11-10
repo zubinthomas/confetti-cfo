@@ -89,6 +89,8 @@ export const auth = {
 
   resetPasswordRequest: (email: string) => post("/auth/reset-password-request", { email }),
 
+  getResetPasswordInfo: (resetToken: string) => get<{ email: string }>(`/auth/reset-password/${resetToken}`),
+
   resetPassword: ({ resetToken, newPassword }: { resetToken: string; newPassword: string }) =>
     post("/auth/reset-password", { resetToken, newPassword }),
 };

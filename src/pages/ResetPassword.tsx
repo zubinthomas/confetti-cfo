@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { auth } from "@/api/auth";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,21 @@ import AuthLayout from "@/components/AuthLayout";
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
   const resetToken = searchParams.get("token");
+
+  // Checked on mount rather than only at submit time, so an expired/used
+  // link shows this page's own "invalid" state right away instead of
+  // letting someone fill in a password first and find out after.
+  const [email, setEmail] = useState<string | null>(null);
+  const [checkingToken, setCheckingToken] = useState(!!resetToken);
+  const [tokenError, setTokenError] = useState("");
+
+  useEffect(() => {
+    if (!resetToken) return;
+    auth.getResetPasswordInfo(resetToken)
+      .then((info) => setEmail(info.email))
+      .catch((err) => setTokenError(err.message || "This reset link is invalid or has expired."))
+      .finally(() => setCheckingToken(false));
+  }, [resetToken]);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -34,12 +49,12 @@ export default function ResetPassword() {
     }
   };
 
-  if (!resetToken) {
+  if (!resetToken || tokenError) {
     return (
       <AuthLayout
         icon={AlertTriangle}
         title="Invalid reset link"
-        subtitle="This password reset link is missing or invalid"
+        subtitle={tokenError || "This password reset link is missing or invalid"}
         footer={
           <Link to="/forgot-password" className="text-primary font-medium hover:underline">
             Request a new link
@@ -47,8 +62,20 @@ export default function ResetPassword() {
         }
       >
         <p className="text-sm text-foreground text-center">
-          The link you used appears to be incomplete. Please request a new password reset email.
+          {resetToken
+            ? "Please request a new password reset email."
+            : "The link you used appears to be incomplete. Please request a new password reset email."}
         </p>
+      </AuthLayout>
+    );
+  }
+
+  if (checkingToken) {
+    return (
+      <AuthLayout icon={Lock} title="New password" subtitle="Checking your reset link...">
+        <div className="flex justify-center py-4">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
       </AuthLayout>
     );
   }
@@ -57,7 +84,7 @@ export default function ResetPassword() {
     <AuthLayout
       icon={Lock}
       title="New password"
-      subtitle="Enter your new password below"
+      subtitle={email ? `Resetting the password for ${email}` : "Enter your new password below"}
     >
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
