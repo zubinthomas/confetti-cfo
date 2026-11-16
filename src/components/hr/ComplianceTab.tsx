@@ -7,6 +7,7 @@ import FormField from "./FormField";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { DIVISIONS } from "@/lib/hrDivisions";
 import { useAuth } from "@/lib/AuthContext";
+import { OTHER_TYPE, splitType, joinType } from "@/lib/licenceType";
 
 // Days until expiry
 const daysUntil = (dateStr: string | null | undefined) => {
@@ -41,7 +42,7 @@ const LICENCE_TYPES = [
 ];
 
 const EMPTY = {
-  licence_name: "", licence_type: "Trade Licence", authority: "",
+  licence_name: "", licence_type: "Trade Licence", licence_type_other: "", authority: "",
   location: "Kolkata (Head Office)", division: "Admin",
   licence_number: "", issue_date: "", expiry_date: "",
   status: "Active", renewal_reminder_days: 30,
@@ -122,7 +123,13 @@ export default function ComplianceTab() {
     setError("");
     setSaving(true);
     try {
-      const payload = { ...form, annual_fee: Number(form.annual_fee) || 0, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
+      const licenceType = joinType(form.licence_type ?? "", form.licence_type_other ?? "");
+      if (licenceType === null) {
+        setError("Describe the licence type, or pick one from the list");
+        return;
+      }
+      const { licence_type_other: _other, ...rest } = form;
+      const payload = { ...rest, licence_type: licenceType, annual_fee: Number(form.annual_fee) || 0, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
       if (form.id) await Licence.update(form.id, payload);
       else await Licence.create(payload);
       setShowForm(false);
@@ -328,7 +335,11 @@ export default function ComplianceTab() {
                       </td>
                       <td className="py-2.5">
                         <div className="flex gap-2">
-                          <button onClick={() => { setForm({ ...l }); setShowForm(true); }} className="text-xs text-primary hover:underline">Edit</button>
+                          <button onClick={() => {
+                            const { type, other } = splitType(l.licence_type, LICENCE_TYPES);
+                            setForm({ ...l, licence_type: type, licence_type_other: other });
+                            setShowForm(true);
+                          }} className="text-xs text-primary hover:underline">Edit</button>
                           <button onClick={() => setPendingDelete(l)} className="text-xs text-red-500 hover:underline">Del</button>
                         </div>
                       </td>
@@ -352,6 +363,11 @@ export default function ComplianceTab() {
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Licence Name *" name="licence_name" value={form.licence_name ?? ""} onChange={updateField} />
               <FormField label="Type *" name="licence_type" options={LICENCE_TYPES} value={form.licence_type ?? ""} onChange={updateField} />
+              {form.licence_type === OTHER_TYPE && (
+                <div className="sm:col-span-2">
+                  <FormField label="Specify type *" name="licence_type_other" value={form.licence_type_other ?? ""} onChange={updateField} />
+                </div>
+              )}
               <FormField label="Issuing Authority" name="authority" value={form.authority ?? ""} onChange={updateField} />
               <FormField label="Licence / Certificate Number" name="licence_number" value={form.licence_number ?? ""} onChange={updateField} />
               <FormField label="Location *" name="location" options={LOCATIONS} value={form.location ?? ""} onChange={updateField} />
@@ -363,6 +379,7 @@ export default function ComplianceTab() {
               <FormField label="Annual Fee (₹)" name="annual_fee" type="number" value={form.annual_fee ?? ""} onChange={updateField} />
               <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
+            {error && <p className="px-6 -mt-2 mb-3 text-xs text-destructive">{error}</p>}
             <div className="px-6 pb-6 flex justify-end gap-3">
               <button onClick={() => setShowForm(false)} className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted">Cancel</button>
               <button onClick={save} disabled={saving} className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
