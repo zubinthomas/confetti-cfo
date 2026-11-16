@@ -1,21 +1,29 @@
-// Database backup: gzipped PGDATA-directory dumps via PGlite's own
-// dumpDataDir(), written to server/backups/ - deliberately NOT inside
+// Database backup, written to server/backups/ - deliberately NOT inside
 // server/data/ (see client.ts's DATA_DIR), so losing or corrupting the live
 // data directory doesn't also take out the backups.
 //
-// createBackup() touches the live PGlite client, so - like everything else
-// that does (server/import/pruneScheduler.ts, server/sheets/scheduler.ts) -
-// it only runs safely in-process, inside the already-running server (the
-// scheduler, or server/routes/backups.ts's POST route). It lazily imports
-// client.ts only when called, so importing this file on its own (e.g. this
-// file's own `list` CLI command below) never trips the PGlite single-process
-// lock - see server/db/client.ts's header comment.
+// Two formats coexist depending on which driver client.ts is using:
+//  - DATABASE_URL set (real Postgres): a genuine `pg_dump --format=custom`
+//    file (`.dump`), restorable into any Postgres via pg_restore.
+//  - DATABASE_URL unset (PGlite): the same PGlite-internal dumpDataDir()
+//    tarball (`.tar.gz`) as before - touches the live PGlite client, so,
+//    like everything else that does (server/import/pruneScheduler.ts,
+//    server/sheets/scheduler.ts), it only runs safely in-process, inside
+//    the already-running server (the scheduler, or
+//    server/routes/backups.ts's POST route). client.ts is lazily imported
+//    only on this path, so importing this file on its own (e.g. this file's
+//    own `list` CLI command below) never trips the PGlite single-process
+//    lock - see server/db/client.ts's header comment.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
+const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const BACKUP_DIR = path.join(__dirname, '..', 'backups');
+const BACKUP_EXTENSIONS = ['.dump', '.tar.gz'];
 
 export interface BackupInfo {
   filename: string;
@@ -35,19 +43,33 @@ async function pruneOldBackups(): Promise<void> {
   }
 }
 
-/** Takes a live backup of the whole PGDATA directory and prunes anything
- *  past BACKUP_RETENTION_DAYS (default 14). Must run in-process - see this
+/** Takes a live backup and prunes anything past BACKUP_RETENTION_DAYS
+ *  (default 14). On the PGlite branch this must run in-process - see this
  *  file's header comment. */
 export async function createBackup(): Promise<BackupInfo> {
-  const { client } = await import('./client.ts');
-  const tarball = await client.dumpDataDir('gzip');
-  const buffer = Buffer.from(await tarball.arrayBuffer());
   await fs.mkdir(BACKUP_DIR, { recursive: true });
   const createdAt = new Date().toISOString();
-  const filename = `${createdAt.replace(/[:.]/g, '-')}.tar.gz`;
-  await fs.writeFile(path.join(BACKUP_DIR, filename), buffer);
+  const stamp = createdAt.replace(/[:.]/g, '-');
+  const DATABASE_URL = process.env.DATABASE_URL;
+
+  let filename: string;
+  let sizeBytes: number;
+  if (DATABASE_URL) {
+    filename = `${stamp}.dump`;
+    const outPath = path.join(BACKUP_DIR, filename);
+    await execFileAsync('pg_dump', ['--format=custom', '--file', outPath, DATABASE_URL]);
+    sizeBytes = (await fs.stat(outPath)).size;
+  } else {
+    const { client } = await import('./client.ts');
+    const tarball = await client!.dumpDataDir('gzip');
+    const buffer = Buffer.from(await tarball.arrayBuffer());
+    filename = `${stamp}.tar.gz`;
+    await fs.writeFile(path.join(BACKUP_DIR, filename), buffer);
+    sizeBytes = buffer.byteLength;
+  }
+
   await pruneOldBackups();
-  return { filename, createdAt, sizeBytes: buffer.byteLength };
+  return { filename, createdAt, sizeBytes };
 }
 
 /** Metadata only (filename/time/size) - never reads backup contents. Pure
@@ -62,7 +84,7 @@ export async function listBackups(): Promise<BackupInfo[]> {
     throw err;
   }
   const infos = await Promise.all(
-    names.filter((n) => n.endsWith('.tar.gz')).map(async (filename) => {
+    names.filter((n) => BACKUP_EXTENSIONS.some((ext) => n.endsWith(ext))).map(async (filename) => {
       const stat = await fs.stat(path.join(BACKUP_DIR, filename));
       return { filename, createdAt: stat.mtime.toISOString(), sizeBytes: stat.size };
     }),
@@ -71,9 +93,11 @@ export async function listBackups(): Promise<BackupInfo[]> {
 }
 
 // CLI: `node db/backup.ts list` - filesystem-only, safe with the server
-// running. No `create` command here on purpose: taking a backup must happen
-// in-process via the running server (the scheduler or the HTTP route), not a
-// separate CLI process - see server/package.json's backup:* scripts.
+// running. No `create` command here: on the PGlite branch taking a backup
+// must happen in-process via the running server (the scheduler or the HTTP
+// route), not a separate CLI process - see server/package.json's backup:*
+// scripts. (On the real-Postgres branch a CLI create would be safe too,
+// since pg_dump talks over the network, but there's no need for one yet.)
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [, , command] = process.argv;
   if (command === 'list') {
