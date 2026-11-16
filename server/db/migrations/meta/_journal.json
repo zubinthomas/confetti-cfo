@@ -498,6 +498,13 @@
       "when": 1794825039403,
       "tag": "0071_licence_fee_interval",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1794825507260,
+      "tag": "0072_licence_locations",
+      "breakpoints": true
     }
   ]
 }

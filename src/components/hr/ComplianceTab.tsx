@@ -8,6 +8,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { DIVISIONS } from "@/lib/hrDivisions";
 import { useAuth } from "@/lib/AuthContext";
 import { OTHER_TYPE, splitType, joinType } from "@/lib/licenceType";
+import { LICENCE_LOCATIONS, locationOptions } from "@/lib/licenceLocation";
 import { FEE_INTERVALS, DEFAULT_FEE_INTERVAL, feeInterval, amountFieldLabel, feeLabel } from "@/lib/licenceFee";
 
 // Days until expiry
@@ -25,14 +26,6 @@ const statusStyle: Record<string, string> = {
   "Not Applicable": "bg-muted text-muted-foreground",
 };
 
-const LOCATIONS = [
-  "Kolkata (Head Office)",
-  "Kolkata (Sienna)",
-  "Birbhum (Ceramics Factory)",
-  "Birbhum (Other)",
-  "All Locations",
-];
-
 const LICENCE_TYPES = [
   "Trade Licence", "GST Registration", "FSSAI", "Excise / Bar Licence",
   "Fire NOC", "Building Plan Approval", "Factory Licence", "Shops & Establishments",
@@ -44,7 +37,7 @@ const LICENCE_TYPES = [
 
 const EMPTY = {
   licence_name: "", licence_type: "Trade Licence", licence_type_other: "", authority: "",
-  location: "Kolkata (Head Office)", division: "Admin",
+  location: "Kolkata", division: "Admin",
   licence_number: "", issue_date: "", expiry_date: "",
   status: "Active", renewal_reminder_days: 30,
   fee_amount: "", fee_interval: DEFAULT_FEE_INTERVAL, notes: "",
@@ -52,28 +45,28 @@ const EMPTY = {
 
 // Pre-populated checklist of commonly required licences for Confetti Exports
 const CHECKLIST = [
-  { licence_name: "Trade Licence - Kolkata HO", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Head Office)", division: "Admin" },
-  { licence_name: "Trade Licence - Sienna Restaurant & Bar", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata (Sienna)", division: "F&B Services" },
-  { licence_name: "Trade Licence - Birbhum Factory", licence_type: "Trade Licence", authority: "Birbhum Zila Parishad / Municipality", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
+  { licence_name: "Trade Licence - Kolkata HO", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata", division: "Admin" },
+  { licence_name: "Trade Licence - Sienna Restaurant & Bar", licence_type: "Trade Licence", authority: "KMC (Kolkata Municipal Corporation)", location: "Kolkata", division: "F&B Services" },
+  { licence_name: "Trade Licence - Birbhum Factory", licence_type: "Trade Licence", authority: "Birbhum Zila Parishad / Municipality", location: "Birbhum", division: "Pottery" },
   { licence_name: "GST Registration (Group)", licence_type: "GST Registration", authority: "GSTN / GST Department", location: "All Locations", division: "All" },
-  { licence_name: "FSSAI - Sienna Food Business", licence_type: "FSSAI", authority: "FSSAI (Food Safety & Standards Authority)", location: "Kolkata (Sienna)", division: "F&B Services" },
-  { licence_name: "Excise / Bar Licence - Sienna", licence_type: "Excise / Bar Licence", authority: "West Bengal Excise Dept.", location: "Kolkata (Sienna)", division: "F&B Services" },
-  { licence_name: "Fire NOC - Sienna", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Kolkata (Sienna)", division: "F&B Services" },
-  { licence_name: "Fire NOC - Birbhum Factory", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
-  { licence_name: "Factory Licence - Ceramics", licence_type: "Factory Licence", authority: "WB Directorate of Factories", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
-  { licence_name: "Shops & Establishments - Kolkata HO", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Head Office)", division: "Admin" },
-  { licence_name: "Shops & Establishments - Sienna", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata (Sienna)", division: "F&B Services" },
+  { licence_name: "FSSAI - Sienna Food Business", licence_type: "FSSAI", authority: "FSSAI (Food Safety & Standards Authority)", location: "Kolkata", division: "F&B Services" },
+  { licence_name: "Excise / Bar Licence - Sienna", licence_type: "Excise / Bar Licence", authority: "West Bengal Excise Dept.", location: "Kolkata", division: "F&B Services" },
+  { licence_name: "Fire NOC - Sienna", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Kolkata", division: "F&B Services" },
+  { licence_name: "Fire NOC - Birbhum Factory", licence_type: "Fire NOC", authority: "West Bengal Fire & Emergency Services", location: "Birbhum", division: "Pottery" },
+  { licence_name: "Factory Licence - Ceramics", licence_type: "Factory Licence", authority: "WB Directorate of Factories", location: "Birbhum", division: "Pottery" },
+  { licence_name: "Shops & Establishments - Kolkata HO", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata", division: "Admin" },
+  { licence_name: "Shops & Establishments - Sienna", licence_type: "Shops & Establishments", authority: "WB Labour Dept.", location: "Kolkata", division: "F&B Services" },
   { licence_name: "ESI Registration", licence_type: "ESI Registration", authority: "ESIC", location: "All Locations", division: "All" },
   { licence_name: "PF / EPF Registration", licence_type: "PF Registration", authority: "EPFO", location: "All Locations", division: "All" },
   { licence_name: "Professional Tax - WB", licence_type: "Professional Tax", authority: "WB PT Department", location: "All Locations", division: "All" },
-  { licence_name: "Pollution Control NOC - Ceramics Factory", licence_type: "Pollution Control NOC", authority: "WBPCB", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
-  { licence_name: "Pollution Control Consent (CTE/CTO)", licence_type: "Pollution Control Consent", authority: "WBPCB", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
-  { licence_name: "Labour Licence - Ceramics Factory", licence_type: "Labour Licence", authority: "WB Labour Dept.", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
-  { licence_name: "Import Export Code (IEC)", licence_type: "Import Export Code", authority: "DGFT", location: "Kolkata (Head Office)", division: "Admin" },
+  { licence_name: "Pollution Control NOC - Ceramics Factory", licence_type: "Pollution Control NOC", authority: "WBPCB", location: "Birbhum", division: "Pottery" },
+  { licence_name: "Pollution Control Consent (CTE/CTO)", licence_type: "Pollution Control Consent", authority: "WBPCB", location: "Birbhum", division: "Pottery" },
+  { licence_name: "Labour Licence - Ceramics Factory", licence_type: "Labour Licence", authority: "WB Labour Dept.", location: "Birbhum", division: "Pottery" },
+  { licence_name: "Import Export Code (IEC)", licence_type: "Import Export Code", authority: "DGFT", location: "Kolkata", division: "Admin" },
   { licence_name: "MSME / Udyam Registration", licence_type: "MSME / Udyam", authority: "MSME Ministry", location: "All Locations", division: "All" },
-  { licence_name: "KMC Building Permission - Sienna", licence_type: "KMC Permission", authority: "KMC Building Dept.", location: "Kolkata (Sienna)", division: "F&B Services" },
-  { licence_name: "Signage Permission - Sienna", licence_type: "Signage Permission", authority: "KMC Advertisement Dept.", location: "Kolkata (Sienna)", division: "F&B Services" },
-  { licence_name: "Water / Sewage NOC - Birbhum", licence_type: "Water / Sewage Permit", authority: "PHED / Local Municipality", location: "Birbhum (Ceramics Factory)", division: "Pottery" },
+  { licence_name: "KMC Building Permission - Sienna", licence_type: "KMC Permission", authority: "KMC Building Dept.", location: "Kolkata", division: "F&B Services" },
+  { licence_name: "Signage Permission - Sienna", licence_type: "Signage Permission", authority: "KMC Advertisement Dept.", location: "Kolkata", division: "F&B Services" },
+  { licence_name: "Water / Sewage NOC - Birbhum", licence_type: "Water / Sewage Permit", authority: "PHED / Local Municipality", location: "Birbhum", division: "Pottery" },
 ];
 
 export default function ComplianceTab() {
@@ -246,7 +239,7 @@ export default function ComplianceTab() {
         <div className="flex flex-wrap items-center gap-2 mb-4 justify-between">
           <div className="flex flex-wrap gap-2">
             {/* Location filter */}
-            {["All", ...LOCATIONS].map(loc => (
+            {["All", ...LICENCE_LOCATIONS].map(loc => (
               <button key={loc} onClick={() => setFilterLoc(loc)}
                 className={`text-xs px-2.5 py-1 rounded-lg border transition ${filterLoc === loc ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"}`}>
                 {loc === "All" ? "All Locations" : loc}
@@ -372,7 +365,7 @@ export default function ComplianceTab() {
               )}
               <FormField label="Issuing Authority" name="authority" value={form.authority ?? ""} onChange={updateField} />
               <FormField label="Licence / Certificate Number" name="licence_number" value={form.licence_number ?? ""} onChange={updateField} />
-              <FormField label="Location *" name="location" options={LOCATIONS} value={form.location ?? ""} onChange={updateField} />
+              <FormField label="Location *" name="location" options={locationOptions(form.location)} value={form.location ?? ""} onChange={updateField} />
               <FormField label="Department *" name="division" options={divisionOptions} value={form.division ?? ""} onChange={updateField} />
               <FormField label="Status" name="status" options={["Not Applied", "Applied", "Active", "Renewal Pending", "Expired", "Not Applicable"]} value={form.status ?? ""} onChange={updateField} />
               <FormField label="Issue Date" name="issue_date" type="date" value={form.issue_date ?? ""} onChange={updateField} />
