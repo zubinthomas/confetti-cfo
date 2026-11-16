@@ -4,7 +4,7 @@
 // if the department list changes. Shared by any parser that needs to
 // validate/normalize a Department-style column (parseHr.ts, parseRoster.ts).
 export const DEPARTMENTS = [
-  'Accounts', 'Admin', 'Batik Unit', 'Culinary', 'Driver', 'F&B Services',
+  'Accounts', 'Admin', 'Batik Unit', 'Compliance', 'Culinary', 'Driver', 'F&B Services',
   'Jewellery', 'Legal', 'Marketing', 'Partner', 'Pottery',
   'Quality Control', 'Retail', 'Tailor', 'Utility',
 ];

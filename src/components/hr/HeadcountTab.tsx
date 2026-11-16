@@ -18,7 +18,7 @@ import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 
 const divisionColors: Record<string, string> = {
-  Accounts: "#f59e0b", Admin: "#8b5cf6", "Batik Unit": "#ec4899", Culinary: "#ef4444",
+  Accounts: "#f59e0b", Admin: "#8b5cf6", "Batik Unit": "#ec4899", Compliance: "#0ea5e9", Culinary: "#ef4444",
   Driver: "#64748b", "F&B Services": "#f97316", Jewellery: "#eab308", Legal: "#6366f1",
   Marketing: "#14b8a6", Partner: "#a855f7", Pottery: "#3b82f6", "Quality Control": "#06b6d4",
   Retail: "#84cc16", Tailor: "#d946ef", Utility: "#10b981",

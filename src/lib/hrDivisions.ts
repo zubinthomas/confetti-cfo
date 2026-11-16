@@ -7,7 +7,7 @@
 // Control, Partner) don't belong to any prior "division" grouping, so
 // this stays a flat list rather than inventing an ungrounded hierarchy.
 export const DIVISIONS = [
-  "Accounts", "Admin", "Batik Unit", "Culinary", "Driver", "F&B Services",
+  "Accounts", "Admin", "Batik Unit", "Compliance", "Culinary", "Driver", "F&B Services",
   "Jewellery", "Legal", "Marketing", "Partner", "Pottery",
   "Quality Control", "Retail", "Tailor", "Utility",
 ] as const;
