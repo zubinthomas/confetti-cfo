@@ -4,6 +4,7 @@ import { authMiddleware, requireEntityPermission, type AuthedRequest } from '../
 import { getUserDivisionScope } from '../db/divisionScope.ts';
 import { getManagedEmployeeIds } from '../db/managerScope.ts';
 import { hasPermission } from '../db/permissions.ts';
+import { validateLicenceFee } from '../db/licenceFee.ts';
 
 // Row column (in API/snake_case shape) that identifies which employee a row
 // belongs to, per entity - same mapping as server/db.ts's
@@ -62,6 +63,7 @@ router.post('/:entity', requireEntityPermission('write'), async (req: AuthedRequ
       return res.status(403).json({ message: `You can only create records in: ${scope.join(', ')}` });
     }
     let body = req.body;
+    if (req.params.entity === 'Licence') validateLicenceFee(body);
     if (req.params.entity === 'Employee') {
       body = dropSalaryIfUnauthorized(body, await hasPermission(req.user!.id, 'PayrollRecord', 'write'));
     }
@@ -94,6 +96,7 @@ router.put('/:entity/:id', requireEntityPermission('write'), async (req: AuthedR
       }
     }
     let body = req.body;
+    if (req.params.entity === 'Licence') validateLicenceFee(body);
     if (req.params.entity === 'Employee') {
       body = dropSalaryIfUnauthorized(body, await hasPermission(req.user!.id, 'PayrollRecord', 'write'));
     }

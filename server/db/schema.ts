@@ -1029,7 +1029,11 @@ export const licences = pgTable('licences', {
   expiryDate: text('expiry_date'),
   status: text('status'),
   renewalReminderDays: integer('renewal_reminder_days'),
-  annualFee: doublePrecision('annual_fee'),
+  // Fee per payment interval: fee_amount rupees every fee_interval
+  // ('monthly' | 'quarterly' | 'half_yearly' | 'annual', see db/licenceFee.ts).
+  // Was annual_fee before migration 0071; those amounts read as annual.
+  feeAmount: doublePrecision('fee_amount'),
+  feeInterval: text('fee_interval').notNull().default('annual'),
   notes: text('notes'),
   documentUrl: text('document_url'),
 });

@@ -8,6 +8,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { DIVISIONS } from "@/lib/hrDivisions";
 import { useAuth } from "@/lib/AuthContext";
 import { OTHER_TYPE, splitType, joinType } from "@/lib/licenceType";
+import { FEE_INTERVALS, DEFAULT_FEE_INTERVAL, feeInterval, amountFieldLabel, feeLabel } from "@/lib/licenceFee";
 
 // Days until expiry
 const daysUntil = (dateStr: string | null | undefined) => {
@@ -46,7 +47,7 @@ const EMPTY = {
   location: "Kolkata (Head Office)", division: "Admin",
   licence_number: "", issue_date: "", expiry_date: "",
   status: "Active", renewal_reminder_days: 30,
-  annual_fee: "", notes: "",
+  fee_amount: "", fee_interval: DEFAULT_FEE_INTERVAL, notes: "",
 };
 
 // Pre-populated checklist of commonly required licences for Confetti Exports
@@ -129,7 +130,7 @@ export default function ComplianceTab() {
         return;
       }
       const { licence_type_other: _other, ...rest } = form;
-      const payload = { ...rest, licence_type: licenceType, annual_fee: Number(form.annual_fee) || 0, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
+      const payload = { ...rest, licence_type: licenceType, fee_amount: Number(form.fee_amount) || 0, fee_interval: feeInterval(form.fee_interval).value, renewal_reminder_days: Number(form.renewal_reminder_days) || 30 };
       if (form.id) await Licence.update(form.id, payload);
       else await Licence.create(payload);
       setShowForm(false);
@@ -304,6 +305,7 @@ export default function ComplianceTab() {
                         <p className="font-medium text-foreground">{l.licence_name}</p>
                         <p className="text-xs text-muted-foreground">{l.licence_type}</p>
                         {l.licence_number && <p className="text-xs text-muted-foreground font-mono">#{l.licence_number}</p>}
+                        {feeLabel(l.fee_amount, l.fee_interval) && <p className="text-xs text-muted-foreground">{feeLabel(l.fee_amount, l.fee_interval)}</p>}
                       </td>
                       <td className="py-2.5 pr-3 text-xs text-muted-foreground">{l.authority || "-"}</td>
                       <td className="py-2.5 pr-3 text-xs text-muted-foreground">{l.location}</td>
@@ -376,7 +378,9 @@ export default function ComplianceTab() {
               <FormField label="Issue Date" name="issue_date" type="date" value={form.issue_date ?? ""} onChange={updateField} />
               <FormField label="Expiry Date" name="expiry_date" type="date" value={form.expiry_date ?? ""} onChange={updateField} />
               <FormField label="Remind Before (days)" name="renewal_reminder_days" type="number" value={form.renewal_reminder_days ?? ""} onChange={updateField} />
-              <FormField label="Annual Fee (₹)" name="annual_fee" type="number" value={form.annual_fee ?? ""} onChange={updateField} />
+              <FormField label="Payment interval" name="fee_interval" options={FEE_INTERVALS.map((i) => i.label)} value={feeInterval(form.fee_interval).label}
+                onChange={(name, label) => updateField(name, FEE_INTERVALS.find((i) => i.label === label)?.value ?? DEFAULT_FEE_INTERVAL)} />
+              <FormField label={amountFieldLabel(form.fee_interval)} name="fee_amount" type="number" value={form.fee_amount ?? ""} onChange={updateField} />
               <div className="sm:col-span-2"><FormField label="Notes" name="notes" value={form.notes ?? ""} onChange={updateField} /></div>
             </div>
             {error && <p className="px-6 -mt-2 mb-3 text-xs text-destructive">{error}</p>}
