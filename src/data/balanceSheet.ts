@@ -45,6 +45,33 @@ export const BS_CLASSIFICATION: Record<string, BsBucket> = {
   "Salary Payable": "liability_equity",
 };
 
+// Real Tally-synced Balance-Sheet ledgers (see seed-tally-pl-and-missing-bs.ts's
+// BS_LEDGER_ITEMS / seed-tally-balance-sheet.ts's BALANCE_GROUP_NAMES) that
+// aren't in BS_CLASSIFICATION above yet. Listed explicitly, not left to
+// "whatever's still unclassified", so they keep surfacing in the Unclassified
+// card for review even if they have zero financial_records rows under the
+// Balance Sheet business unit - a Tally ledger with an unparseable
+// CLOSINGBALANCE never gets pushed at all (see agent/src/tally_client.rs's
+// parse_ledger_balances), so a real gap here can legitimately mean no data,
+// not a wrong classification.
+const BS_UNCLASSIFIED_KNOWN_NAMES = [
+  "Loan & Advance-Other",
+  "Security Deposit",
+  "Suspense A/c",
+  "Accrued Interest",
+  "TDS",
+];
+
+// Every Balance-Sheet-natured line item name, classified or not. lineItems
+// has no businessUnitId column - only businessId - so a CEPL P&L line item
+// like "F&B Product Sales" shares the same businessId as these ~28 real
+// Balance Sheet ledgers. Scoping resolveBsLi to this set (rather than just
+// businessId) keeps unrelated P&L line items out of the Unclassified card.
+const BS_LINE_ITEM_NAMES = new Set<string>([
+  ...Object.keys(BS_CLASSIFICATION),
+  ...BS_UNCLASSIFIED_KNOWN_NAMES,
+]);
+
 export interface BsLineItem {
   id: number;
   name: string;
@@ -60,7 +87,7 @@ export function resolveBsLi(lineItems: LineItem[]): BsLi {
   const assets: BsLineItem[] = [];
   const liabilityEquity: BsLineItem[] = [];
   const unclassified: BsLineItem[] = [];
-  for (const l of lineItems.filter((li) => li.businessId === CEPL_ID)) {
+  for (const l of lineItems.filter((li) => li.businessId === CEPL_ID && BS_LINE_ITEM_NAMES.has(li.name))) {
     const entry = { id: l.id, name: l.name };
     const bucket = BS_CLASSIFICATION[l.name];
     if (bucket === "asset") assets.push(entry);

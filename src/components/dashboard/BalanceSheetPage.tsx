@@ -76,6 +76,13 @@ export default function BalanceSheetPage() {
   );
 }
 
+// Distinguishes "no data was ever synced for this line item" from "this
+// line item's real balance is zero" - L() already returns "-" for null, but
+// every call site below previously defeated that with `?? 0` before calling
+// it, which is specifically misleading for rows affected by the Tally
+// closing-balance sync gap (see the footnote at the bottom of this page).
+const money = (v: number | null): string => (v == null ? "—" : `₹${L(v)}`);
+
 function BsDetail({ data }: { data: BalanceSheet }) {
   const imbalanceAbs = Math.abs(data.imbalance);
   const nearZero = imbalanceAbs < Math.max(1, data.totalAssets * 0.001);
@@ -114,16 +121,16 @@ function BsDetail({ data }: { data: BalanceSheet }) {
       const prev = i > 0 ? trend[i - 1].value : null;
       const delta = pt.value != null && prev != null ? pt.value - prev : null;
       const deltaStr = delta == null ? "" : delta === 0 ? " (no change)" : ` (${delta > 0 ? "+" : ""}₹${L(delta)})`;
-      return { label: pt.endDate, value: `₹${L(pt.value ?? 0)}${deltaStr}` };
+      return { label: pt.endDate, value: `${money(pt.value)}${deltaStr}` };
     });
   };
 
   const assetRows: PLRowData[] = [
-    ...data.lines.assets.map((r) => ({ label: r.name, value: `₹${L(r.value ?? 0)}`, details: formatTrend(r.trend) })),
+    ...data.lines.assets.map((r) => ({ label: r.name, value: money(r.value), details: formatTrend(r.trend) })),
     { label: "Total Assets", value: `₹${L(data.totalAssets)}`, isTotal: true },
   ];
   const liabilityRows: PLRowData[] = [
-    ...data.lines.liabilityEquity.map((r) => ({ label: r.name, value: `₹${L(r.value ?? 0)}`, details: formatTrend(r.trend) })),
+    ...data.lines.liabilityEquity.map((r) => ({ label: r.name, value: money(r.value), details: formatTrend(r.trend) })),
     { label: "Total Liabilities & Equity", value: `₹${L(data.totalLiabilityEquity)}`, isTotal: true },
   ];
 
@@ -145,7 +152,7 @@ function BsDetail({ data }: { data: BalanceSheet }) {
       {data.lines.unclassified.length > 0 && (
         <DashCard title="Unclassified - needs review">
           {data.lines.unclassified.map((r) => (
-            <PLRow key={r.name} label={r.name} value={`₹${L(r.value ?? 0)}`} details={formatTrend(r.trend)} />
+            <PLRow key={r.name} label={r.name} value={money(r.value)} details={formatTrend(r.trend)} />
           ))}
           <p className="text-xs text-muted-foreground mt-3">
             These line items don&rsquo;t have a confirmed Asset / Liability &amp; Equity
